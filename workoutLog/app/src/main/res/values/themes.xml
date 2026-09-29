@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.WorkoutLog_AndroidStudio" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- Without this, the cold-start window (and the Android 12+ splash
+             screen, which falls back to windowBackground when the app
+             hasn't opted into a dedicated splash theme) both default to
+             white, so there's a white flash before Compose ever draws
+             HomeScreen's real dark background. -->
+        <item name="android:windowBackground">@color/app_background</item>
+    </style>
+</resources>

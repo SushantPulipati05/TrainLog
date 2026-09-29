@@ -1,0 +1,568 @@
+name,muscle_group,equipment,category
+Rickshaw Carry,Forearms,Other,Strength
+Single-Leg Press,Quadriceps,Machine,Strength
+Landmine twist,Abdominals,Other,Strength
+Weighted pull-up,Lats,Other,Strength
+T-Bar Row with Handle,Middle Back,Other,Strength
+Palms-down wrist curl over bench,Forearms,Barbell,Strength
+Atlas Stones,Lower Back,Other,Strength
+Dumbbell front raise to lateral raise,Shoulders,Dumbbell,Strength
+Clean from Blocks,Quadriceps,Barbell,Strength
+Incline Hammer Curls,Biceps,Dumbbell,Strength
+Straight-bar wrist roll-up,Forearms,,Strength
+Barbell glute bridge,Glutes,Barbell,Strength
+Clean and press,Shoulders,Barbell,Strength
+Triceps dip,Triceps,Body Only,Strength
+Dumbbell farmer's walk,Forearms,Other,Strength
+Palms-up wrist curl over bench,Forearms,Barbell,Strength
+Barbell Full Squat,Quadriceps,Barbell,Strength
+Barbell deficit deadlift,Lower Back,Barbell,Strength
+Barbell Deadlift,Hamstrings,Barbell,Strength
+Single-arm palm-in dumbbell shoulder press,Shoulders,Dumbbell,Strength
+Romanian Deadlift With Dumbbells,Hamstrings,Dumbbell,Strength
+Tire flip,Quadriceps,Other,Strength
+Clean Deadlift,Hamstrings,Barbell,Strength
+Elbow plank,Abdominals,Body Only,Strength
+Bottoms Up,Abdominals,Body Only,Strength
+Barbell back squat to box,Quadriceps,Barbell,Strength
+Clean and jerk,Shoulders,Barbell,Strength
+Single-arm kettlebell push-press,Shoulders,Kettlebells,Strength
+Push-press,Quadriceps,Barbell,Strength
+Suspended ab fall-out,Abdominals,Other,Strength
+Military press,Shoulders,Barbell,Strength
+Power snatch-,Quadriceps,Barbell,Strength
+Sumo deadlift,Hamstrings,Barbell,Strength
+Hang Clean,Quadriceps,Barbell,Strength
+Dumbbell V-Sit Cross Jab,Abdominals,Dumbbell,Strength
+Reverse Band Box Squat,Quadriceps,,Strength
+Standing palms-in shoulder press,Shoulders,Dumbbell,Strength
+Standing cable low-to-high twist,Abdominals,Cable,Strength
+Decline EZ-bar skullcrusher,Triceps,E-Z Curl Bar,Strength
+Standing behind-the-back wrist curl,Forearms,Barbell,Strength
+Seated finger curl,Forearms,Barbell,Strength
+Wide-grip barbell curl,Biceps,Barbell,Strength
+Dumbbell spell caster,Abdominals,Dumbbell,Strength
+Dumbbell floor press,Triceps,Dumbbell,Strength
+Lying Face Down Plate Neck Resistance,Neck,Other,Strength
+Pullups,Lats,Body Only,Strength
+Decline reverse crunch,Abdominals,Other,Strength
+Dumbbell Bench Press,Chest,Dumbbell,Strength
+Jumping rope,Quadriceps,Body Only,Strength
+Seated barbell shoulder press,Shoulders,Barbell,Strength
+EZ-bar spider curl,Biceps,Barbell,Strength
+Smith machine shrug,Traps,Machine,Strength
+Smith Machine Calf Raise,Calves,Machine,Strength
+Romanian Deadlift from Deficit,Hamstrings,Barbell,Strength
+Power Snatch,Hamstrings,Barbell,Strength
+Pushups,Chest,Body Only,Strength
+Barbell walking lunge,Quadriceps,Barbell,Strength
+Front Squats With Two Kettlebells,Quadriceps,Kettlebells,Strength
+Spider crawl,Abdominals,Body Only,Strength
+Power Clean from Blocks,Hamstrings,Barbell,Strength
+Single Leg Push-off,Quadriceps,Other,Strength
+Hip Circles (Prone),Abductors,,Strength
+Reverse-grip bent-over row,Middle Back,Barbell,Strength
+Seated Two-Arm Palms-Up Low-Pulley Wrist Curl,Forearms,Cable,Strength
+Back extension,Lower Back,Body Only,Strength
+Close-grip bench press,Chest,Barbell,Strength
+Cocoons,Abdominals,Body Only,Strength
+Cross-Body Crunch,Abdominals,Body Only,Strength
+Dumbbell Flyes,Chest,Dumbbell,Strength
+Hammer Curls,Biceps,Dumbbell,Strength
+Incline dumbbell bench press,Chest,Dumbbell,Strength
+Low-cable cross-over,Chest,Cable,Strength
+Single-arm high-cable side bend,Abdominals,Cable,Strength
+Seated Dumbbell Press,Shoulders,Dumbbell,Strength
+Standing dumbbell shoulder press,Shoulders,Dumbbell,Strength
+EZ-Bar Curl,Biceps,E-Z Curl Bar,Strength
+Olympic Squat,Quadriceps,Barbell,Strength
+Natural Glute Ham Raise,Hamstrings,Body Only,Strength
+Axle Deadlift,Lower Back,Other,Strength
+Zottman Curl,Biceps,,Strength
+Glute ham raise-,Hamstrings,None,Strength
+Single-arm lateral raise,Shoulders,Dumbbell,Strength
+Power Partials,Shoulders,Dumbbell,Strength
+Leverage Shrug,Traps,Machine,Strength
+Cable V-bar push-down,Triceps,Cable,Strength
+Wrist Roller,Forearms,Other,Strength
+Incline dumbbell reverse fly,Shoulders,Dumbbell,Strength
+Stair climber,Quadriceps,Machine,Strength
+Elbow-to-knee crunch,Abdominals,Body Only,Strength
+Kettlebell Pistol Squat,Quadriceps,Kettlebells,Strength
+Overhead dumbbell front raise,Shoulders,Dumbbell,Strength
+Biceps curl to shoulder press,Biceps,Dumbbell,Strength
+Weighted bench dip,Triceps,Body Only,Strength
+Barbell Hip Thrust,Glutes,Barbell,Strength
+Forward lunge,Quadriceps,Body Only,Strength
+Barbell Bench Press - Medium Grip,Chest,Barbell,Strength
+Chest dip,Chest,Other,Strength
+Seated dumbbell shoulder press,Shoulders,Dumbbell,Strength
+Barbell Curl,Biceps,Barbell,Strength
+EZ-Bar Skullcrusher,Triceps,E-Z Curl Bar,Strength
+One-Arm Dumbbell Row,Middle Back,Dumbbell,Strength
+Alternating standing shoulder press,Shoulders,Dumbbell,Strength
+Concentration curl,Biceps,Dumbbell,Strength
+Decline Crunch,Abdominals,Body Only,Strength
+Decline Dumbbell Flyes,Chest,Dumbbell,Strength
+Single-arm incline rear delt raise,Shoulders,Dumbbell,Strength
+Alternating dumbbell front raise,Shoulders,Dumbbell,Strength
+Hanging toes-to-bar,Abdominals,Body Only,Strength
+Narrow-stance squat,Quadriceps,Barbell,Strength
+Kneeling cable oblique crunch,Abdominals,Cable,Strength
+Reverse Grip Triceps Pushdown,Triceps,Cable,Strength
+Bear crawl sled drag,Quadriceps,Other,Strength
+Rocky Pull-Ups/Pulldowns,Lats,Other,Strength
+Snatch-Grip Behind-The-Neck Overhead Press,Shoulders,Barbell,Strength
+Box Squat with Bands,Quadriceps,Barbell,Strength
+Flexor Incline Dumbbell Curls,Biceps,Dumbbell,Strength
+Seated One-Arm Dumbbell Palms-Up Wrist Curl,Forearms,Dumbbell,Strength
+Thigh adductor,Adductors,Machine,Strength
+Machine Bicep Curl,Biceps,Machine,Strength
+Seated Palms-Down Barbell Wrist Curl,Forearms,,Strength
+Car driver,Shoulders,Other,Strength
+Alternating Deltoid Raise,Shoulders,Dumbbell,Strength
+Hanging Oblique Knee Raise,Abdominals,Body Only,Strength
+Bodyweight Flyes,Chest,E-Z Curl Bar,Strength
+Standing Calf Raises,Calves,Machine,Strength
+Push-Ups - Close Triceps Position,Triceps,Body Only,Strength
+One-Arm Long Bar Row,Middle Back,Barbell,Strength
+Overhead cable curl,Biceps,Cable,Strength
+Single-dumbbell front raise,Shoulders,Dumbbell,Strength
+Incline cable chest fly,Chest,Cable,Strength
+Single-leg depth squat,Quadriceps,Bands,Strength
+Dumbbell suitcase crunch,Abdominals,Medicine Ball,Strength
+Plate Twist,Abdominals,Other,Strength
+Single-leg cable hip extension,Glutes,Cable,Strength
+Weighted Jump Squat,Quadriceps,Barbell,Strength
+Squat with Chains,Quadriceps,Barbell,Strength
+Gorilla Chin/Crunch,Abdominals,Body Only,Strength
+Kneeling cable triceps extension,Triceps,Cable,Strength
+Kneeling Cable Crunch With Alternating Oblique Twists,Abdominals,Cables,Strength
+Bicycling,Quadriceps,Other,Cardio
+Arnold press,Shoulders,Dumbbell,Strength
+Weighted Crunches,Abdominals,Other,Strength
+Single-arm cable triceps extension,Triceps,Cable,Strength
+Barbell roll-out,Abdominals,Barbell,Strength
+Kneeling cable crunch,Abdominals,Cable,Strength
+Exercise Ball Pull-In,Abdominals,Exercise Ball,Strength
+Hanging leg raise,Abdominals,Body Only,Strength
+Barbell Ab Rollout - On Knees,Abdominals,Barbell,Strength
+Barbell Squat,Quadriceps,Barbell,Strength
+Decline barbell bench press,Chest,Barbell,Strength
+Dumbbell Bicep Curl,Biceps,Dumbbell,Strength
+Dumbbell Goblet Squat,Quadriceps,Dumbbell,Strength
+Dumbbell squat,Quadriceps,Dumbbell,Strength
+Barbell front squat,Quadriceps,Barbell,Strength
+Close-grip pull-down,Lats,Cable,Strength
+Triceps Pushdown - Rope Attachment,Triceps,Cables,Strength
+Side-to-side box skip,Quadriceps,Body Only,Strength
+Smith machine shoulder press,Shoulders,Machine,Strength
+Seated triceps press,Triceps,Dumbbell,Strength
+Dumbbell Lying Supination,Forearms,,Strength
+Pull-up,Lats,Body Only,Strength
+Wide-grip bench press,Chest,Barbell,Strength
+Close-grip EZ-bar curl,Biceps,Barbell,Strength
+T-Bar Row,Middle Back,Other,Strength
+Bent Over Two-Arm Long Bar Row,Middle Back,Barbell,Strength
+Muscle Up,Lats,Body Only,Strength
+Machine shoulder press,Shoulders,Machine,Strength
+Incline EZ-bar skullcrusher,Triceps,Barbell,Strength
+Alternating sit-through with crunch,Middle Back,Other,Strength
+Wide-Grip Decline Barbell Bench Press,Chest,Barbell,Strength
+Rower,Middle Back,Machine,Strength
+Snatch Deadlift,Hamstrings,Barbell,Strength
+Front Plate Raise,Shoulders,Other,Strength
+Decline Close-Grip Bench To Skull Crusher,Triceps,Barbell,Strength
+Lying Leg Curls,Hamstrings,Machine,Strength
+Cross-body hammer curl,Biceps,Dumbbell,Strength
+Shotgun row,Lats,Cable,Strength
+Ab Roller,Abdominals,Other,Strength
+Reverse-grip incline dumbbell bench press,Chest,Dumbbell,Strength
+Leg Press,Quadriceps,Machine,Strength
+Stiff-Legged Dumbbell Deadlift,Hamstrings,Dumbbell,Strength
+Cable Crossover,Chest,Cable,Strength
+Barbell Incline Bench Press Medium-Grip,Chest,Barbell,Strength
+Incline Dumbbell Flyes,Chest,Dumbbell,Strength
+Seated Cable Rows,Middle Back,Cable,Strength
+Tricep Dumbbell Kickback,Triceps,Dumbbell,Strength
+Otis-Up,Abdominals,Other,Strength
+Mountain climber,Abdominals,Body Only,Strength
+Ab bicycle,Abdominals,Body Only,Strength
+Barbell forward lunge,Quadriceps,Barbell,Strength
+3/4 sit-up,Abdominals,Body Only,Strength
+Exercise ball leg curl,Hamstrings,Exercise Ball,Strength
+Glute bridge,Glutes,Body Only,Strength
+Close-Grip Front Lat Pulldown,Lats,Cable,Strength
+Dip Machine,Triceps,Cable,Strength
+Incline dumbbell row,Middle Back,Dumbbell,Strength
+Dumbbell Lunges,Quadriceps,Dumbbell,Strength
+Single-arm standing shoulder press,Shoulders,Dumbbell,Strength
+Preacher Curl,Biceps,Barbell,Strength
+Reverse crunch,Abdominals,Body Only,Strength
+Standing Dumbbell Triceps Extension,Triceps,Dumbbell,Strength
+Elliptical trainer,Quadriceps,Machine,Cardio
+Bodyweight squat,Quadriceps,Body Only,Strength
+Bent Over Two-Dumbbell Row With Palms In,Middle Back,Dumbbell,Strength
+Hex-bar deadlift,Quadriceps,Other,Strength
+Narrow-stance leg press,Quadriceps,Machine,Strength
+Single-leg glute bridge,Glutes,Body Only,Strength
+Barbell Curls Lying Against An Incline,Biceps,Barbell,Strength
+Standing Hip Circles,Abductors,Body Only,Strength
+Clam,Abductors,,Strength
+Narrow Stance Hack Squats,Quadriceps,Machine,Strength
+Seated Close-Grip Concentration Barbell Curl,Biceps,Barbell,Strength
+Dumbbell Lying Pronation,Forearms,,Strength
+Smith machine box squat,Quadriceps,Barbell,Strength
+Drop Push,Chest,Other,Strength
+Upside-down pull-up,Middle Back,Other,Strength
+Reverse Barbell Preacher Curls,Biceps,E-Z Curl Bar,Strength
+Close-grip EZ-bar bench press,Chest,E-Z Curl Bar,Strength
+Incline Push-Up,Chest,Body Only,Strength
+Hyperextensions With No Hyperextension Bench,Lower Back,Body Only,Strength
+Dumbbell front raise,Shoulders,Dumbbell,Strength
+Parallel Bar Dip,Triceps,Body Only,Strength
+Stairmaster,Quadriceps,Machine,Strength
+Double Leg Butt Kick,Quadriceps,,Strength
+Groiners,Adductors,Body Only,Strength
+Neck Press,Chest,Barbell,Strength
+Broad jump,Quadriceps,Body Only,Strength
+Machine Squat,Quadriceps,Machine,Strength
+V-bar pull-up,Lats,,Strength
+Ring dip,Triceps,Body Only,Strength
+Standing One-Arm Cable Curl,Biceps,Cable,Strength
+Burpee,Quadriceps,Body Only,Strength
+Double-arm triceps kick-back,Triceps,Dumbbell,Strength
+Dumbbell reverse lunge,Quadriceps,Dumbbell,Strength
+Seated Calf Raise,Calves,Machine,Strength
+Standing dumbbell shrug,Traps,Dumbbell,Strength
+Calf Press On The Leg Press Machine,Calves,Machine,Strength
+Barbell step-up,Quadriceps,Barbell,Strength
+Feet-elevated bench dip,Triceps,Body Only,Strength
+Bent Over Barbell Row,Middle Back,Barbell,Strength
+Crunches,Abdominals,Body Only,Strength
+Dumbbell Alternate Bicep Curl,Biceps,Dumbbell,Strength
+Bent-over dumbbell rear delt row,Shoulders,Dumbbell,Strength
+External Rotation with Cable,Shoulders,Cables,Strength
+Handstand push-up,Shoulders,Body Only,Strength
+Single-arm dumbbell preacher curl,Biceps,Dumbbell,Strength
+Step-up with knee raise,Glutes,Body Only,Strength
+Smith machine back squat,Quadriceps,Machine,Strength
+Incline dumbbell front raise,Shoulders,Dumbbell,Strength
+Alternate Incline Dumbbell Curl,Biceps,Dumbbell,Strength
+Standing dumbbell upright row,Traps,Dumbbell,Strength
+Single-arm cable front raise,Shoulders,Cable,Strength
+Two-Arm Kettlebell Military Press,Shoulders,Kettlebells,Strength
+Incline cable chest press,Chest,Cable,Strength
+Rope climb,Lats,Body Only,Strength
+Trail Running/Walking,Quadriceps,Body Only,Cardio
+Standing Bradford press,Shoulders,Barbell,Strength
+Neutral-grip dumbbell bench press,Chest,Dumbbell,Strength
+Cable Chest Press,Chest,Cable,Strength
+Standing concentration curl,Biceps,Dumbbell,Strength
+Wide-Grip Rear Pull-Up,Lats,Body Only,Strength
+Kettlebell pass-through lunge,Hamstrings,Kettlebells,Strength
+Hands-elevated push-up,Chest,Body Only,Strength
+Deadlift with Bands,Lower Back,Barbell,Strength
+Straight-arm rope pull-down,Lats,Cable,Strength
+Barbell Shoulder Press,Shoulders,Barbell,Strength
+Power clean,Hamstrings,Barbell,Strength
+Hang Snatch,Hamstrings,Barbell,Strength
+Kettlebell sumo deadlift high pull,Traps,Kettlebells,Strength
+Calf-Machine Shoulder Shrug,Traps,Machine,Strength
+Bench Press - Powerlifting,Triceps,Barbell,Strength
+Rocking Standing Calf Raise,Calves,Barbell,Strength
+Goblet Squat,Quadriceps,Kettlebells,Strength
+Behind-the-head skullcrusher,Triceps,Barbell,Strength
+Seated palms-up wrist curl,Forearms,Barbell,Strength
+Reverse Cable Curl,Biceps,Cable,Strength
+Dumbbell side bend,Abdominals,Dumbbell,Strength
+Lat pull-down,Lats,Cable,Strength
+Side Lateral Raise,Shoulders,Dumbbell,Strength
+Alternating incline dumbbell biceps curl,Biceps,Dumbbell,Strength
+Kettlebell One-Legged Deadlift,Hamstrings,Kettlebells,Strength
+Alternate Hammer Curl,Biceps,Dumbbell,Strength
+Decline Push-Up,Chest,Body Only,Strength
+Captain's chair knee raise,Abdominals,Other,Strength
+Triceps Pushdown,Triceps,Cable,Strength
+Low cable overhead triceps extension,Triceps,Cable,Strength
+Single-arm cable cross-over,Chest,Cable,Strength
+Seated dumbbell biceps curl,Biceps,Dumbbell,Strength
+Battle ropes,Shoulders,Other,Strength
+Dead bug reach,Abdominals,Body Only,Strength
+Deadlift with Chains,Lower Back,Barbell,Strength
+Rope Crunch,Abdominals,Cable,Strength
+Palms-Up Dumbbell Wrist Curl Over A Bench,Forearms,Dumbbell,Strength
+Kettlebell thruster,Glutes,Kettlebells,Strength
+Single-Arm Push-Up,Chest,Body Only,Strength
+Band Hip Adductions,Adductors,Bands,Strength
+Single-arm kettlebell clean,Hamstrings,Kettlebells,Strength
+Preacher Hammer Dumbbell Curl,Biceps,Dumbbell,Strength
+Alternating Kettlebell Press,Shoulders,Kettlebells,Strength
+Split Squat with Dumbbells,Quadriceps,Dumbbell,Strength
+Standing One-Arm Dumbbell Curl Over Incline Bench,Biceps,,Strength
+Standing Olympic Plate Hand Squeeze,Forearms,Other,Strength
+Sledgehammer swing,Abdominals,Other,Strength
+Kneeling Squat,Glutes,Barbell,Strength
+Single-arm kettlebell snatch,Shoulders,Kettlebells,Strength
+Close-grip barbell curl,Biceps,Barbell,Strength
+Box jump,Hamstrings,Other,Strength
+Standing cable crunch,Abdominals,Cable,Strength
+Leverage Incline Chest Press,Chest,Machine,Strength
+Standing barbell overhead triceps extension,Triceps,Barbell,Strength
+Lying cable triceps extension,Triceps,Cable,Strength
+Kettlebell Turkish Get-Up (Squat style),Shoulders,,Strength
+Crunch - Hands Overhead,Abdominals,Body Only,Strength
+Cable Internal Rotation,Shoulders,Cable,Strength
+Leg Extensions,Quadriceps,Machine,Strength
+Close push-up to wide push-up,Chest,Body Only,Strength
+Single-arm dumbbell triceps extension,Triceps,Dumbbell,Strength
+Butterfly,Chest,Machine,Strength
+Decline dumbbell bench press,Chest,Dumbbell,Strength
+V-up,Abdominals,Body Only,Strength
+Seated face pull,Shoulders,Cable,Strength
+Barbell Bulgarian split squat,Quadriceps,Barbell,Strength
+Reverse-grip lat pull-down,Lats,Machine,Strength
+Standing Biceps Cable Curl,Biceps,Cable,Strength
+Single-arm cable seated row,Middle Back,Cable,Strength
+Single-arm kettlebell row,Chest,Dumbbell,Strength
+Scissors Jump,Quadriceps,Body Only,Strength
+Wide Stance Stiff Legs,Hamstrings,Barbell,Strength
+Rack Pull with Bands,Lower Back,Barbell,Strength
+Drag curl,Biceps,Barbell,Strength
+Hang Clean - Below the Knees,Quadriceps,Barbell,Strength
+Decline oblique crunch,Abdominals,None,Strength
+Dumbbell external shoulder rotation,Shoulders,Dumbbell,Strength
+Single-arm bent-over cable rear delt fly,Shoulders,Cable,Strength
+Clean,Hamstrings,Barbell,Strength
+Single-arm incline lateral raise,Shoulders,Dumbbell,Strength
+Decline bar press sit-up,Abdominals,Barbell,Strength
+Barbell rear delt bent-over row,Shoulders,Barbell,Strength
+Calf Press,Calves,Machine,Strength
+Kettlebell alternating renegade row,Middle Back,Kettlebells,Strength
+Bosu Ball Cable Crunch With Side Bends,Abdominals,Cable,Strength
+Stomach Vacuum,Abdominals,Body Only,Strength
+Hammer Grip Incline DB Bench Press,Chest,Dumbbell,Strength
+Wide-grip hands-elevated push-up,Chest,Body Only,Strength
+Decline Dumbbell Triceps Extension,Triceps,Dumbbell,Strength
+Jumping jack-,Quadriceps,Body Only,Strength
+Push-Ups With Feet On An Exercise Ball,Chest,Body Only,Strength
+Seated cable shoulder press,Shoulders,Cable,Strength
+Barbell hack squat,Quadriceps,Barbell,Strength
+Feet-elevated push-up,Chest,Body Only,Strength
+Good Morning,Hamstrings,Barbell,Strength
+Leverage Chest Press,Chest,Machine,Strength
+Gironda Sternum Chins,Lats,Other,Strength
+Exercise ball crunch,Abdominals,Exercise Ball,Strength
+Seated rear delt fly,Shoulders,Dumbbell,Strength
+Standing face pull,Shoulders,Cable,Strength
+Glute Ham Raise,Hamstrings,Machine,Strength
+Russian twist,Abdominals,Body Only,Strength
+Seated Flat Bench Leg Pull-In,Abdominals,Weight Bench,Strength
+Barbell shrug,Traps,Barbell,Strength
+Standing cable rear delt row,Shoulders,Cable,Strength
+Flat Bench Lying Leg Raise,Abdominals,Body Only,Strength
+Hack Squat,Quadriceps,Barbell,Strength
+Dumbbell skullcrusher,Triceps,Dumbbell,Strength
+Man-maker,Middle Back,Dumbbell,Strength
+Pallof press,Abdominals,Other,Strength
+Knees tucked crunch,Abdominals,Body Only,Strength
+Straight-arm dumbbell pull-over,Chest,Dumbbell,Strength
+Arms-crossed jump squat,Quadriceps,Body Only,Strength
+Decline Smith Press,Chest,Machine,Strength
+Band Skull Crusher,Triceps,,Strength
+Side Wrist Pull,Shoulders,None,Strength
+Isometric Wipers,Chest,Body Only,Strength
+Skating,Quadriceps,Other,Strength
+Cable cross-over,Chest,Cable,Strength
+Treadmill running,Quadriceps,Machine,Cardio
+One Arm Pronated Dumbbell Triceps Extension,Triceps,Dumbbell,Strength
+Single-arm kettlebell clean and jerk,Shoulders,Kettlebells,Strength
+Side To Side Chins,Lats,Body Only,Strength
+Incline Dumbbell Bench With Palms Facing In,Chest,Dumbbell,Strength
+Seated palms-down wrist curl,Forearms,Dumbbell,Strength
+Standing leg swing,Hamstrings,Body Only,Strength
+Clock push-up,Chest,Body Only,Strength
+Machine seated row,Lats,Machine,Strength
+Lying Face Up Plate Neck Resistance,Neck,Other,Strength
+Weighted sissy squat,Quadriceps,Other,Strength
+Jog In Place,Quadriceps,,Strength
+Dumbbell Raise,Shoulders,Dumbbell,Strength
+Palms-Down Dumbbell Wrist Curl Over A Bench,Forearms,Dumbbell,Strength
+One Arm Supinated Dumbbell Triceps Extension,Triceps,Dumbbell,Strength
+Stationary bike,Quadriceps,Machine,Strength
+Dumbbell bent-over row,Middle Back,Dumbbell,Strength
+Barbell thruster,Quadriceps,Barbell,Strength
+Flutter Kicks,Glutes,Weight Bench,Strength
+Dumbbell sumo squat,Quadriceps,Dumbbell,Strength
+Barbell upright row,Shoulders,Barbell,Strength
+Superman,Lower Back,Body Only,Strength
+Straight-Arm Pulldown,Lats,Cable,Strength
+Barbell stiff-legged deadlift,Hamstrings,Barbell,Strength
+Standing One-Arm Dumbbell Triceps Extension,Triceps,Dumbbells,Strength
+Smith machine bench press,Chest,Machine,Strength
+Seated Side Lateral Raise,Shoulders,Dumbbell,Strength
+Dumbbell Lying Rear Lateral Raise,Shoulders,Dumbbell,Strength
+Dumbbell preacher curl,Biceps,Dumbbell,Strength
+Front Raise And Pullover,Chest,Barbell,Strength
+Dumbbell seated box jump,Quadriceps,Dumbbell,Strength
+Middle Back Shrug,Middle Back,Dumbbell,Strength
+Incline face-down bar front raise,Shoulders,E-Z Curl Bar,Strength
+Butt-Ups,Abdominals,Body Only,Strength
+Band Good Morning (Pull Through),Hamstrings,Bands,Strength
+Bodyweight Reverse Lunge,Quadriceps,Body Only,Strength
+Seated One-Arm Dumbbell Palms-Down Wrist Curl,Forearms,Dumbbell,Strength
+Glute Kickback,Glutes,Body Only,Strength
+Treadmill jogging,Quadriceps,Machine,Cardio
+Plate Pinch,Forearms,Other,Strength
+Yates Row Reverse Grip,Middle Back,Barbell,Strength
+Linear Acceleration Wall Drill,Hamstrings,Body Only,Strength
+Reverse-grip bench press,Triceps,Barbell,Strength
+Leverage Decline Chest Press,Chest,Machine,Strength
+Chain Handle Extension,Triceps,Other,Strength
+Rowing Machine,Middle Back,Machine,Cardio
+Jump Rope,Calves,Other,Cardio
+Stair Climber,Glutes,Machine,Cardio
+Swimming,Lats,Other,Cardio
+Battle Ropes,Shoulders,Other,Cardio
+Jumping Jacks,Abductors,Body Only,Cardio
+360° Pull,Lats,Body Only,Calisthenics
+Adv Tuck Flag,Abdominals,Body Only,Calisthenics
+Adv Tuck FL Row,Lats,Body Only,Calisthenics
+Adv Tuck Skin the Cat,Lats,Body Only,Calisthenics
+Archer-In Row,Lats,Body Only,Calisthenics
+Archer Pull Up,Lats,Body Only,Calisthenics
+Archer Push Up,Chest,Body Only,Calisthenics
+Archer Row,Lats,Body Only,Calisthenics
+Arch Hang,Lats,Body Only,Calisthenics
+Bulgarian Dip,Triceps,Body Only,Calisthenics
+C2B Pull Up,Lats,Body Only,Calisthenics
+Decline Pike PU,Shoulders,Body Only,Calisthenics
+Diamond Push Up,Chest,Body Only,Calisthenics
+Dip,Triceps,Body Only,Calisthenics
+Dip Neg,Triceps,Body Only,Calisthenics
+FL to Inverted,Lats,Body Only,Calisthenics
+Foot Sup L-Sit,Abdominals,Body Only,Calisthenics
+Front Lever Row,Lats,Body Only,Calisthenics
+German Hang,Lats,Body Only,Calisthenics
+Hanging Pull FL to Inv,Lats,Body Only,Calisthenics
+Headstand PU,Shoulders,Body Only,Calisthenics
+High One Arm Pull Up,Lats,Body Only,Calisthenics
+HS PU,Shoulders,Body Only,Calisthenics
+Human Flag,Abdominals,Body Only,Calisthenics
+Incline OA PU,Chest,Body Only,Calisthenics
+Incline Push Up,Chest,Body Only,Strength/Calisthenics
+Incline Row,Lats,Body Only,Calisthenics
+Iron Cross,Lats,Body Only,Calisthenics
+Iron Cross Progression,Lats,Body Only,Calisthenics
+Iron Cross to BL,Lats,Body Only,Calisthenics
+Kipping MU,Lats,Body Only,Calisthenics
+L-Hang,Lats,Body Only,Calisthenics
+L-Sit,Abdominals,Body Only,Calisthenics
+L-Sit Dip,Triceps,Body Only,Calisthenics
+L-Sit Muscle Up,Lats,Body Only,Calisthenics
+L-Sit Pull Up,Lats,Body Only,Calisthenics
+MU Neg,Lats,Body Only,Calisthenics
+Muscle Up,Lats,Body Only,Strength/Calisthenics
+OA Pull Up Neg,Lats,Body Only,Calisthenics
+OA Straight MU,Lats,Body Only,Calisthenics
+One Arm Pull Up,Lats,Body Only,Calisthenics
+One Arm Push Up,Chest,Body Only,Calisthenics
+One Arm Row,Lats,Body Only,Calisthenics
+One Leg L-Sit,Abdominals,Body Only,Calisthenics
+Pike Push Up,Shoulders,Body Only,Calisthenics
+Pike Skin the Cat,Lats,Body Only,Calisthenics
+PP Push Up,Shoulders,Body Only,Calisthenics
+Pull Up,Lats,Body Only,Strength/Calisthenics
+Pull Up Negative,Lats,Body Only,Calisthenics
+Push Up,Chest,Body Only,Calisthenics
+Ring Archer PU,Chest,Body Only,Calisthenics
+Ring Dip,Triceps,Body Only,Strength/Calisthenics
+Ring Dip Neg,Triceps,Body Only,Calisthenics
+Ring HS,Shoulders,Body Only,Calisthenics
+Ring HS Push Up,Shoulders,Body Only,Calisthenics
+Ring L-Sit Dip,Triceps,Body Only,Calisthenics
+Ring L-Sit Pull Up,Lats,Body Only,Calisthenics
+Ring OA Push Up,Chest,Body Only,Calisthenics
+Ring Push Up,Chest,Body Only,Calisthenics
+Ring Shld Stand,Shoulders,Body Only,Calisthenics
+Ring Strap HS PU,Shoulders,Body Only,Calisthenics
+Ring Str OA PU,Chest,Body Only,Calisthenics
+Ring Sup Hold,Triceps,Body Only,Calisthenics
+Ring Wall Maltese PU,Shoulders,Body Only,Calisthenics
+Ring Wide Dip,Triceps,Body Only,Calisthenics
+Ring Wide HS PU,Shoulders,Body Only,Calisthenics
+Ring Wide L-Pull Up,Lats,Body Only,Calisthenics
+Ring Wide PU,Chest,Body Only,Calisthenics
+Ring Wide Pull Up,Lats,Body Only,Calisthenics
+Row,Lats,Body Only,Calisthenics
+RTO 45° Dip,Triceps,Body Only,Calisthenics
+RTO 75° Dip,Triceps,Body Only,Calisthenics
+RTO 90° Dip,Triceps,Body Only,Calisthenics
+RTO Archer PU,Chest,Body Only,Calisthenics
+RTO Dip,Triceps,Body Only,Calisthenics
+RTO L-Sit,Abdominals,Body Only,Calisthenics
+RTO Maltese PU,Shoulders,Body Only,Calisthenics
+RTO PP PU,Shoulders,Body Only,Calisthenics
+RTO Push Up,Chest,Body Only,Calisthenics
+RTO Sup Hold,Triceps,Body Only,Calisthenics
+Scapular Pull,Traps,Body Only,Calisthenics
+Side Plank,Abdominals,Body Only,Calisthenics
+Straddle Flag,Abdominals,Body Only,Calisthenics
+Straddle FL Row,Lats,Body Only,Calisthenics
+Straddle L-Sit,Abdominals,Body Only,Calisthenics
+Straddle OA PU,Chest,Body Only,Calisthenics
+Strict Bar MU,Lats,Body Only,Calisthenics
+Str OA Row,Lats,Body Only,Calisthenics
+Sup Hold,Triceps,Body Only,Calisthenics
+Tuck FL Row,Lats,Body Only,Calisthenics
+Tuck ICM,Lats,Body Only,Calisthenics
+Tuck L-Sit,Abdominals,Body Only,Calisthenics
+Tuck L-Sit Dip,Triceps,Body Only,Calisthenics
+Tuck Skin the Cat,Lats,Body Only,Calisthenics
+Typewriter Pull Up,Lats,Body Only,Calisthenics
+Vertical Flag,Abdominals,Body Only,Calisthenics
+Vertical Row,Lats,Body Only,Calisthenics
+Wall HeS PU,Shoulders,Body Only,Calisthenics
+Wall HeS PU Neg,Shoulders,Body Only,Calisthenics
+Wall HS PU,Shoulders,Body Only,Calisthenics
+Wall Maltese PU,Shoulders,Body Only,Calisthenics
+Wall PP Push Up,Shoulders,Body Only,Calisthenics
+Wide Muscle Up,Lats,Body Only,Calisthenics
+Wide Row,Lats,Body Only,Calisthenics
+Standing Hamstring Stretch,Hamstrings,Body Only,Mobility/Flexibility
+Seated Forward Fold,Hamstrings,Body Only,Mobility/Flexibility
+Standing Quad Stretch,Quadriceps,Body Only,Mobility/Flexibility
+Couch Stretch,Quadriceps,Body Only,Mobility/Flexibility
+Kneeling Hip Flexor Stretch,Quadriceps,Body Only,Mobility/Flexibility
+90/90 Hip Stretch,Glutes,Body Only,Mobility/Flexibility
+Pigeon Pose,Glutes,Body Only,Mobility/Flexibility
+Figure-Four Stretch,Glutes,Body Only,Mobility/Flexibility
+Butterfly Stretch,Adductors,Body Only,Mobility/Flexibility
+Frog Stretch,Adductors,Body Only,Mobility/Flexibility
+Standing Calf Stretch,Calves,Body Only,Mobility/Flexibility
+Downward Dog,Calves,Body Only,Mobility/Flexibility
+Ankle Mobility Rocks,Calves,Body Only,Mobility/Flexibility
+Cat-Cow Stretch,Lower Back,Body Only,Mobility/Flexibility
+Child's Pose,Lower Back,Body Only,Mobility/Flexibility
+Cobra Stretch,Lower Back,Body Only,Mobility/Flexibility
+Seated Spinal Twist,Lower Back,Body Only,Mobility/Flexibility
+Thoracic Spine Rotation,Middle Back,Body Only,Mobility/Flexibility
+Open Book Stretch,Middle Back,Body Only,Mobility/Flexibility
+Scorpion Stretch,Middle Back,Body Only,Mobility/Flexibility
+Shoulder Dislocates,Shoulders,Other,Mobility/Flexibility
+Arm Circles,Shoulders,Body Only,Mobility/Flexibility
+Cross-Body Shoulder Stretch,Shoulders,Body Only,Mobility/Flexibility
+Band Pull-Apart,Shoulders,Bands,Mobility/Flexibility
+Doorway Chest Stretch,Chest,Body Only,Mobility/Flexibility
+Neck Rolls,Neck,Body Only,Mobility/Flexibility
+Neck Side Stretch,Neck,Body Only,Mobility/Flexibility
+Wrist Mobility Drill,Forearms,Body Only,Mobility/Flexibility
+Wrist Flexor Stretch,Forearms,Body Only,Mobility/Flexibility
+World's Greatest Stretch,Hamstrings,Body Only,Mobility/Flexibility
+Spiderman Lunge with Rotation,Adductors,Body Only,Mobility/Flexibility
+Walking Lunge with Twist,Quadriceps,Body Only,Mobility/Flexibility
+Leg Swings,Hamstrings,Body Only,Mobility/Flexibility
+Deep Squat Hold,Quadriceps,Body Only,Mobility/Flexibility
+Foam Rolling - IT Band,Abductors,Other,Mobility/Flexibility
+Foam Rolling - Quads,Quadriceps,Other,Mobility/Flexibility
+Foam Rolling - Upper Back,Middle Back,Other,Mobility/Flexibility

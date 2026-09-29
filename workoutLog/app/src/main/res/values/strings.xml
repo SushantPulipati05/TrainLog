@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Trainlog</string>
+    <string name="heatmap_widget_description">Two-month workout consistency heatmap</string>
+</resources>

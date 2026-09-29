@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the barbell mark, rendered as a bitmap
+     (rounded rects don't translate cleanly to a hand-written VectorDrawable
+     path, so this points at the pre-rendered PNGs in mipmap-*/ instead). -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_launcher_foreground"
+    android:gravity="fill" />

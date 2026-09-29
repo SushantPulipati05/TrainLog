@@ -1,0 +1,75 @@
+# =========================================================================
+# TrainLog monorepo .gitignore
+# Covers: workoutLog (Android/Jetpack Compose) + WorkoutLog_Server (Kotlin/Ktor)
+# =========================================================================
+
+# ---- Gradle (shared by both subprojects) ----
+.gradle/
+**/build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+out/
+!**/src/main/**/out/
+!**/src/test/**/out/
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# ---- Kotlin ----
+.kotlin/
+
+# ---- Android / Android Studio ----
+*.iml
+local.properties
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Android signing material - never commit these
+*.jks
+*.keystore
+keystore.properties
+
+# ---- IntelliJ IDEA / Android Studio project files ----
+.idea/
+*.ipr
+*.iws
+
+# ---- VS Code ----
+.vscode/
+
+# ---- Eclipse / NetBeans (unused here, kept defensively) ----
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# ---- Secrets / environment / local config ----
+.env
+.env.*
+!.env.example
+*.pem
+secrets.*
+
+# ---- Server-specific build/runtime output ----
+WorkoutLog_Server/build/
+
+# ---- OS cruft ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Logs ----
+*.log
