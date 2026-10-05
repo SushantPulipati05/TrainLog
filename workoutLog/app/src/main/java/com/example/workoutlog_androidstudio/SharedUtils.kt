@@ -41,6 +41,30 @@ fun heatmapCellColor(inCurrentMonth: Boolean, exerciseCount: Int): Color {
     return if (intensity == 0f) AppSurfaceVariant else AppAccent.copy(alpha = intensity)
 }
 
+/** e.g. "01:24:03" - the active-workout timer, shown both on the full
+ *  screen and on the floating mini-player that replaces it while
+ *  minimized, so both always read exactly the same elapsed time. */
+fun formatElapsed(totalSeconds: Int): String {
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return "%02d:%02d:%02d".format(hours, minutes, seconds)
+}
+
+/** Short mm:ss form of an elapsed duration (h:mm:ss past an hour) - used
+ *  beside each logged set, where the main timer's full hh:mm:ss would be
+ *  too wide for the space. */
+fun formatElapsedShort(totalSeconds: Int): String {
+    val hours = totalSeconds / 3600
+    val minutes = (totalSeconds % 3600) / 60
+    val seconds = totalSeconds % 60
+    return if (hours > 0) {
+        "%d:%02d:%02d".format(hours, minutes, seconds)
+    } else {
+        "%d:%02d".format(minutes, seconds)
+    }
+}
+
 /** e.g. "7 exercises on 29th September" for a heatmap cell's tooltip. */
 fun heatmapTooltipLabel(date: LocalDate, exerciseCount: Int): String {
     val day = date.dayOfMonth

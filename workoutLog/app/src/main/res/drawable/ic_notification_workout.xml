@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification small icon - reuses the app's own launcher mark (the
+     barbell foreground layer, already alpha-masked to just its shape)
+     instead of a separate glyph, so the ongoing workout notification is
+     recognizably this app's logo. Android renders status-bar/notification
+     icons from a drawable's alpha channel only, ignoring its color, which
+     is exactly what this bitmap already is. -->
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@mipmap/ic_launcher_foreground"
+    android:gravity="fill" />

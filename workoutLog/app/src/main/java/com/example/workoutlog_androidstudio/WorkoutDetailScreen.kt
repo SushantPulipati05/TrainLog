@@ -8,15 +8,18 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -41,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -69,20 +73,41 @@ import com.example.workoutlog_androidstudio.api.UpdateWorkoutRequest
 import com.example.workoutlog_androidstudio.api.WorkoutDetailResponse
 import kotlinx.coroutines.launch
 
+/**
+ * View of one finished workout, opened by tapping a card in the "Previous
+ * Workouts" list on the home screen. [workout] already carries the header
+ * stats (title, date, duration, tags) computed server-side by
+ * /workouts/summary - this screen fetches the per-set breakdown, and lets
+ * the user edit everything about the workout except when it happened - the
+ * date, time and duration stay fixed.
+ *
+ * NOTE: "previous" (per-set history) and PR badges aren't wired up yet -
+ * that's a deliberate follow-up, not a bug.
+ */
 @Composable
 fun WorkoutDetailScreen(
     workout: WorkoutSummary,
     onBack: () -> Unit,
+    onOpenExerciseHistory: (exerciseId: Int, exerciseName: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-
+    // Seeded straight from AppDataCache when this workout (or the exercise
+    // list) has already been loaded elsewhere, so re-opening the same
+    // workout never shows the spinner twice.
     var detail by remember { mutableStateOf(AppDataCache.workoutDetails[workout.id]) }
     var exercises by remember { mutableStateOf(AppDataCache.exercises ?: emptyList()) }
     var isLoading by remember { mutableStateOf(AppDataCache.workoutDetails[workout.id] == null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
+    // The name shown at the top - starts as what the home screen passed in,
+    // but reflects a saved rename once an edit has actually gone through.
     var displayedTitle by remember { mutableStateOf(workout.title) }
 
+    // The database id (workout.id) never gets reused or renumbered when
+    // older workouts are deleted, so it can jump way ahead of how many
+    // workouts actually still exist (e.g. "ARCHIVE #17" with only 2 left).
+    // Instead we show this workout's position among all workouts that still
+    // exist, oldest first - so it always reads as a clean, gap-free count.
     var archiveNumber by remember { mutableStateOf<Int?>(null) }
 
     val coroutineScope = rememberCoroutineScope()
@@ -109,6 +134,8 @@ fun WorkoutDetailScreen(
         reload()
     }
 
+    // Buckets the flat set list by exercise, in the order each exercise's
+    // first set appears - groupBy preserves that order for us.
     val groupedSets: List<Pair<ExerciseResponse?, List<SetEntryResponse>>> = remember(detail, exercises) {
         detail?.sets
             ?.groupBy { it.exerciseId }
@@ -116,13 +143,15 @@ fun WorkoutDetailScreen(
             ?: emptyList()
     }
 
+    // ---- Edit mode state ----
     var isEditing by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
     var saveError by remember { mutableStateOf<String?>(null) }
     var editedWorkoutName by remember { mutableStateOf("") }
     var editedNotes by remember { mutableStateOf("") }
     var editableExercises by remember { mutableStateOf<List<EditableExercise>>(emptyList()) }
-
+    // Snapshot taken the moment editing starts - diffed against editableExercises
+    // on save to work out exactly what changed (added, edited, or removed).
     var originalExercises by remember { mutableStateOf<List<EditableExercise>>(emptyList()) }
     var showAddExerciseDialog by remember { mutableStateOf(false) }
     var showCustomExerciseDialog by remember { mutableStateOf(false) }
@@ -130,6 +159,8 @@ fun WorkoutDetailScreen(
     var isCreatingCustomExercise by remember { mutableStateOf(false) }
     var customExerciseError by remember { mutableStateOf<String?>(null) }
 
+    // "Save as Template" - lets this already-logged workout become a
+    // reusable template under "My Workouts".
     var showSaveAsTemplateDialog by remember { mutableStateOf(false) }
     var isSavingTemplate by remember { mutableStateOf(false) }
     var saveTemplateError by remember { mutableStateOf<String?>(null) }
@@ -154,7 +185,7 @@ fun WorkoutDetailScreen(
                     EditableSet(
                         id = s.id,
                         setNumber = s.setNumber,
-                        kg = s.weightKg?.let { formatDecimal(it) } ?: "",
+                        kg = s.weightKg?.let { formatKgForInput(it) } ?: "",
                         reps = s.reps.toString()
                     )
                 }
@@ -176,7 +207,7 @@ fun WorkoutDetailScreen(
         saveError = null
         coroutineScope.launch {
             try {
-
+                // Workout name / notes - only send what actually changed.
                 val nameChanged = editedWorkoutName.trim().isNotBlank() && editedWorkoutName.trim() != displayedTitle
                 val notesChanged = editedNotes != detail?.notes.orEmpty()
                 if (nameChanged || notesChanged) {
@@ -192,10 +223,13 @@ fun WorkoutDetailScreen(
                 val originalById = originalExercises.associateBy { it.exerciseId }
                 val editedById = editableExercises.associateBy { it.exerciseId }
 
+                // Exercises removed entirely this session - one call cleans up
+                // every set that exercise had logged.
                 for (removedExerciseId in originalById.keys - editedById.keys) {
                     NetworkClient.workoutApi.deleteExerciseFromWorkout(workout.id, removedExerciseId)
                 }
 
+                // Exercises kept (edited or untouched) or newly added.
                 for ((exerciseId, editedExercise) in editedById) {
                     val originalExercise = originalById[exerciseId]
                     val originalSetsById: Map<Int, EditableSet> = originalExercise?.sets.orEmpty()
@@ -203,6 +237,7 @@ fun WorkoutDetailScreen(
                         .toMap()
                     val editedSetIds = editedExercise.sets.mapNotNull { it.id }.toSet()
 
+                    // Sets removed from this exercise.
                     for (removedSetId in originalSetsById.keys - editedSetIds) {
                         NetworkClient.workoutApi.deleteSet(removedSetId)
                     }
@@ -212,7 +247,8 @@ fun WorkoutDetailScreen(
                         val weight = set.kg.toDoubleOrNull()
 
                         if (set.id == null) {
-
+                            // A newly added row - either on a brand-new exercise,
+                            // or an extra set added to one that already existed.
                             NetworkClient.workoutApi.logSet(
                                 workoutId = workout.id,
                                 request = NewSetRequest(
@@ -238,7 +274,8 @@ fun WorkoutDetailScreen(
                     displayedTitle = editedWorkoutName.trim()
                 }
                 isEditing = false
-
+                // Force a real re-fetch (rather than the cached copy) since
+                // this workout's sets/exercises just changed on the server.
                 reload(force = true)
             } catch (e: Exception) {
                 saveError = "Couldn't save your changes. Check your connection and try again."
@@ -299,7 +336,8 @@ fun WorkoutDetailScreen(
     CustomExerciseDialog(
         visible = showCustomExerciseDialog,
         initialName = customExercisePrefillName,
-
+        // Muscle groups pulled straight from the already-loaded exercise list,
+        // so the options here always match what's actually in the dataset.
         muscleGroups = exercises.mapNotNull { it.muscleGroup }.distinct().sorted(),
         isSubmitting = isCreatingCustomExercise,
         errorMessage = customExerciseError,
@@ -438,7 +476,13 @@ fun WorkoutDetailScreen(
                         singleLine = true,
                         textStyle = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                         modifier = Modifier.fillMaxWidth(),
-                        colors = appTextFieldColors()
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = AppTextPrimary,
+                            unfocusedTextColor = AppTextPrimary,
+                            focusedBorderColor = AppAccent,
+                            unfocusedBorderColor = AppBorder,
+                            cursorColor = AppAccent
+                        )
                     )
                 } else {
                     Box(modifier = Modifier.fillMaxWidth()) {
@@ -523,7 +567,13 @@ fun WorkoutDetailScreen(
                             placeholder = { Text(text = "Add notes...", color = AppTextMuted) },
                             modifier = Modifier.fillMaxWidth(),
                             minLines = 2,
-                            colors = appTextFieldColors()
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = AppTextPrimary,
+                                unfocusedTextColor = AppTextPrimary,
+                                focusedBorderColor = AppAccent,
+                                unfocusedBorderColor = AppBorder,
+                                cursorColor = AppAccent
+                            )
                         )
                     }
                 } else {
@@ -634,7 +684,15 @@ fun WorkoutDetailScreen(
                     }
                     else -> {
                         items(groupedSets, key = { (exercise, sets) -> exercise?.id ?: sets.first().id }) { (exercise, sets) ->
-                            ExerciseDetailCard(exercise = exercise, sets = sets)
+                            ExerciseDetailCard(
+                                exercise = exercise,
+                                sets = sets,
+                                onClick = {
+                                    val exerciseId = exercise?.id ?: sets.first().exerciseId
+                                    val exerciseName = exercise?.name ?: "Exercise #$exerciseId"
+                                    onOpenExerciseHistory(exerciseId, exerciseName)
+                                }
+                            )
                             Spacer(modifier = Modifier.height(14.dp))
                         }
                     }
@@ -666,6 +724,9 @@ fun WorkoutDetailScreen(
     }
 }
 
+/** The form for saving an already-logged workout as a reusable template -
+ *  name and notes default to the workout's own, so a single tap ("Save") is
+ *  enough for the common case. */
 @Composable
 private fun SaveAsTemplateDialog(
     visible: Boolean,
@@ -698,7 +759,13 @@ private fun SaveAsTemplateDialog(
             singleLine = true,
             label = { Text(text = "Name", color = AppTextMuted) },
             modifier = Modifier.fillMaxWidth(),
-            colors = appTextFieldColors()
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = AppTextPrimary,
+                unfocusedTextColor = AppTextPrimary,
+                focusedBorderColor = AppAccent,
+                unfocusedBorderColor = AppBorder,
+                cursorColor = AppAccent
+            )
         )
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
@@ -706,7 +773,13 @@ private fun SaveAsTemplateDialog(
             onValueChange = { notes = it },
             label = { Text(text = "Notes (optional)", color = AppTextMuted) },
             modifier = Modifier.fillMaxWidth(),
-            colors = appTextFieldColors()
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = AppTextPrimary,
+                unfocusedTextColor = AppTextPrimary,
+                focusedBorderColor = AppAccent,
+                unfocusedBorderColor = AppBorder,
+                cursorColor = AppAccent
+            )
         )
         if (errorMessage != null) {
             Spacer(modifier = Modifier.height(12.dp))
@@ -742,6 +815,10 @@ private fun SaveAsTemplateDialog(
     }
 }
 
+/** One set row while editing a past workout - id is null for a row that
+ *  doesn't exist on the backend yet (added this edit session); otherwise
+ *  it's the existing SetEntries.id, which is how saving decides whether a
+ *  row means create, update, or (if it's gone by save time) delete. */
 private data class EditableSet(
     val id: Int?,
     val setNumber: Int,
@@ -749,6 +826,7 @@ private data class EditableSet(
     val reps: String
 )
 
+/** One exercise card's worth of state while editing a past workout. */
 private data class EditableExercise(
     val exerciseId: Int,
     val name: String,
@@ -757,6 +835,9 @@ private data class EditableExercise(
     val sets: List<EditableSet>
 )
 
+/** A brand-new exercise added to a past workout during this edit session -
+ *  starts with a single blank set, same convention as adding a fresh
+ *  exercise during an active workout. */
 private fun ExerciseResponse.toNewEditableExercise(): EditableExercise {
     val isBodyweight = equipment.equals("Body Only", ignoreCase = true)
     return EditableExercise(
@@ -768,6 +849,12 @@ private fun ExerciseResponse.toNewEditableExercise(): EditableExercise {
     )
 }
 
+/** Drops a trailing ".0" for a clean input box value (e.g. 100.0 -> "100"),
+ *  but keeps real decimals (42.5 -> "42.5"). */
+private fun formatKgForInput(weightKg: Double): String =
+    if (weightKg == weightKg.toLong().toDouble()) weightKg.toLong().toString() else weightKg.toString()
+
+/** One of the three stat tiles (volume / total sets / exercises) shown side by side. */
 @Composable
 private fun StatCard(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
@@ -783,11 +870,20 @@ private fun StatCard(label: String, value: String, modifier: Modifier = Modifier
 }
 
 @Composable
-private fun ExerciseDetailCard(exercise: ExerciseResponse?, sets: List<SetEntryResponse>) {
+private fun ExerciseDetailCard(
+    exercise: ExerciseResponse?,
+    sets: List<SetEntryResponse>,
+    onClick: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(AppSurface, RoundedCornerShape(18.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
             .padding(16.dp)
     ) {
         Text(
@@ -844,6 +940,10 @@ private fun ExerciseDetailCard(exercise: ExerciseResponse?, sets: List<SetEntryR
     }
 }
 
+/** The editable counterpart of [ExerciseDetailCard] - each set's LOAD/REPS
+ *  become input boxes, each row gets a remove button, and the card itself
+ *  can be removed (taking every one of its sets with it) or grown with an
+ *  extra set via the row at the bottom. */
 @Composable
 private fun EditableExerciseCard(
     exercise: EditableExercise,
@@ -963,6 +1063,11 @@ private fun EditableCellField(value: String, onValueChange: (String) -> Unit, mo
     )
 }
 
+/**
+ * Drops a trailing ".0" (e.g. 100.0 -> "100 KG") but keeps real decimals
+ * (e.g. 42.5 -> "42.5 KG"). A null weight (nothing logged - e.g. a bodyweight
+ * set with no added weight) shows as a blank dash rather than "0 KG".
+ */
 private fun formatLoad(weightKg: Double?): String {
     if (weightKg == null) return "-"
     val number = if (weightKg == weightKg.toLong().toDouble()) {

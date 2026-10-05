@@ -397,19 +397,7 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(AppSurface, RoundedCornerShape(16.dp))
-                                .padding(vertical = 16.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "TERMINATE SESSION / LOG OUT",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = AppTextMuted
-                            )
-                        }
+                        AccountSection()
 
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(

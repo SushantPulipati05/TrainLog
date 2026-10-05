@@ -275,9 +275,13 @@ private fun StatTile(icon: ImageVector, label: String, value: String, modifier: 
 
 @Composable
 private fun StartWorkoutButton(isStarting: Boolean, onClick: () -> Unit) {
+    // Same guard as HomeScreen's Quick Start button - starting a second
+    // workout while ActiveWorkoutState already has one running would orphan
+    // whichever one loses the race.
+    val workoutAlreadyActive = ActiveWorkoutState.workout != null
     Button(
         onClick = onClick,
-        enabled = !isStarting,
+        enabled = !isStarting && !workoutAlreadyActive,
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
@@ -289,7 +293,10 @@ private fun StartWorkoutButton(isStarting: Boolean, onClick: () -> Unit) {
         } else {
             Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Start Workout", fontWeight = FontWeight.SemiBold)
+            Text(
+                text = if (workoutAlreadyActive) "Workout In Progress" else "Start Workout",
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }

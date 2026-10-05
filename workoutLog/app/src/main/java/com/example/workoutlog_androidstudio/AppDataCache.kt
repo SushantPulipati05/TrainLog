@@ -3,6 +3,7 @@ package com.example.workoutlog_androidstudio
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.example.workoutlog_androidstudio.api.ExerciseHistoryResponse
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.ProfileResponse
@@ -51,6 +52,20 @@ object AppDataCache {
         private set
     var templateDetails by mutableStateOf<Map<Int, WorkoutTemplateDetailResponse>>(emptyMap())
         private set
+    var exerciseHistories by mutableStateOf<Map<Int, ExerciseHistoryResponse>>(emptyMap())
+        private set
+
+    /** Forgets everything. Called on logout so the next person to sign in on
+     *  this phone never sees the previous account's workouts or profile. */
+    fun clear() {
+        workoutSummaries = null
+        exercises = null
+        profile = null
+        templates = null
+        workoutDetails = emptyMap()
+        templateDetails = emptyMap()
+        exerciseHistories = emptyMap()
+    }
 
     private fun toSummary(response: WorkoutSummaryResponse) = WorkoutSummary(
         id = response.id,
@@ -112,6 +127,19 @@ object AppDataCache {
         return fetched
     }
 
+    // Keyed by exerciseId - the weight-progression history used by the
+    // exercise's growth-chart screen. Logging a new set invalidates the
+    // relevant entry (see invalidateExerciseHistory below) so the next
+    // visit to that chart picks up the fresh data instead of showing stale
+    // history right after the workout that just added to it.
+    suspend fun loadExerciseHistory(exerciseId: Int, force: Boolean = false): ExerciseHistoryResponse {
+        val cached = exerciseHistories[exerciseId]
+        if (!force && cached != null) return cached
+        val fetched = NetworkClient.workoutApi.getExerciseHistory(exerciseId)
+        exerciseHistories = exerciseHistories + (exerciseId to fetched)
+        return fetched
+    }
+
     // --- Local mutation helpers - screens call these right after a
     // successful server call so the shared cache (and every other screen
     // reading from it) updates immediately, without a fresh fetch. ---
@@ -147,5 +175,9 @@ object AppDataCache {
 
     fun addExercise(exercise: ExerciseResponse) {
         exercises = (exercises.orEmpty() + exercise)
+    }
+
+    fun invalidateExerciseHistory(exerciseId: Int) {
+        exerciseHistories = exerciseHistories - exerciseId
     }
 }

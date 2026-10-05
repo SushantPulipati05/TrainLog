@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -72,19 +73,28 @@ import kotlinx.coroutines.launch
 @Composable
 fun ActiveWorkoutScreen(
     workout: WorkoutResponse,
+    // Hoisted up to MainActivity rather than kept as local `remember` state,
+    // so the floating mini-player (a sibling composable shown once this
+    // screen is minimized) can display the exact same running timer and
+    // pause state instead of a frozen snapshot.
+    elapsedSeconds: Int,
+    onTick: () -> Unit,
+    isPaused: Boolean,
+    onTogglePause: () -> Unit,
     onClose: () -> Unit,
+    onMinimize: () -> Unit,
     onEndWorkout: (notes: String) -> Unit,
 
     prefillExercises: List<ExerciseResponse> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     var exercises by remember { mutableStateOf<List<ActiveExercise>>(emptyList()) }
-    var isPaused by remember { mutableStateOf(false) }
     var notesText by remember { mutableStateOf("") }
 
-    var elapsedSeconds by remember { mutableStateOf(0) }
-
     var showAddExerciseDialog by remember { mutableStateOf(false) }
+    // Index of the exercise the user swiped to delete; non-null while the
+    // confirmation popup is showing.
+    var pendingDeleteIndex by remember { mutableStateOf<Int?>(null) }
     var availableExercises by remember { mutableStateOf(AppDataCache.exercises ?: emptyList()) }
     var isLoadingExercises by remember { mutableStateOf(false) }
     var exerciseLoadError by remember { mutableStateOf<String?>(null) }
@@ -98,7 +108,7 @@ fun ActiveWorkoutScreen(
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
 
-    LaunchedEffectTicker(isPaused) { elapsedSeconds++ }
+    LaunchedEffectTicker(isPaused) { onTick() }
 
     LaunchedEffect(showAddExerciseDialog) {
         if (showAddExerciseDialog && availableExercises.isEmpty() && !isLoadingExercises) {
@@ -123,12 +133,37 @@ fun ActiveWorkoutScreen(
             restLabel = "90S",
             isBodyweight = isBodyweight,
 
-            sets = listOf(ExerciseSet(setNumber = 1, previousLabel = "-", kg = if (isBodyweight) "0" else "", reps = ""))
+            sets = listOf(
+                ExerciseSet(
+                    setNumber = 1,
+                    previousLabel = "-",
+                    kg = if (isBodyweight) "0" else "",
+                    reps = "",
+                    loggedAtSeconds = elapsedSeconds
+                )
+            )
         )
     }
 
     LaunchedEffect(Unit) {
         prefillExercises.forEach { addExerciseToWorkout(it) }
+    }
+
+    pendingDeleteIndex?.let { index ->
+        val target = exercises.getOrNull(index)
+        if (target == null) {
+            pendingDeleteIndex = null
+        } else {
+            DeleteConfirmationPopup(
+                title = "Delete exercise?",
+                message = "Remove ${target.name} and all its sets from this workout?",
+                onConfirm = {
+                    exercises = exercises.toMutableList().also { it.removeAt(index) }
+                    pendingDeleteIndex = null
+                },
+                onCancel = { pendingDeleteIndex = null }
+            )
+        }
     }
 
     AddExerciseDialog(
@@ -195,8 +230,16 @@ fun ActiveWorkoutScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onClose) {
-                Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = AppTextPrimary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Minimizes into the floating mini-player instead of ending
+                // the workout - distinct from the X below, which discards
+                // this screen outright.
+                IconButton(onClick = onMinimize) {
+                    Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Minimize", tint = AppTextPrimary)
+                }
+                IconButton(onClick = onClose) {
+                    Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = AppTextPrimary)
+                }
             }
             Text(
                 text = workout.workoutName,
@@ -204,7 +247,7 @@ fun ActiveWorkoutScreen(
                 color = AppTextPrimary
             )
             TextButton(
-                onClick = { isPaused = !isPaused },
+                onClick = onTogglePause,
                 colors = pausePillColors()
             ) {
                 Icon(
@@ -258,14 +301,13 @@ fun ActiveWorkoutScreen(
             itemsIndexed(exercises) { index, exercise ->
                 SwipeToDeleteExerciseCard(
                     exercise = exercise,
+                    elapsedSeconds = elapsedSeconds,
                     onSetsChange = { updatedSets ->
                         exercises = exercises.toMutableList().also {
                             it[index] = exercise.copy(sets = updatedSets)
                         }
                     },
-                    onDelete = {
-                        exercises = exercises.toMutableList().also { it.removeAt(index) }
-                    }
+                    onDelete = { pendingDeleteIndex = index }
                 )
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -333,13 +375,6 @@ private fun LaunchedEffectTicker(paused: Boolean, onTick: () -> Unit) {
     }
 }
 
-private fun formatElapsed(totalSeconds: Int): String {
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    return "%02d:%02d:%02d".format(hours, minutes, seconds)
-}
-
 private fun logWorkoutData(
     workout: WorkoutResponse,
     exercises: List<ActiveExercise>,
@@ -399,6 +434,7 @@ private suspend fun syncWorkoutToServer(
 @Composable
 private fun ExerciseCard(
     exercise: ActiveExercise,
+    elapsedSeconds: Int,
     onSetsChange: (List<ExerciseSet>) -> Unit
 ) {
     Column(
@@ -430,8 +466,8 @@ private fun ExerciseCard(
         }
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(0.7f))
-            Spacer(modifier = Modifier.weight(1.3f))
+            Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(0.9f))
+            Spacer(modifier = Modifier.weight(1.1f))
             Text(
                 text = if (exercise.isBodyweight) "ADDED KG" else "KG",
                 style = MaterialTheme.typography.labelSmall,
@@ -469,7 +505,15 @@ private fun ExerciseCard(
             onClick = {
                 val nextNumber = exercise.sets.size + 1
                 val defaultKg = if (exercise.isBodyweight) "0" else ""
-                onSetsChange(exercise.sets + ExerciseSet(nextNumber, "-", defaultKg, ""))
+                onSetsChange(
+                    exercise.sets + ExerciseSet(
+                        setNumber = nextNumber,
+                        previousLabel = "-",
+                        kg = defaultKg,
+                        reps = "",
+                        loggedAtSeconds = elapsedSeconds
+                    )
+                )
             },
             modifier = Modifier.fillMaxWidth()
         ) {
@@ -484,17 +528,18 @@ private fun ExerciseCard(
 @Composable
 private fun SwipeToDeleteExerciseCard(
     exercise: ActiveExercise,
+    elapsedSeconds: Int,
     onSetsChange: (List<ExerciseSet>) -> Unit,
     onDelete: () -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { targetValue ->
             if (targetValue == SwipeToDismissBoxValue.EndToStart) {
+                // Ask first; returning false snaps the card back until the
+                // user confirms in the popup.
                 onDelete()
-                true
-            } else {
-                false
             }
+            false
         }
     )
 
@@ -520,7 +565,7 @@ private fun SwipeToDeleteExerciseCard(
             }
         }
     ) {
-        ExerciseCard(exercise = exercise, onSetsChange = onSetsChange)
+        ExerciseCard(exercise = exercise, elapsedSeconds = elapsedSeconds, onSetsChange = onSetsChange)
     }
 }
 
@@ -583,16 +628,29 @@ private fun SetRow(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .weight(0.7f)
-                .size(28.dp)
-                .background(AppSurfaceVariant, CircleShape),
-            contentAlignment = Alignment.Center
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.weight(0.9f)
         ) {
-            Text(text = set.setNumber.toString(), color = AppTextPrimary, style = MaterialTheme.typography.labelSmall)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(AppSurfaceVariant, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = set.setNumber.toString(), color = AppTextPrimary, style = MaterialTheme.typography.labelSmall)
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            // The workout timer's value when this set was added - two
+            // consecutive sets' values show how much rest was taken
+            // between them.
+            Text(
+                text = formatElapsedShort(set.loggedAtSeconds),
+                color = AppTextMuted,
+                style = MaterialTheme.typography.labelSmall
+            )
         }
-        Spacer(modifier = Modifier.weight(1.3f))
+        Spacer(modifier = Modifier.weight(1.1f))
         SetInputField(
             value = set.kg,
             onValueChange = onKgChange,

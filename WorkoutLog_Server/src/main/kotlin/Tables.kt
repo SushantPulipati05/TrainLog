@@ -4,13 +4,32 @@ import org.jetbrains.exposed.v1.core.Table
 import org.jetbrains.exposed.v1.javatime.datetime
 
 /**
- * Catalog of exercises a user can pick from (seeded from your spreadsheet
- * import, or added ad hoc later). `name` is unique so re-importing the same
- * CSV twice won't create duplicate rows.
+ * One row per signed-in person. Login itself is handled by Firebase
+ * Authentication - this app's server never sees or stores a password. The
+ * [firebaseUid] (the verified token's "sub" claim) is how a request is tied
+ * back to a row here, and every other table's user_id points at [id].
+ */
+object Users : Table("users") {
+    val id = integer("id").autoIncrement()
+    val firebaseUid = varchar("firebase_uid", 128).uniqueIndex()
+    val email = varchar("email", 320).nullable()
+    val displayName = varchar("display_name", 200).nullable()
+    val createdAt = datetime("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}
+
+/**
+ * Catalog of exercises a user can pick from. Built-in exercises (seeded from
+ * the CSV) have a null [userId] and are visible to everyone; a custom
+ * exercise someone typed in has their [userId] and is visible only to them.
+ * Name uniqueness is enforced per owner by partial unique indexes created in
+ * migrateMultiUser() (App.kt), not by a column-level unique index, since two
+ * different users are allowed to each have their own "Cable Pull-Through".
  */
 object Exercises : Table("exercises") {
     val id = integer("id").autoIncrement()
-    val name = varchar("name", 100).uniqueIndex()
+    val name = varchar("name", 100)
     val muscleGroup = varchar("muscle_group", 50).nullable()
     val equipment = varchar("equipment", 50).nullable()
     // "Cardio", "Strength", "Calisthenics", or "Strength/Calisthenics" (for
@@ -20,6 +39,8 @@ object Exercises : Table("exercises") {
     // migrateExercisesCategory() in App.kt). 30 chars wide enough to fit
     // "Strength/Calisthenics".
     val category = varchar("category", 30).nullable()
+    // null = built-in (shared by everyone); otherwise the Users.id who made it.
+    val userId = integer("user_id").references(Users.id).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -31,6 +52,10 @@ object Workouts : Table("workouts") {
     val startedAt = datetime("started_at")
     val endedAt = datetime("ended_at").nullable()
     val notes = varchar("notes", 500).nullable()
+    // Whose workout this is. Nullable only so rows from before accounts
+    // existed can be added to a database that already has them; every new
+    // row always sets it, and every query filters on it.
+    val userId = integer("user_id").references(Users.id).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -57,7 +82,7 @@ object SetEntries : Table("set_entries") {
  *  creates a new [Workouts] row and pre-fills the exercise list client-side. */
 object WorkoutTemplates : Table("workout_templates") {
     val id = integer("id").autoIncrement()
-    val name = varchar("name", 100).uniqueIndex()
+    val name = varchar("name", 100)
     // "Strength Training", "Calisthenics", "Cardio", "Mobility/Flexibility", etc.
     // - always resolved server-side from the categories of its exercises,
     // never chosen by the user directly.
@@ -72,6 +97,10 @@ object WorkoutTemplates : Table("workout_templates") {
     // one the user built themselves (from scratch, or saved from a past
     // workout) - lets the Workouts tab show "My Workouts" as its own section.
     val isCustom = bool("is_custom").default(false)
+    // null = one of the built-in templates (shared by everyone); otherwise
+    // the Users.id who built it. Name uniqueness is per owner - see
+    // migrateMultiUser() in App.kt.
+    val userId = integer("user_id").references(Users.id).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }
@@ -86,13 +115,14 @@ object WorkoutTemplateExercises : Table("workout_template_exercises") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/** Single-row table holding the one user's profile info - this app has no
- *  multi-user login yet, so there's always exactly one row, with id = 1.
- *  Stats like workouts logged and total volume aren't stored here at all;
+/** One profile row per user (see [userId]). Stats like workouts logged and total volume aren't stored here at all;
  *  they're computed fresh from Workouts/SetEntries every time they're asked
  *  for, so they can never drift out of sync with the real workout history. */
 object AthleteProfile : Table("athlete_profile") {
-    val id = integer("id")
+    val id = integer("id").autoIncrement()
+    // Unique per user (unique index created in migrateMultiUser()). Nullable
+    // only for the one pre-accounts row, which the owner claims on first login.
+    val userId = integer("user_id").references(Users.id).nullable()
     val name = varchar("name", 100)
     val age = integer("age")
     val weightKg = double("weight_kg")

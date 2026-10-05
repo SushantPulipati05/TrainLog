@@ -177,3 +177,29 @@ data class SaveWorkoutAsTemplateRequest(
     val name: String? = null,
     val notes: String? = null
 )
+/** One finished workout's contribution to an exercise's progression history. */
+
+/** One finished workout's contribution to an exercise's progression history. */
+@Serializable
+data class ExerciseHistoryPointResponse(
+    val workoutId: Int,
+    val workoutName: String,
+    val date: String,
+    val startedAt: String,
+    val maxWeightKg: Double?,
+    val maxReps: Int,
+    val totalVolumeKg: Double,
+    val isPr: Boolean,
+    val sets: List<SetEntryResponse>
+)
+
+/** One exercise's full progression history, oldest workout first. */
+@Serializable
+data class ExerciseHistoryResponse(
+    val exerciseId: Int,
+    val exerciseName: String,
+    val equipment: String?,
+    val muscleGroup: String?,
+    val isBodyweight: Boolean,
+    val history: List<ExerciseHistoryPointResponse>
+)

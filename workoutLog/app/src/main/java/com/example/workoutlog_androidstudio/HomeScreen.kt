@@ -442,8 +442,14 @@ private fun QuickStartCard(onStartEmptyWorkout: () -> Unit) {
             color = AppTextSecondary
         )
         Spacer(modifier = Modifier.height(18.dp))
+        // Starting a second workout while one is already running would
+        // orphan whichever one loses the race, so this is disabled for as
+        // long as ActiveWorkoutState already has one - the same shared
+        // state the floating mini-player and notification read.
+        val workoutAlreadyActive = ActiveWorkoutState.workout != null
         Button(
             onClick = onStartEmptyWorkout,
+            enabled = !workoutAlreadyActive,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -455,7 +461,10 @@ private fun QuickStartCard(onStartEmptyWorkout: () -> Unit) {
         ) {
             Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Start Empty Workout", fontWeight = FontWeight.SemiBold)
+            Text(
+                text = if (workoutAlreadyActive) "Workout In Progress" else "Start Empty Workout",
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }

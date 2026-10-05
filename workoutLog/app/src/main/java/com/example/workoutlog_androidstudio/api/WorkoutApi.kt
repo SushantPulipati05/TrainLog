@@ -13,6 +13,7 @@ import retrofit2.http.POST
 import retrofit2.http.DELETE
 import retrofit2.http.PATCH
 import retrofit2.http.PUT
+import com.example.workoutlog_androidstudio.AuthInterceptor
 
 interface WorkoutApi {
     @POST("workouts")
@@ -74,6 +75,12 @@ interface WorkoutApi {
         @Path("id") workoutId: Int,
         @Body request: SaveWorkoutAsTemplateRequest
     ): WorkoutTemplateDetailResponse
+
+    @GET("exercises/{id}/history")
+    suspend fun getExerciseHistory(@Path("id") exerciseId: Int): ExerciseHistoryResponse
+
+    @DELETE("account")
+    suspend fun deleteAccount()
 }
 
 object NetworkClient {
@@ -82,9 +89,11 @@ object NetworkClient {
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
+        redactHeader("Authorization")
     }
 
     private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(AuthInterceptor())
         .addInterceptor(loggingInterceptor)
         .build()
 

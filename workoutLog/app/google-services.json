@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1067958050476",
+    "project_id": "trainlog-5eba9",
+    "storage_bucket": "trainlog-5eba9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1067958050476:android:bed7d625916bc558fc4909",
+        "android_client_info": {
+          "package_name": "com.example.workoutlog_androidstudio"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1067958050476-b25q85bgba1iur729rt2m9srt1otd8it.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.workoutlog_androidstudio",
+            "certificate_hash": "3cf1f04d872a20df59dac23045192752218d881d"
+          }
+        },
+        {
+          "client_id": "1067958050476-09lr11cusjd6bsahqel98q5til9fmf4h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD0YOqzyE2gY2rVzLkhgIcdMLq0dqMn1Fw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1067958050476-09lr11cusjd6bsahqel98q5til9fmf4h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

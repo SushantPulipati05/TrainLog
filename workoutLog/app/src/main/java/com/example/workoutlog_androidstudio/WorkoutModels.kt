@@ -18,7 +18,14 @@ data class ExerciseSet(
     val setNumber: Int,
     val previousLabel: String,  // e.g. "100 x 8" - what was logged last time
     val kg: String,
-    val reps: String
+    val reps: String,
+    // The workout's own running timer (ActiveWorkoutState.elapsedSeconds),
+    // stamped the moment this set was added - not a wall-clock timestamp,
+    // so it's unaffected by time zone/clock changes and keeps counting
+    // correctly through pauses/backgrounding exactly like the timer
+    // itself does. Shown beside each set so two consecutive sets' values
+    // reveal how much rest was taken between them.
+    val loggedAtSeconds: Int = 0
 )
 
 /** One exercise card during an active workout, with all its logged sets. */
