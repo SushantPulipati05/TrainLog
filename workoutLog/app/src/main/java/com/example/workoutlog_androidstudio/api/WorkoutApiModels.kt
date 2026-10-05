@@ -111,7 +111,8 @@ data class ProfileResponse(
     val weeksActive: Int,
     // Distinct calendar days/week the user wants to log at least one
     // workout - set on the Targets screen, shown as Home's weekly widget.
-    val weeklyWorkoutTarget: Int
+    val weeklyWorkoutTarget: Int,
+    val onboardingComplete: Boolean = true
 )
 
 @Serializable
@@ -122,7 +123,8 @@ data class UpdateProfileRequest(
     val targetWeightKg: Double? = null,
     val heightCm: Double? = null,
     val bodyFatPercent: Double? = null,
-    val weeklyWorkoutTarget: Int? = null
+    val weeklyWorkoutTarget: Int? = null,
+    val onboardingComplete: Boolean? = null
 )
 
 /** A workout template summarized for the Workouts tab's list. */

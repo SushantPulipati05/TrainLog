@@ -136,6 +136,10 @@ object AthleteProfile : Table("athlete_profile") {
     // How many distinct calendar days a week the user wants to log at least
     // one workout - shown as the home screen's "WEEKLY TARGET" widget.
     val weeklyWorkoutTarget = integer("weekly_workout_target").default(6)
+    // false until the person finishes the first-run onboarding (name, age,
+    // height, weight, ...). A brand-new account's profile starts false with
+    // placeholder values; the app shows onboarding until it's true.
+    val onboardingComplete = bool("onboarding_complete").default(true)
 
     override val primaryKey = PrimaryKey(id)
 }

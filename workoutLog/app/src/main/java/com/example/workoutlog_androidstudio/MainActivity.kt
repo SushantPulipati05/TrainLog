@@ -129,6 +129,35 @@ class MainActivity : ComponentActivity() {
                     return@WorkoutLogTheme
                 }
 
+                // A brand-new account fills in its details (name, age,
+                // height, weight...) once before the app opens. The server
+                // says which: a new account's placeholder profile comes back
+                // with onboardingComplete = false.
+                var startupAttempt by remember { mutableStateOf(0) }
+                var startupFailed by remember { mutableStateOf(false) }
+                var startupProfile by remember { mutableStateOf(AppDataCache.profile) }
+                var onboardingDone by remember { mutableStateOf(AppDataCache.profile?.onboardingComplete) }
+                LaunchedEffect(startupAttempt) {
+                    if (onboardingDone != null) return@LaunchedEffect
+                    startupFailed = false
+                    try {
+                        val loaded = AppDataCache.loadProfile()
+                        startupProfile = loaded
+                        onboardingDone = loaded.onboardingComplete
+                    } catch (e: Exception) {
+                        startupFailed = true
+                    }
+                }
+                if (onboardingDone != true) {
+                    val profileForOnboarding = startupProfile
+                    if (onboardingDone == false && profileForOnboarding != null) {
+                        OnboardingScreen(initial = profileForOnboarding, onFinished = { onboardingDone = true })
+                    } else {
+                        StartupStatus(failed = startupFailed, onRetry = { startupAttempt++ })
+                    }
+                    return@WorkoutLogTheme
+                }
+
                 // Every exercise a just-started template workout should open
                 // with - set right before ActiveWorkoutState.start(...),
                 // cleared once consumed (or when a plain empty workout is

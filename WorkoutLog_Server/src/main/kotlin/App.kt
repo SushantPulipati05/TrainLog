@@ -206,7 +206,8 @@ data class ProfileResponse(
     val totalVolumeKg: Double,
     val memberSince: String,      // ISO date
     val weeksActive: Int,
-    val weeklyWorkoutTarget: Int   // distinct days/week the user wants to log a workout
+    val weeklyWorkoutTarget: Int,  // distinct days/week the user wants to log a workout
+    val onboardingComplete: Boolean // false = the app should show first-run onboarding
 )
 
 /** What the app sends to edit the profile. Any field left null keeps its
@@ -220,7 +221,9 @@ data class UpdateProfileRequest(
     val targetWeightKg: Double? = null,
     val heightCm: Double? = null,
     val bodyFatPercent: Double? = null,
-    val weeklyWorkoutTarget: Int? = null
+    val weeklyWorkoutTarget: Int? = null,
+    // Sent as true once, by the last onboarding screen.
+    val onboardingComplete: Boolean? = null
 )
 
 /** One finished workout's contribution to an exercise's progression history -
@@ -358,6 +361,7 @@ fun Application.module() {
     migrateWorkoutTemplatesCustomFields()
     migrateAthleteProfileWeeklyTarget()
     migrateMultiUser()
+    migrateAthleteProfileOnboarding()
 
     seedExercisesIfNeeded()
     seedWorkoutTemplatesIfNeeded()
@@ -1252,10 +1256,19 @@ fun Application.module() {
                     val current = AthleteProfile.selectAll().where { AthleteProfile.userId eq me }.singleOrNull()
                         ?: return@transaction false
 
+                    // Finishing onboarding replaces the placeholder values, so
+                    // the weight it sets is a starting point, not a change -
+                    // no "previous weight" delta should come out of it.
+                    val finishingOnboarding = request.onboardingComplete == true && !current[AthleteProfile.onboardingComplete]
+
                     AthleteProfile.update({ AthleteProfile.userId eq me }) {
                         if (request.name != null) { it[name] = request.name }
                         if (request.age != null) { it[age] = request.age }
-                        if (request.weightKg != null && request.weightKg != current[AthleteProfile.weightKg]) {
+                        if (finishingOnboarding) {
+                            if (request.weightKg != null) { it[weightKg] = request.weightKg }
+                            it[previousWeightKg] = null
+                            it[onboardingComplete] = true
+                        } else if (request.weightKg != null && request.weightKg != current[AthleteProfile.weightKg]) {
                             it[previousWeightKg] = current[AthleteProfile.weightKg]
                             it[weightKg] = request.weightKg
                         }
@@ -1812,7 +1825,8 @@ private fun loadProfileResponse(me: Int): ProfileResponse? = transaction {
         totalVolumeKg = totalVolumeKg,
         memberSince = profile[AthleteProfile.memberSince],
         weeksActive = weeksActive,
-        weeklyWorkoutTarget = profile[AthleteProfile.weeklyWorkoutTarget]
+        weeklyWorkoutTarget = profile[AthleteProfile.weeklyWorkoutTarget],
+        onboardingComplete = profile[AthleteProfile.onboardingComplete]
     )
 }
 
@@ -1889,6 +1903,7 @@ private fun provisionUser(payload: Payload): Int = transaction {
             it[AthleteProfile.heightCm] = 170.0
             it[AthleteProfile.bodyFatPercent] = null
             it[AthleteProfile.memberSince] = LocalDate.now().toString()
+            it[AthleteProfile.onboardingComplete] = false
         }
     }
 
@@ -2073,6 +2088,36 @@ private fun dropSingleColumnUnique(connection: java.sql.Connection, table: Strin
             } else {
                 statement.execute("DROP INDEX IF EXISTS \"$indexName\"")
             }
+        }
+    }
+}
+
+/**
+ * Adds athlete_profile.onboarding_complete to a database from before the
+ * first-run onboarding existed. Every profile already there counts as
+ * onboarded (the owner's real profile, and anything edited), EXCEPT ones
+ * still holding the untouched placeholder values a new account was given -
+ * those people never got to enter their details, so they get onboarding too.
+ * Only runs the first time (when the column doesn't exist yet), so it never
+ * second-guesses anyone afterwards.
+ */
+private fun migrateAthleteProfileOnboarding() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        val columnExists = connection.createStatement().use { statement ->
+            statement.executeQuery(
+                "SELECT 1 FROM information_schema.columns " +
+                    "WHERE table_name = 'athlete_profile' AND column_name = 'onboarding_complete'"
+            ).use { rows -> rows.next() }
+        }
+        if (columnExists) return
+
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE athlete_profile ADD COLUMN onboarding_complete BOOLEAN NOT NULL DEFAULT TRUE")
+            statement.execute(
+                "UPDATE athlete_profile SET onboarding_complete = FALSE " +
+                    "WHERE user_id IS NOT NULL AND age = 25 AND weight_kg = 70 AND height_cm = 170 " +
+                    "AND previous_weight_kg IS NULL AND target_weight_kg IS NULL AND body_fat_percent IS NULL"
+            )
         }
     }
 }
