@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -268,6 +269,7 @@ private fun StepperButton(icon: ImageVector, enabled: Boolean, onClick: () -> Un
     Box(
         modifier = Modifier
             .size(44.dp)
+            .clip(CircleShape)
             .background(if (enabled) AppSurfaceVariant else AppSurfaceVariant.copy(alpha = 0.4f), CircleShape)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center

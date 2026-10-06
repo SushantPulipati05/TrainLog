@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -98,6 +99,7 @@ fun AddExerciseDialog(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
                             .clickable { onRequestCustomExercise(query.trim()) }
                             .border(1.dp, AppBorder, RoundedCornerShape(14.dp))
                             .padding(horizontal = 14.dp, vertical = 14.dp),
@@ -157,11 +159,9 @@ fun AddExerciseDialog(
 fun SelectableChip(text: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) AppAccent else AppSurfaceVariant)
             .clickable(onClick = onClick)
-            .background(
-                if (selected) AppAccent else AppSurfaceVariant,
-                RoundedCornerShape(50)
-            )
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(
@@ -270,6 +270,7 @@ fun AddExerciseButton(onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .border(1.dp, AppBorder, RoundedCornerShape(14.dp))
             .padding(vertical = 14.dp),

@@ -36,6 +36,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -202,6 +203,7 @@ fun ProfileScreen(
                     }
                     Box(
                         modifier = Modifier
+                            .clip(RoundedCornerShape(50))
                             .background(AppAccent, RoundedCornerShape(50))
                             .clickable(enabled = !isSaving) { saveEdits() }
                             .padding(horizontal = 16.dp, vertical = 6.dp)

@@ -61,7 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.glance.appwidget.updateAll
-import com.example.workoutlog_androidstudio.api.EndWorkoutRequest
+import com.example.workoutlog_androidstudio.api.CompleteWorkoutRequest
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.NewExerciseRequest
@@ -88,8 +88,11 @@ fun ActiveWorkoutScreen(
     prefillExercises: List<ExerciseResponse> = emptyList(),
     modifier: Modifier = Modifier
 ) {
-    var exercises by remember { mutableStateOf<List<ActiveExercise>>(emptyList()) }
-    var notesText by remember { mutableStateOf("") }
+    // The exercises, sets and notes live in ActiveWorkoutState rather than
+    // here, because it saves them on the phone with every change - so the
+    // workout survives the app being killed (or the screen being rotated).
+    var exercises by ActiveWorkoutState::exercises
+    var notesText by ActiveWorkoutState::notes
 
     var showAddExerciseDialog by remember { mutableStateOf(false) }
     // Index of the exercise the user swiped to delete; non-null while the
@@ -99,6 +102,10 @@ fun ActiveWorkoutScreen(
     var isLoadingExercises by remember { mutableStateOf(false) }
     var exerciseLoadError by remember { mutableStateOf<String?>(null) }
     var isEndingWorkout by remember { mutableStateOf(false) }
+    // Set when End Workout couldn't reach the server; the screen stays open
+    // (nothing is lost) so the person can simply try again.
+    var endError by remember { mutableStateOf<String?>(null) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
     var showCustomExerciseDialog by remember { mutableStateOf(false) }
     var customExercisePrefillName by remember { mutableStateOf("") }
@@ -146,7 +153,23 @@ fun ActiveWorkoutScreen(
     }
 
     LaunchedEffect(Unit) {
-        prefillExercises.forEach { addExerciseToWorkout(it) }
+        // Only into an empty workout - a restored one already has its own.
+        if (exercises.isEmpty()) {
+            prefillExercises.forEach { addExerciseToWorkout(it) }
+        }
+    }
+
+    if (showDiscardConfirm) {
+        DeleteConfirmationPopup(
+            title = "Discard workout?",
+            message = "Nothing from this workout will be saved. This can't be undone.",
+            confirmLabel = "Discard",
+            onConfirm = {
+                showDiscardConfirm = false
+                onClose()
+            },
+            onCancel = { showDiscardConfirm = false }
+        )
     }
 
     pendingDeleteIndex?.let { index ->
@@ -237,8 +260,8 @@ fun ActiveWorkoutScreen(
                 IconButton(onClick = onMinimize) {
                     Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Minimize", tint = AppTextPrimary)
                 }
-                IconButton(onClick = onClose) {
-                    Icon(imageVector = Icons.Filled.Close, contentDescription = "Close", tint = AppTextPrimary)
+                IconButton(onClick = { showDiscardConfirm = true }, enabled = !isEndingWorkout) {
+                    Icon(imageVector = Icons.Filled.Close, contentDescription = "Discard workout", tint = AppTextPrimary)
                 }
             }
             Text(
@@ -324,22 +347,44 @@ fun ActiveWorkoutScreen(
                 .padding(horizontal = 20.dp)
         )
 
+        if (endError != null) {
+            Text(
+                text = endError.orEmpty(),
+                style = MaterialTheme.typography.bodySmall,
+                color = AppDanger,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp)
+            )
+        }
+
         Button(
             onClick = {
                 if (isEndingWorkout) return@Button
                 logWorkoutData(workout, exercises, notesText)
                 isEndingWorkout = true
+                endError = null
                 coroutineScope.launch {
-                    try {
+                    val saved = try {
                         syncWorkoutToServer(workout.id, exercises, notesText)
-
-                        WorkoutHeatmapWidget().updateAll(context)
+                        true
                     } catch (e: Exception) {
-
                         Log.e("EndWorkout", "Failed to sync workout ${workout.id}", e)
-                    } finally {
-                        isEndingWorkout = false
+                        false
+                    }
+                    isEndingWorkout = false
+                    if (saved) {
+                        try {
+                            WorkoutHeatmapWidget().updateAll(context)
+                        } catch (e: Exception) {
+                            Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
+                        }
+                        // Only now does the screen close - a failed save
+                        // keeps everything here to try again.
                         onEndWorkout(notesText)
+                    } else {
+                        endError = "Couldn't save your workout. Check your connection and tap End Workout again - your sets are safe on this phone."
                     }
                 }
             },
@@ -400,34 +445,30 @@ private fun logWorkoutData(
     Log.d("WorkoutData", report)
 }
 
+/** Sends the whole finished workout - every set with reps filled in, plus
+ *  the notes - in ONE request that the server saves all-or-nothing. Safe to
+ *  retry: sending it again replaces the sets rather than adding duplicates,
+ *  so a failed attempt on bad gym signal can simply be tried again. */
 private suspend fun syncWorkoutToServer(
     workoutId: Int,
     exercises: List<ActiveExercise>,
     notes: String
 ) {
-    exercises.forEach { exercise ->
-        exercise.sets.forEach { set ->
-            val reps = set.reps.toIntOrNull()
-
-            val weight = set.kg.toDoubleOrNull()
-
-            if (reps != null) {
-                NetworkClient.workoutApi.logSet(
-                    workoutId = workoutId,
-                    request = NewSetRequest(
-                        exerciseId = exercise.exerciseId,
-                        setNumber = set.setNumber,
-                        reps = reps,
-                        weightKg = weight
-                    )
-                )
-            }
+    val sets = exercises.flatMap { exercise ->
+        exercise.sets.mapNotNull { set ->
+            val reps = set.reps.toIntOrNull() ?: return@mapNotNull null
+            NewSetRequest(
+                exerciseId = exercise.exerciseId,
+                setNumber = set.setNumber,
+                reps = reps,
+                weightKg = set.kg.toDoubleOrNull()
+            )
         }
     }
 
-    NetworkClient.workoutApi.endWorkout(
+    NetworkClient.workoutApi.completeWorkout(
         workoutId = workoutId,
-        request = EndWorkoutRequest(notes = notes.ifBlank { null })
+        request = CompleteWorkoutRequest(notes = notes.ifBlank { null }, sets = sets)
     )
 }
 

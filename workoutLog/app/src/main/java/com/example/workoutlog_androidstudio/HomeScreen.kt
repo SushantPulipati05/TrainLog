@@ -103,11 +103,14 @@ fun HomeScreen(
 ) {
     var showNewWorkoutDialog by remember { mutableStateOf(false) }
 
-    var previousWorkouts by remember { mutableStateOf(AppDataCache.workoutSummaries ?: emptyList()) }
+    // Read straight from the shared cache (it's Compose state), so anything
+    // that refreshes it - ending a workout, deleting one, another screen's
+    // fetch - shows up here immediately, without restarting the app.
+    val previousWorkouts = AppDataCache.workoutSummaries ?: emptyList()
     var isLoadingPrevious by remember { mutableStateOf(AppDataCache.workoutSummaries == null) }
     var previousWorkoutsError by remember { mutableStateOf<String?>(null) }
 
-    var weeklyWorkoutTarget by remember { mutableStateOf(AppDataCache.profile?.weeklyWorkoutTarget ?: DEFAULT_WEEKLY_TARGET_DAYS) }
+    val weeklyWorkoutTarget = AppDataCache.profile?.weeklyWorkoutTarget ?: DEFAULT_WEEKLY_TARGET_DAYS
 
     var workoutPendingDelete by remember { mutableStateOf<WorkoutSummary?>(null) }
     val coroutineScope = rememberCoroutineScope()
@@ -123,7 +126,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         try {
-            previousWorkouts = AppDataCache.loadWorkoutSummaries()
+            AppDataCache.loadWorkoutSummaries()
         } catch (e: Exception) {
             previousWorkoutsError = "Couldn't load previous workouts. Check your connection."
         } finally {
@@ -133,7 +136,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         try {
-            weeklyWorkoutTarget = AppDataCache.loadProfile().weeklyWorkoutTarget
+            AppDataCache.loadProfile()
         } catch (e: Exception) {
 
         }
@@ -208,6 +211,8 @@ fun HomeScreen(
                 color = AppAccent
             )
             Spacer(modifier = Modifier.height(20.dp))
+            ConsistencyHeatmap(workouts = previousWorkouts, onOpenCalendar = onOpenCalendar)
+            Spacer(modifier = Modifier.height(20.dp))
             WeeklyTargetWidget(completedDays = completedDaysThisWeek, targetDays = weeklyWorkoutTarget)
             Spacer(modifier = Modifier.height(20.dp))
             QuickStartCard(onStartEmptyWorkout = { showNewWorkoutDialog = true })
@@ -269,11 +274,6 @@ fun HomeScreen(
                 }
             }
         }
-
-        item {
-            Spacer(modifier = Modifier.height(28.dp))
-            ConsistencyHeatmap(workouts = previousWorkouts, onOpenCalendar = onOpenCalendar)
-        }
     }
 
     workoutPendingDelete?.let { workout ->
@@ -294,7 +294,6 @@ fun HomeScreen(
             onConfirm = {
                 workoutPendingDelete = null
 
-                previousWorkouts = previousWorkouts.filterNot { it.id == workout.id }
                 AppDataCache.removeWorkout(workout.id)
                 deletedWorkoutTitle = workout.title
                 toastVisible = true
@@ -302,8 +301,6 @@ fun HomeScreen(
                     try {
                         NetworkClient.workoutApi.deleteWorkout(workout.id)
                     } catch (e: Exception) {
-                        previousWorkouts = (previousWorkouts + workout)
-                            .sortedByDescending { it.id }
                         AppDataCache.addWorkout(workout)
                         toastVisible = false
                     }
@@ -517,8 +514,9 @@ private fun WorkoutCard(workout: WorkoutSummary, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppSurface)
             .clickable(onClick = onClick)
-            .background(AppSurface, RoundedCornerShape(18.dp))
             .padding(18.dp)
     ) {
         Row(
@@ -660,29 +658,13 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
             .mapValues { (_, counts) -> counts.sum() }
     }
 
-    var tooltip by remember { mutableStateOf<HeatmapTooltipInfo?>(null) }
-
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onOpenCalendar),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Consistency",
-                style = MaterialTheme.typography.headlineSmall,
-                color = AppTextPrimary
-            )
-            Icon(
-                imageVector = Icons.Filled.ChevronRight,
-                contentDescription = "Open workout log & calendar",
-                tint = AppTextSecondary
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
+    // The whole heatmap is one tap target that opens the calendar - the
+    // cells themselves aren't separately tappable.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Open workout calendar", onClick = onOpenCalendar)
+    ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -690,13 +672,11 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
             MonthGrid(
                 monthAnchor = today,
                 exerciseCountByDate = exerciseCountByDate,
-                onCellTap = { date, count, bounds -> tooltip = HeatmapTooltipInfo(date, count, bounds) },
                 modifier = Modifier.weight(1f)
             )
             MonthGrid(
                 monthAnchor = nextMonthAnchor,
                 exerciseCountByDate = exerciseCountByDate,
-                onCellTap = { date, count, bounds -> tooltip = HeatmapTooltipInfo(date, count, bounds) },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -723,73 +703,12 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
             Text(text = "More", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
         }
     }
-
-    tooltip?.let { info ->
-        HeatmapTooltipPopup(info = info, onDismiss = { tooltip = null })
-    }
-}
-
-private data class HeatmapTooltipInfo(val date: LocalDate, val exerciseCount: Int, val anchorBounds: Rect)
-
-@Composable
-private fun HeatmapTooltipPopup(info: HeatmapTooltipInfo, onDismiss: () -> Unit) {
-    val density = LocalDensity.current
-    val gapPx = with(density) { 6.dp.toPx() }
-    val edgeMarginPx = with(density) { 8.dp.toPx() }
-
-    Popup(
-        popupPositionProvider = remember(info.anchorBounds) {
-            object : PopupPositionProvider {
-                override fun calculatePosition(
-                    anchorBounds: IntRect,
-                    windowSize: IntSize,
-                    layoutDirection: LayoutDirection,
-                    popupContentSize: IntSize
-                ): IntOffset {
-                    val cellCenterX = (info.anchorBounds.left + info.anchorBounds.right) / 2f
-                    val minX = edgeMarginPx
-                    val maxX = (windowSize.width - popupContentSize.width - edgeMarginPx).coerceAtLeast(minX)
-                    val x = (cellCenterX - popupContentSize.width / 2f).coerceIn(minX, maxX)
-
-                    val yAbove = info.anchorBounds.top - popupContentSize.height - gapPx
-                    val y = if (yAbove >= 0f) yAbove else info.anchorBounds.bottom + gapPx
-
-                    return IntOffset(x.roundToInt(), y.roundToInt())
-                }
-            }
-        },
-        onDismissRequest = onDismiss
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(
-                modifier = Modifier
-                    .background(AppSurfaceVariant, RoundedCornerShape(8.dp))
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            ) {
-                Text(
-                    text = heatmapTooltipLabel(info.date, info.exerciseCount),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = AppTextPrimary
-                )
-            }
-            Canvas(modifier = Modifier.size(width = 12.dp, height = 6.dp)) {
-                val path = Path().apply {
-                    moveTo(0f, 0f)
-                    lineTo(size.width, 0f)
-                    lineTo(size.width / 2f, size.height)
-                    close()
-                }
-                drawPath(path, color = AppSurfaceVariant)
-            }
-        }
-    }
 }
 
 @Composable
 private fun MonthGrid(
     monthAnchor: LocalDate,
     exerciseCountByDate: Map<LocalDate, Int>,
-    onCellTap: (LocalDate, Int, Rect) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val weeks = remember(monthAnchor) { weeksOfMonth(monthAnchor) }
@@ -812,7 +731,6 @@ private fun MonthGrid(
                     HeatmapCell(
                         inCurrentMonth = inMonth,
                         exerciseCount = exerciseCount,
-                        onTap = { bounds -> onCellTap(date, exerciseCount, bounds) },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -823,13 +741,10 @@ private fun MonthGrid(
 }
 
 @Composable
-private fun HeatmapCell(inCurrentMonth: Boolean, exerciseCount: Int, onTap: (Rect) -> Unit, modifier: Modifier = Modifier) {
-    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+private fun HeatmapCell(inCurrentMonth: Boolean, exerciseCount: Int, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .onGloballyPositioned { coordinates = it }
-            .clickable { coordinates?.let { onTap(it.boundsInWindow()) } }
             .background(heatmapCellColor(inCurrentMonth, exerciseCount), RoundedCornerShape(4.dp))
     )
 }

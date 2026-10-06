@@ -398,11 +398,7 @@ private fun <T> SegmentedControl(
                     .weight(1f)
                     .clip(RoundedCornerShape(10.dp))
                     .background(if (isSelected) AppSurfaceVariant else Color.Transparent)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = { onSelect(option) }
-                    )
+                    .clickable(onClick = { onSelect(option) })
                     .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {

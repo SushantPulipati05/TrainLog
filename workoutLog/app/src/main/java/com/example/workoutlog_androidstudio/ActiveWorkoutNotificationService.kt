@@ -43,6 +43,9 @@ class ActiveWorkoutNotificationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // If Android restarts this service after killing the app, load the
+        // saved workout so the notification still has something to show.
+        ActiveWorkoutState.init(this)
         createNotificationChannel()
     }
 

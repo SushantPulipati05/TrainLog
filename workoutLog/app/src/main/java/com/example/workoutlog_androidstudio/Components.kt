@@ -189,7 +189,8 @@ fun DeleteConfirmationPopup(
     title: String,
     message: String,
     onConfirm: () -> Unit,
-    onCancel: () -> Unit
+    onCancel: () -> Unit,
+    confirmLabel: String = "Delete"
 ) {
     Popup(
         alignment = Alignment.Center,
@@ -219,7 +220,7 @@ fun DeleteConfirmationPopup(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = AppDanger, contentColor = Color.White)
                 ) {
-                    Text(text = "Delete", fontWeight = FontWeight.SemiBold)
+                    Text(text = confirmLabel, fontWeight = FontWeight.SemiBold)
                 }
             }
         }

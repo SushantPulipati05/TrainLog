@@ -56,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -417,6 +418,7 @@ fun WorkoutDetailScreen(
                     }
                     Box(
                         modifier = Modifier
+                            .clip(RoundedCornerShape(50))
                             .background(AppAccent, RoundedCornerShape(50))
                             .clickable(enabled = !isSaving) { saveEdits() }
                             .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -446,6 +448,7 @@ fun WorkoutDetailScreen(
                     }
                     Box(
                         modifier = Modifier
+                            .clip(RoundedCornerShape(50))
                             .background(AppAccent, RoundedCornerShape(50))
                             .clickable { startEditing() }
                             .padding(horizontal = 16.dp, vertical = 6.dp)
@@ -878,12 +881,9 @@ private fun ExerciseDetailCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppSurface, RoundedCornerShape(18.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppSurface)
+            .clickable(onClick = onClick)
             .padding(16.dp)
     ) {
         Text(

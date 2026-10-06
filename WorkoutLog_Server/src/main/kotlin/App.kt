@@ -156,6 +156,14 @@ data class UpdateWorkoutRequest(
     val notes: String? = null
 )
 
+/** Everything about a finished workout in one request: all its sets plus
+ *  notes. See POST /workouts/{id}/complete. */
+@Serializable
+data class CompleteWorkoutRequest(
+    val notes: String? = null,
+    val sets: List<NewSetRequest>
+)
+
 /** What the app sends to edit one already-logged set's reps/weight. */
 @Serializable
 data class UpdateSetRequest(
@@ -1286,6 +1294,86 @@ fun Application.module() {
                 }
 
                 call.respond(loadProfileResponse(me)!!)
+            }
+
+            // Saves a finished workout in one go: replaces whatever sets the
+            // workout has with the ones sent, stores the notes and marks it
+            // ended - all in one transaction, so it either fully saves or
+            // not at all. Sending the same request again (a retry after a
+            // dropped connection) gives the same result rather than
+            // duplicate sets, and keeps the original end time.
+            post("/workouts/{id}/complete") {
+                val me = call.userId()
+                val workoutId = call.parameters["id"]?.toIntOrNull()
+                if (workoutId == null) {
+                    call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+                val request = try {
+                    call.receive<CompleteWorkoutRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+                val validSets = request.sets.size <= 1000 && request.sets.all { set ->
+                    set.reps in 0..10_000 && set.setNumber in 1..1000 &&
+                        (set.weightKg == null || set.weightKg in 0.0..2_000.0)
+                }
+                if (!validSets) {
+                    call.respondText("one or more sets are invalid", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+                val allVisible = transaction {
+                    request.sets.map { it.exerciseId }.distinct().all { exerciseVisible(it, me) }
+                }
+                if (!allVisible) {
+                    call.respondText("one or more of those exercises doesn't exist", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+                val completed = transaction {
+                    val workoutRow = Workouts.selectAll()
+                        .where { (Workouts.id eq workoutId) and (Workouts.userId eq me) }
+                        .singleOrNull()
+                        ?: return@transaction null
+
+                    val now = LocalDateTime.now()
+                    SetEntries.deleteWhere { SetEntries.workoutId eq workoutId }
+                    request.sets.forEach { set ->
+                        SetEntries.insert {
+                            it[SetEntries.workoutId] = workoutId
+                            it[exerciseId] = set.exerciseId
+                            it[setNumber] = set.setNumber
+                            it[reps] = set.reps
+                            it[weightKg] = set.weightKg
+                            it[createdAt] = now
+                        }
+                    }
+
+                    val endedAt = workoutRow[Workouts.endedAt] ?: now
+                    val notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }?.take(500)
+                    Workouts.update({ (Workouts.id eq workoutId) and (Workouts.userId eq me) }) {
+                        it[Workouts.endedAt] = endedAt
+                        it[Workouts.notes] = notes
+                    }
+
+                    WorkoutResponse(
+                        id = workoutId,
+                        workoutName = workoutRow[Workouts.workoutName],
+                        startedAt = workoutRow[Workouts.startedAt].toString(),
+                        endedAt = endedAt.toString(),
+                        notes = notes
+                    )
+                }
+
+                if (completed == null) {
+                    call.respondText("no workout with that id", status = HttpStatusCode.NotFound)
+                } else {
+                    call.respond(completed)
+                }
             }
 
             // Permanently deletes this user's account and everything they own:

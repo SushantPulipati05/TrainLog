@@ -142,6 +142,7 @@ fun WorkoutsScreen(
                     )
                     Row(
                         modifier = Modifier
+                            .clip(RoundedCornerShape(50))
                             .background(AppAccent, RoundedCornerShape(50))
                             .clickable { showCreateDialog = true }
                             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -326,6 +327,7 @@ private fun CategoryFilterRow(
 private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
+            .clip(RoundedCornerShape(50))
             .background(if (selected) AppAccent else AppSurface, RoundedCornerShape(50))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -347,8 +349,9 @@ private fun WorkoutTemplateCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(AppSurface)
             .clickable(onClick = onClick)
-            .background(AppSurface, RoundedCornerShape(18.dp))
             .padding(18.dp)
     ) {
         Row(

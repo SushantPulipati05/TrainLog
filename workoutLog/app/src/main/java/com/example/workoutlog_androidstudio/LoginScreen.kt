@@ -35,6 +35,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -118,6 +119,7 @@ fun LoginScreen() {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
                 .background(Color.White, RoundedCornerShape(14.dp))
                 .clickable(enabled = !isBusy) { launchAuth { AuthManager.signInWithGoogle(context) } }
                 .padding(vertical = 16.dp),

@@ -12,6 +12,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -106,6 +110,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Brings back a workout that was still in progress if Android killed
+        // the app (it's saved on the phone with every change).
+        ActiveWorkoutState.init(this)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
         handleIntent(intent)
@@ -298,66 +305,90 @@ class MainActivity : ComponentActivity() {
                     // comment above. Its own onBack only ever pops the
                     // stack, so it reveals whatever was open before it
                     // rather than jumping to a single hardcoded screen.
-                    when (val top = screenStack.lastOrNull()) {
-                        is Screen.WorkoutDetail -> {
-                            WorkoutDetailScreen(
-                                workout = top.workout,
-                                onBack = { pop() },
-                                onOpenExerciseHistory = { exerciseId, exerciseName ->
-                                    push(Screen.ExerciseHistory(exerciseId, exerciseName))
-                                }
-                            )
-                        }
-                        is Screen.ExerciseHistory -> {
-                            ExerciseHistoryScreen(
-                                exerciseId = top.exerciseId,
-                                exerciseName = top.exerciseName,
-                                onBack = { pop() }
-                            )
-                        }
-                        is Screen.TemplateDetail -> {
-                            WorkoutTemplateDetailScreen(
-                                templateSummary = top.template,
-                                onBack = { pop() },
-                                onStartWorkout = { templateDetail ->
-                                    coroutineScope.launch {
-                                        // Same belt-and-suspenders guard as onStartWorkout
-                                        // above, behind StartWorkoutButton's own disabled state.
-                                        if (ActiveWorkoutState.workout != null) return@launch
-                                        try {
-                                            val started = NetworkClient.workoutApi.startWorkout(
-                                                NewWorkoutRequest(workoutName = templateDetail.name)
-                                            )
-                                            Log.d("StartWorkout", "Created workout from template: $started")
-                                            pendingPrefillExercises = templateDetail.exercises
-                                            // Starting a workout leaves this whole chevron
-                                            // stack behind, not just its top entry - when the
-                                            // workout ends you land back on the tab view.
-                                            screenStack = emptyList()
-                                            ActiveWorkoutState.start(started)
-                                        } catch (e: Exception) {
-                                            Log.e("StartWorkout", "Failed to start workout from template", e)
+                    // Opening a chevron screen slides it in from the right over
+                    // the current one (which drifts a little to the left);
+                    // going back slides it off to the right, revealing
+                    // the previous screen - or the tabs, when the stack empties.
+                    AnimatedContent(
+                        targetState = screenStack,
+                        modifier = Modifier.fillMaxSize(),
+                        contentKey = { it.lastOrNull() },
+                        transitionSpec = {
+                            val forward = targetState.size >= initialState.size
+                            val spec = tween<IntOffset>(durationMillis = 320, easing = FastOutSlowInEasing)
+                            if (forward) {
+                                (slideInHorizontally(spec) { fullWidth -> fullWidth })
+                                    .togetherWith(slideOutHorizontally(spec) { fullWidth -> -fullWidth / 4 })
+                                    .apply { targetContentZIndex = 1f }
+                            } else {
+                                (slideInHorizontally(spec) { fullWidth -> -fullWidth / 4 })
+                                    .togetherWith(slideOutHorizontally(spec) { fullWidth -> fullWidth })
+                                    .apply { targetContentZIndex = -1f }
+                            }
+                        },
+                        label = "chevronScreens"
+                    ) { stack ->
+                        when (val top = stack.lastOrNull()) {
+                            is Screen.WorkoutDetail -> {
+                                WorkoutDetailScreen(
+                                    workout = top.workout,
+                                    onBack = { pop() },
+                                    onOpenExerciseHistory = { exerciseId, exerciseName ->
+                                        push(Screen.ExerciseHistory(exerciseId, exerciseName))
+                                    }
+                                )
+                            }
+                            is Screen.ExerciseHistory -> {
+                                ExerciseHistoryScreen(
+                                    exerciseId = top.exerciseId,
+                                    exerciseName = top.exerciseName,
+                                    onBack = { pop() }
+                                )
+                            }
+                            is Screen.TemplateDetail -> {
+                                WorkoutTemplateDetailScreen(
+                                    templateSummary = top.template,
+                                    onBack = { pop() },
+                                    onStartWorkout = { templateDetail ->
+                                        coroutineScope.launch {
+                                            // Same belt-and-suspenders guard as onStartWorkout
+                                            // above, behind StartWorkoutButton's own disabled state.
+                                            if (ActiveWorkoutState.workout != null) return@launch
+                                            try {
+                                                val started = NetworkClient.workoutApi.startWorkout(
+                                                    NewWorkoutRequest(workoutName = templateDetail.name)
+                                                )
+                                                Log.d("StartWorkout", "Created workout from template: $started")
+                                                pendingPrefillExercises = templateDetail.exercises
+                                                // Starting a workout leaves this whole chevron
+                                                // stack behind, not just its top entry - when the
+                                                // workout ends you land back on the tab view.
+                                                screenStack = emptyList()
+                                                ActiveWorkoutState.start(started)
+                                            } catch (e: Exception) {
+                                                Log.e("StartWorkout", "Failed to start workout from template", e)
+                                            }
                                         }
                                     }
-                                }
-                            )
+                                )
+                            }
+                            Screen.Calendar -> {
+                                WorkoutCalendarScreen(
+                                    onBack = { pop() },
+                                    onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) }
+                                )
+                            }
+                            Screen.Targets -> {
+                                TargetsScreen(onBack = { pop() })
+                            }
+                            Screen.AllWorkouts -> {
+                                AllWorkoutsScreen(
+                                    onBack = { pop() },
+                                    onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) }
+                                )
+                            }
+                            null -> Unit
                         }
-                        Screen.Calendar -> {
-                            WorkoutCalendarScreen(
-                                onBack = { pop() },
-                                onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) }
-                            )
-                        }
-                        Screen.Targets -> {
-                            TargetsScreen(onBack = { pop() })
-                        }
-                        Screen.AllWorkouts -> {
-                            AllWorkoutsScreen(
-                                onBack = { pop() },
-                                onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) }
-                            )
-                        }
-                        null -> Unit
                     }
 
                     // ActiveWorkoutScreen itself - presented like an iOS modal,
@@ -396,13 +427,29 @@ class MainActivity : ComponentActivity() {
                                 onTogglePause = { ActiveWorkoutState.isPaused = !ActiveWorkoutState.isPaused },
                                 prefillExercises = pendingPrefillExercises,
                                 onMinimize = { ActiveWorkoutState.isMinimized = true },
-                                onClose = { endActiveWorkout() },
+                                onClose = {
+                                    // Discarded: drop it here and remove the
+                                    // empty, never-finished workout from the
+                                    // server too (best effort).
+                                    val discardedId = workout.id
+                                    endActiveWorkout()
+                                    coroutineScope.launch {
+                                        try {
+                                            NetworkClient.workoutApi.deleteWorkout(discardedId)
+                                        } catch (e: Exception) {
+                                            Log.e("DiscardWorkout", "Couldn't delete discarded workout $discardedId", e)
+                                        }
+                                    }
+                                },
                                 onEndWorkout = { notes ->
                                     // ActiveWorkoutScreen has already synced the sets and
                                     // notes to the backend by the time this fires - this
                                     // just closes the screen.
                                     Log.d("EndWorkout", "Ended workout ${workout.id}: $notes")
                                     endActiveWorkout()
+                                    // Pull the finished workout into Home's list
+                                    // (and the totals it changes) right away.
+                                    coroutineScope.launch { AppDataCache.refreshAfterWorkoutEnded() }
                                 },
                                 modifier = Modifier.graphicsLayer {
                                     translationY = size.height * minimizeProgress

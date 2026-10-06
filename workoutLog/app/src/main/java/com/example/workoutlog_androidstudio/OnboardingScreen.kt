@@ -52,6 +52,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -632,6 +633,7 @@ private fun WeeklyTargetPicker(selected: Int, onSelect: (Int) -> Unit) {
                     modifier = Modifier
                         .weight(1f)
                         .height(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
                         .background(if (isSelected) AppAccent else AppSurface, RoundedCornerShape(14.dp))
                         .border(1.dp, if (isSelected) AppAccent else AppBorder, RoundedCornerShape(14.dp))
                         .clickable { onSelect(days) },

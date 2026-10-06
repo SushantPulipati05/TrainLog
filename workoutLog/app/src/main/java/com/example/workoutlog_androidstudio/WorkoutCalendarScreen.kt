@@ -169,6 +169,7 @@ fun WorkoutCalendarScreen(
                             contentDescription = "Previous month",
                             tint = AppTextSecondary,
                             modifier = Modifier
+                                .clip(CircleShape)
                                 .clickable { displayedMonth = displayedMonth.minusMonths(1) }
                                 .padding(6.dp)
                         )
@@ -177,6 +178,7 @@ fun WorkoutCalendarScreen(
                             contentDescription = "Next month",
                             tint = AppTextSecondary,
                             modifier = Modifier
+                                .clip(CircleShape)
                                 .clickable { displayedMonth = displayedMonth.plusMonths(1) }
                                 .padding(6.dp)
                         )

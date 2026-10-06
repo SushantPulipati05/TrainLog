@@ -1,5 +1,7 @@
 package com.example.workoutlog_androidstudio
 
+import kotlinx.serialization.Serializable
+
 /** A finished workout as shown in the "Previous Workouts" list on the home screen. */
 data class WorkoutSummary(
     val id: Int,
@@ -13,7 +15,9 @@ data class WorkoutSummary(
     val tags: List<String>
 )
 
-/** One row in an exercise's set table during an active workout. */
+/** One row in an exercise's set table during an active workout. Serializable
+ *  so a workout in progress can be saved on the phone (see ActiveWorkoutState). */
+@Serializable
 data class ExerciseSet(
     val setNumber: Int,
     val previousLabel: String,  // e.g. "100 x 8" - what was logged last time
@@ -29,6 +33,7 @@ data class ExerciseSet(
 )
 
 /** One exercise card during an active workout, with all its logged sets. */
+@Serializable
 data class ActiveExercise(
     val exerciseId: Int,        // the backend's Exercises.id, needed to log sets
     val name: String,

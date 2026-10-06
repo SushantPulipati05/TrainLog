@@ -157,7 +157,29 @@ object AppDataCache {
     }
 
     fun addWorkout(workout: WorkoutSummary) {
-        workoutSummaries = (workoutSummaries.orEmpty() + workout)
+        workoutSummaries = (workoutSummaries.orEmpty() + workout).sortedByDescending { it.id }
+    }
+
+    /** Called right after a workout is ended. Re-fetches everything a
+     *  finished workout changes - the previous-workouts list (and so the
+     *  heatmap and weekly target), the profile's totals, and the templates'
+     *  "last done" labels - and drops the cached exercise growth charts so
+     *  they reload with the new sets. Failures are ignored: each screen
+     *  still loads for itself the next time it opens. */
+    suspend fun refreshAfterWorkoutEnded() {
+        exerciseHistories = emptyMap()
+        try {
+            loadWorkoutSummaries(force = true)
+        } catch (e: Exception) {
+        }
+        try {
+            loadProfile(force = true)
+        } catch (e: Exception) {
+        }
+        try {
+            loadTemplates(force = true)
+        } catch (e: Exception) {
+        }
     }
 
     fun invalidateWorkoutDetail(id: Int) {
