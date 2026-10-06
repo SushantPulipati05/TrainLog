@@ -94,6 +94,11 @@ data class UpdateSetRequest(
     val reps: Int,
     val weightKg: Double?
 )
+@Serializable
+data class CompleteWorkoutRequest(
+    val notes: String? = null,
+    val sets: List<NewSetRequest>
+)
 
 @Serializable
 data class ProfileResponse(

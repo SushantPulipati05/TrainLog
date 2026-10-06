@@ -81,6 +81,9 @@ interface WorkoutApi {
 
     @DELETE("account")
     suspend fun deleteAccount()
+
+    @POST("workouts/{id}/complete")
+    suspend fun completeWorkout(@Path("id") workoutId: Int, @Body request: CompleteWorkoutRequest): WorkoutResponse
 }
 
 object NetworkClient {
