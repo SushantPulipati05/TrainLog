@@ -48,7 +48,11 @@ object AuthManager {
         private set
 
     init {
-        firebaseAuth.addAuthStateListener { isSignedIn = it.currentUser != null }
+        firebaseAuth.addAuthStateListener {
+            isSignedIn = it.currentUser != null
+            // Tags crash reports with the account (an opaque uid) - cleared on sign-out.
+            CrashReporting.setUser(it.currentUser?.uid)
+        }
     }
 
     /** True when this account signs in with an email + password (as opposed to Google only). */
@@ -137,20 +141,27 @@ object AuthManager {
     }
 }
 
-/** Attaches the signed-in user's Firebase ID token to every request. If the
+/** Attaches the phone's time zone and the signed-in user's Firebase ID
+ *  token to every request. If the
  *  server still says 401, the token is force-refreshed and the request tried
  *  once more; if that fails too, the login is no longer valid (account
  *  deleted or disabled), so the user is signed out. */
 class AuthInterceptor : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
-        val token = AuthManager.idTokenBlocking() ?: return chain.proceed(chain.request())
+        // The phone's time zone (e.g. "Asia/Kolkata") goes on every request,
+        // so the server can put each workout on the right local day.
+        val request = chain.request().newBuilder()
+            .header("X-Time-Zone", java.util.TimeZone.getDefault().id)
+            .build()
 
-        val response = chain.proceed(chain.request().withBearer(token))
+        val token = AuthManager.idTokenBlocking() ?: return chain.proceed(request)
+
+        val response = chain.proceed(request.withBearer(token))
         if (response.code != 401) return response
 
         response.close()
-        val fresh = AuthManager.idTokenBlocking(forceRefresh = true) ?: return chain.proceed(chain.request())
-        val retried = chain.proceed(chain.request().withBearer(fresh))
+        val fresh = AuthManager.idTokenBlocking(forceRefresh = true) ?: return chain.proceed(request)
+        val retried = chain.proceed(request.withBearer(fresh))
         if (retried.code == 401) AuthManager.signOut()
         return retried
     }

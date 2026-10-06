@@ -371,6 +371,9 @@ fun ActiveWorkoutScreen(
                         true
                     } catch (e: Exception) {
                         Log.e("EndWorkout", "Failed to sync workout ${workout.id}", e)
+                        // Recovered from (the workout stays on the phone to
+                        // retry), but worth knowing about if it keeps happening.
+                        CrashReporting.record(e)
                         false
                     }
                     isEndingWorkout = false

@@ -50,6 +50,8 @@ import java.sql.DriverManager
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
@@ -417,6 +419,7 @@ fun Application.module() {
             // library plus any custom ones they made - as a JSON array.
             get("/exercises") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val exercises = transaction {
                     Exercises.selectAll().where { visibleExercises(me) }.map { row ->
                         ExerciseResponse(
@@ -435,6 +438,7 @@ fun Application.module() {
             // seeded list doesn't have what they're looking for.
             post("/exercises") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val request = try {
                     call.receive<NewExerciseRequest>()
                 } catch (e: Exception) {
@@ -502,6 +506,7 @@ fun Application.module() {
             // every workout from the client and recomputing it there.
             get("/exercises/{id}/history") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val exerciseId = call.parameters["id"]?.toIntOrNull()
                 if (exerciseId == null) {
                     call.respondText("exercise id must be a number", status = HttpStatusCode.BadRequest)
@@ -528,7 +533,7 @@ fun Application.module() {
                         val maxWeightKg = setsForWorkout.mapNotNull { it[SetEntries.weightKg] }.maxOrNull()
                         val maxReps = setsForWorkout.maxOf { it[SetEntries.reps] }
                         val totalVolumeKg = setsForWorkout.sumOf { (it[SetEntries.weightKg] ?: 0.0) * it[SetEntries.reps] }
-                        val startedAt = setsForWorkout.first()[Workouts.startedAt]
+                        val startedAt = setsForWorkout.first()[Workouts.startedAt].toZone(zone)
 
                         // A set with no weight at all never counts as a PR -
                         // there's nothing to compare against the running max.
@@ -580,6 +585,7 @@ fun Application.module() {
             // the built-in ones and any the user has made.
             get("/workout-templates") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val templates = transaction {
                     WorkoutTemplates.selectAll().where { visibleTemplates(me) }.map { row ->
                         val templateId = row[WorkoutTemplates.id]
@@ -596,7 +602,7 @@ fun Application.module() {
                             estimatedMinutes = row[WorkoutTemplates.estimatedMinutes],
                             exerciseCount = exerciseIds.size,
                             muscleGroups = computeMuscleGroups(exerciseIds),
-                            lastLoggedDaysAgo = computeLastLoggedDaysAgo(row[WorkoutTemplates.name], me),
+                            lastLoggedDaysAgo = computeLastLoggedDaysAgo(row[WorkoutTemplates.name], me, zone),
                             isCustom = row[WorkoutTemplates.isCustom]
                         )
                     }
@@ -610,6 +616,7 @@ fun Application.module() {
             // resolveTemplateFields) - the app never sends them.
             post("/workout-templates") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val request = try {
                     call.receive<NewWorkoutTemplateRequest>()
                 } catch (e: Exception) {
@@ -656,7 +663,7 @@ fun Application.module() {
                         } get WorkoutTemplates.id
 
                         insertTemplateExercises(newTemplateId, request.exerciseIds)
-                        loadTemplateDetail(newTemplateId, me)
+                        loadTemplateDetail(newTemplateId, me, zone)
                     }
                 } catch (e: Exception) {
                     // Most likely a duplicate name - WorkoutTemplates.name has a unique index.
@@ -675,13 +682,14 @@ fun Application.module() {
             // workout" detail screen.
             get("/workout-templates/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val templateId = call.parameters["id"]?.toIntOrNull()
                 if (templateId == null) {
                     call.respondText("template id must be a number", status = HttpStatusCode.BadRequest)
                     return@get
                 }
 
-                val detail = transaction { loadTemplateDetail(templateId, me) }
+                val detail = transaction { loadTemplateDetail(templateId, me, zone) }
 
                 if (detail == null) {
                     call.respondText("no template with that id", status = HttpStatusCode.NotFound)
@@ -696,6 +704,7 @@ fun Application.module() {
             // user's template would.
             delete("/workout-templates/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val templateId = call.parameters["id"]?.toIntOrNull()
                 if (templateId == null) {
                     call.respondText("template id must be a number", status = HttpStatusCode.BadRequest)
@@ -726,6 +735,7 @@ fun Application.module() {
             // if the app doesn't send them.
             post("/workouts/{id}/save-as-template") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -788,7 +798,7 @@ fun Application.module() {
                     "empty" -> call.respondText("that workout has no exercises to save", status = HttpStatusCode.BadRequest)
                     "duplicate" -> call.respondText("a workout with that name already exists", status = HttpStatusCode.Conflict)
                     is Int -> {
-                        val detail = transaction { loadTemplateDetail(result, me) }
+                        val detail = transaction { loadTemplateDetail(result, me, zone) }
                         call.respond(HttpStatusCode.Created, detail!!)
                     }
                     else -> call.respondText("couldn't save this workout as a template", status = HttpStatusCode.InternalServerError)
@@ -798,6 +808,7 @@ fun Application.module() {
             // Returns every workout, most recently started first.
             get("/workouts") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workouts = transaction {
                     Workouts.selectAll()
                         .where { Workouts.userId eq me }
@@ -806,8 +817,8 @@ fun Application.module() {
                             WorkoutResponse(
                                 id = row[Workouts.id],
                                 workoutName = row[Workouts.workoutName],
-                                startedAt = row[Workouts.startedAt].toString(),
-                                endedAt = row[Workouts.endedAt]?.toString(),
+                                startedAt = row[Workouts.startedAt].toZone(zone).toString(),
+                                endedAt = row[Workouts.endedAt]?.toZone(zone)?.toString(),
                                 notes = row[Workouts.notes]
                             )
                         }
@@ -820,6 +831,7 @@ fun Application.module() {
             // and the distinct muscle groups trained, most recent first.
             get("/workouts/summary") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val summaries = transaction {
                     // Now a real value from the athlete profile instead of a
                     // hardcoded guess - falls back to the old guess only if the
@@ -836,9 +848,9 @@ fun Application.module() {
                         .mapNotNull { workoutRow ->
                             // Skip workouts that were started but never ended - there's
                             // nothing meaningful to summarize yet for those.
-                            val endedAt = workoutRow[Workouts.endedAt] ?: return@mapNotNull null
+                            val endedAt = workoutRow[Workouts.endedAt]?.toZone(zone) ?: return@mapNotNull null
                             val workoutId = workoutRow[Workouts.id]
-                            val startedAt = workoutRow[Workouts.startedAt]
+                            val startedAt = workoutRow[Workouts.startedAt].toZone(zone)
 
                             val sets = SetEntries.selectAll()
                                 .where { SetEntries.workoutId eq workoutId }
@@ -884,7 +896,7 @@ fun Application.module() {
                                 "${minutes}m"
                             }
 
-                            val today = LocalDateTime.now().toLocalDate()
+                            val today = LocalDate.now(zone)
                             val startedDate = startedAt.toLocalDate()
                             val dateLabel = when (startedDate) {
                                 today -> "TODAY"
@@ -913,6 +925,7 @@ fun Application.module() {
             // Returns one workout plus every set logged against it.
             get("/workouts/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -942,8 +955,8 @@ fun Application.module() {
                     WorkoutDetailResponse(
                         id = workoutRow[Workouts.id],
                         workoutName = workoutRow[Workouts.workoutName],
-                        startedAt = workoutRow[Workouts.startedAt].toString(),
-                        endedAt = workoutRow[Workouts.endedAt]?.toString(),
+                        startedAt = workoutRow[Workouts.startedAt].toZone(zone).toString(),
+                        endedAt = workoutRow[Workouts.endedAt]?.toZone(zone)?.toString(),
                         notes = workoutRow[Workouts.notes],
                         sets = sets
                     )
@@ -959,8 +972,9 @@ fun Application.module() {
             // Starts a new workout. Example body: {"workoutName":"Push Day"}
             post("/workouts") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val request = call.receive<NewWorkoutRequest>()
-                val now = LocalDateTime.now()
+                val now = nowUtc()
 
                 val newWorkout = transaction {
                     val newId = Workouts.insert {
@@ -972,7 +986,7 @@ fun Application.module() {
                     WorkoutResponse(
                         id = newId,
                         workoutName = request.workoutName,
-                        startedAt = now.toString(),
+                        startedAt = now.toZone(zone).toString(),
                         endedAt = null,
                         notes = null
                     )
@@ -985,6 +999,7 @@ fun Application.module() {
             // Example: POST /workouts/1/sets  with body {"exerciseId":3,"setNumber":1,"reps":10,"weightKg":40.0}
             post("/workouts/{id}/sets") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -1006,7 +1021,7 @@ fun Application.module() {
                         it[setNumber] = request.setNumber
                         it[reps] = request.reps
                         it[weightKg] = request.weightKg
-                        it[createdAt] = LocalDateTime.now()
+                        it[createdAt] = nowUtc()
                     } get SetEntries.id
 
                     SetEntryResponse(
@@ -1032,6 +1047,7 @@ fun Application.module() {
             // with no notes is fine too.
             post("/workouts/{id}/end") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -1048,7 +1064,7 @@ fun Application.module() {
 
                 val updatedWorkout = transaction {
                     Workouts.update({ (Workouts.id eq workoutId) and (Workouts.userId eq me) }) {
-                        it[endedAt] = LocalDateTime.now()
+                        it[endedAt] = nowUtc()
                         if (request?.notes != null) {
                             it[notes] = request.notes
                         }
@@ -1058,8 +1074,8 @@ fun Application.module() {
                         WorkoutResponse(
                             id = row[Workouts.id],
                             workoutName = row[Workouts.workoutName],
-                            startedAt = row[Workouts.startedAt].toString(),
-                            endedAt = row[Workouts.endedAt]?.toString(),
+                            startedAt = row[Workouts.startedAt].toZone(zone).toString(),
+                            endedAt = row[Workouts.endedAt]?.toZone(zone)?.toString(),
                             notes = row[Workouts.notes]
                         )
                     }.singleOrNull()
@@ -1078,6 +1094,7 @@ fun Application.module() {
             // point at it.
             delete("/workouts/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -1103,6 +1120,7 @@ fun Application.module() {
             // was actually done in are not editable.
             patch("/workouts/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -1130,8 +1148,8 @@ fun Application.module() {
                         WorkoutResponse(
                             id = row[Workouts.id],
                             workoutName = row[Workouts.workoutName],
-                            startedAt = row[Workouts.startedAt].toString(),
-                            endedAt = row[Workouts.endedAt]?.toString(),
+                            startedAt = row[Workouts.startedAt].toZone(zone).toString(),
+                            endedAt = row[Workouts.endedAt]?.toZone(zone)?.toString(),
                             notes = row[Workouts.notes]
                         )
                     }.singleOrNull()
@@ -1147,6 +1165,7 @@ fun Application.module() {
             // Edits one already-logged set's reps/weight.
             put("/sets/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val setId = call.parameters["id"]?.toIntOrNull()
                 if (setId == null) {
                     call.respondText("set id must be a number", status = HttpStatusCode.BadRequest)
@@ -1192,6 +1211,7 @@ fun Application.module() {
             // while editing a past workout.
             delete("/sets/{id}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val setId = call.parameters["id"]?.toIntOrNull()
                 if (setId == null) {
                     call.respondText("set id must be a number", status = HttpStatusCode.BadRequest)
@@ -1216,6 +1236,7 @@ fun Application.module() {
             // to delete each of that exercise's sets one at a time.
             delete("/workouts/{workoutId}/exercises/{exerciseId}") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["workoutId"]?.toIntOrNull()
                 val exerciseId = call.parameters["exerciseId"]?.toIntOrNull()
                 if (workoutId == null || exerciseId == null) {
@@ -1239,7 +1260,8 @@ fun Application.module() {
             // Returns the athlete profile screen's data.
             get("/profile") {
                 val me = call.userId()
-                val response = loadProfileResponse(me)
+                val zone = call.userZone()
+                val response = loadProfileResponse(me, zone)
                 if (response == null) {
                     call.respondText("no profile found", status = HttpStatusCode.NotFound)
                 } else {
@@ -1253,6 +1275,7 @@ fun Application.module() {
             // like "-0.4 KG" the next time it loads.
             patch("/profile") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val request = try {
                     call.receive<UpdateProfileRequest>()
                 } catch (e: Exception) {
@@ -1293,7 +1316,7 @@ fun Application.module() {
                     return@patch
                 }
 
-                call.respond(loadProfileResponse(me)!!)
+                call.respond(loadProfileResponse(me, zone)!!)
             }
 
             // Saves a finished workout in one go: replaces whatever sets the
@@ -1304,6 +1327,7 @@ fun Application.module() {
             // duplicate sets, and keeps the original end time.
             post("/workouts/{id}/complete") {
                 val me = call.userId()
+                val zone = call.userZone()
                 val workoutId = call.parameters["id"]?.toIntOrNull()
                 if (workoutId == null) {
                     call.respondText("workout id must be a number", status = HttpStatusCode.BadRequest)
@@ -1340,7 +1364,7 @@ fun Application.module() {
                         .singleOrNull()
                         ?: return@transaction null
 
-                    val now = LocalDateTime.now()
+                    val now = nowUtc()
                     SetEntries.deleteWhere { SetEntries.workoutId eq workoutId }
                     request.sets.forEach { set ->
                         SetEntries.insert {
@@ -1363,8 +1387,8 @@ fun Application.module() {
                     WorkoutResponse(
                         id = workoutId,
                         workoutName = workoutRow[Workouts.workoutName],
-                        startedAt = workoutRow[Workouts.startedAt].toString(),
-                        endedAt = endedAt.toString(),
+                        startedAt = workoutRow[Workouts.startedAt].toZone(zone).toString(),
+                        endedAt = endedAt.toZone(zone).toString(),
                         notes = notes
                     )
                 }
@@ -1384,6 +1408,7 @@ fun Application.module() {
             // failure here never leaves a login with no data behind it.
             delete("/account") {
                 val me = call.userId()
+                val zone = call.userZone()
                 deleteAccount(me)
                 call.respond(HttpStatusCode.NoContent)
             }
@@ -1617,7 +1642,7 @@ private fun computeMuscleGroups(exerciseIds: List<Int>): List<String> {
  *  logged by this user (0 = today), or null if they never have. Matches purely by
  *  name, since workouts aren't otherwise linked back to the template they
  *  were started from. Must be called from inside an existing transaction { } block. */
-private fun computeLastLoggedDaysAgo(templateName: String, me: Int): Int? {
+private fun computeLastLoggedDaysAgo(templateName: String, me: Int, zone: ZoneId): Int? {
     val lastStartedAt = Workouts.selectAll()
         .where { (Workouts.workoutName eq templateName) and (Workouts.endedAt.isNotNull()) and (Workouts.userId eq me) }
         .orderBy(Workouts.startedAt, SortOrder.DESC)
@@ -1626,7 +1651,7 @@ private fun computeLastLoggedDaysAgo(templateName: String, me: Int): Int? {
         ?.get(Workouts.startedAt)
         ?: return null
 
-    return ChronoUnit.DAYS.between(lastStartedAt.toLocalDate(), LocalDateTime.now().toLocalDate()).toInt().coerceAtLeast(0)
+    return ChronoUnit.DAYS.between(lastStartedAt.toZone(zone).toLocalDate(), LocalDate.now(zone)).toInt().coerceAtLeast(0)
 }
 
 /** Inserts one row per exercise into WorkoutTemplateExercises, in the given
@@ -1645,7 +1670,7 @@ private fun insertTemplateExercises(templateId: Int, exerciseIds: List<Int>) {
  *  and the two "create a template" routes, which both return the newly
  *  created template the same way it'd be fetched. Must be called from
  *  inside an existing transaction { } block. */
-private fun loadTemplateDetail(templateId: Int, me: Int): WorkoutTemplateDetailResponse? {
+private fun loadTemplateDetail(templateId: Int, me: Int, zone: ZoneId): WorkoutTemplateDetailResponse? {
     val templateRow = WorkoutTemplates.selectAll()
         .where { (WorkoutTemplates.id eq templateId) and visibleTemplates(me) }
         .singleOrNull()
@@ -1674,7 +1699,7 @@ private fun loadTemplateDetail(templateId: Int, me: Int): WorkoutTemplateDetailR
         level = templateRow[WorkoutTemplates.level],
         estimatedMinutes = templateRow[WorkoutTemplates.estimatedMinutes],
         muscleGroups = computeMuscleGroups(exerciseIds),
-        lastLoggedDaysAgo = computeLastLoggedDaysAgo(templateRow[WorkoutTemplates.name], me),
+        lastLoggedDaysAgo = computeLastLoggedDaysAgo(templateRow[WorkoutTemplates.name], me, zone),
         notes = templateRow[WorkoutTemplates.notes],
         isCustom = templateRow[WorkoutTemplates.isCustom],
         exercises = exercises
@@ -1857,7 +1882,7 @@ private fun seedWorkoutTemplatesIfNeeded() {
  * Returns null only if they somehow have no profile row (one is always
  * created the first time an account is seen - see provisionUser()).
  */
-private fun loadProfileResponse(me: Int): ProfileResponse? = transaction {
+private fun loadProfileResponse(me: Int, zone: ZoneId): ProfileResponse? = transaction {
     val profile = AthleteProfile.selectAll().where { AthleteProfile.userId eq me }.singleOrNull()
         ?: return@transaction null
 
@@ -1895,7 +1920,7 @@ private fun loadProfileResponse(me: Int): ProfileResponse? = transaction {
     val bmi = bodyweightKg / (heightM * heightM)
 
     val memberSinceDate = LocalDate.parse(profile[AthleteProfile.memberSince])
-    val weeksActive = ChronoUnit.WEEKS.between(memberSinceDate, LocalDate.now()).toInt().coerceAtLeast(0)
+    val weeksActive = ChronoUnit.WEEKS.between(memberSinceDate, LocalDate.now(zone)).toInt().coerceAtLeast(0)
 
     val previousWeight = profile[AthleteProfile.previousWeightKg]
     val weightDelta = previousWeight?.let { bodyweightKg - it }
@@ -1944,14 +1969,14 @@ private fun ApplicationCall.userId(): Int {
 
     userIdCache[firebaseUid]?.let { return it }
     return synchronized(provisionLock) {
-        userIdCache[firebaseUid] ?: provisionUser(payload).also { userIdCache[firebaseUid] = it }
+        userIdCache[firebaseUid] ?: provisionUser(payload, userZone()).also { userIdCache[firebaseUid] = it }
     }
 }
 
 /** Finds - or on first sight creates - the Users row for a verified token,
  *  makes sure it has a profile, and (for the app's owner only) hands over
  *  the data that predates accounts. */
-private fun provisionUser(payload: Payload): Int = transaction {
+private fun provisionUser(payload: Payload, zone: ZoneId): Int = transaction {
     val firebaseUid = payload.subject
     val email = payload.getClaim("email").asString()
     val emailVerified = payload.getClaim("email_verified").asBoolean() ?: false
@@ -1961,7 +1986,7 @@ private fun provisionUser(payload: Payload): Int = transaction {
         it[Users.firebaseUid] = firebaseUid
         it[Users.email] = email
         it[Users.displayName] = displayName
-        it[Users.createdAt] = LocalDateTime.now()
+        it[Users.createdAt] = nowUtc()
     }
     val me = Users.selectAll().where { Users.firebaseUid eq firebaseUid }.single()[Users.id]
 
@@ -1990,7 +2015,7 @@ private fun provisionUser(payload: Payload): Int = transaction {
             it[AthleteProfile.targetWeightKg] = null
             it[AthleteProfile.heightCm] = 170.0
             it[AthleteProfile.bodyFatPercent] = null
-            it[AthleteProfile.memberSince] = LocalDate.now().toString()
+            it[AthleteProfile.memberSince] = LocalDate.now(zone).toString()
             it[AthleteProfile.onboardingComplete] = false
         }
     }
@@ -2209,3 +2234,24 @@ private fun migrateAthleteProfileOnboarding() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Time zones
+// ---------------------------------------------------------------------------
+// Every timestamp is STORED in UTC, whatever clock the server runs on. Every
+// timestamp and calendar date SENT BACK is in the person's own time zone,
+// which the app sends on each request - so a workout at 11pm in India lands
+// on that day, not the next one in UTC, and "TODAY"/"YESTERDAY", the heatmap
+// and the weekly target all line up with the phone's own calendar.
+
+/** The caller's time zone from the X-Time-Zone header (an IANA id such as
+ *  "Asia/Kolkata"); UTC when it's missing or not a real zone. */
+private fun ApplicationCall.userZone(): ZoneId =
+    request.headers["X-Time-Zone"]?.let { id -> runCatching { ZoneId.of(id) }.getOrNull() } ?: ZoneOffset.UTC
+
+/** The current time in UTC - how every timestamp is stored. */
+private fun nowUtc(): LocalDateTime = LocalDateTime.now(ZoneOffset.UTC)
+
+/** A stored (UTC) timestamp as wall-clock time in [zone]. */
+private fun LocalDateTime.toZone(zone: ZoneId): LocalDateTime =
+    atOffset(ZoneOffset.UTC).atZoneSameInstant(zone).toLocalDateTime()
