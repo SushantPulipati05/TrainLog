@@ -2,6 +2,8 @@ package com.example.workoutlog_androidstudio
 
 import androidx.compose.ui.graphics.Color
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -82,4 +84,19 @@ fun heatmapTooltipLabel(date: LocalDate, exerciseCount: Int): String {
     val month = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
     val exerciseWord = if (exerciseCount == 1) "exercise" else "exercises"
     return "$exerciseCount $exerciseWord on $day$suffix $month"
+}
+
+/**
+ * The time of day a workout happened, e.g. "6:42 PM – 7:36 PM" (or
+ * "18:42 – 19:36" when the phone uses 24-hour time). The server already
+ * sends startedAt/endedAt converted to the phone's time zone, as ISO
+ * local date-times like "2026-10-06T18:42:13". Returns null if they
+ * can't be parsed, so the caller can just leave the time out.
+ */
+fun workoutTimeRangeLabel(startedAt: String, endedAt: String?, use24Hour: Boolean): String? {
+    val formatter = DateTimeFormatter.ofPattern(if (use24Hour) "HH:mm" else "h:mm a", Locale.ENGLISH)
+    val start = runCatching { LocalDateTime.parse(startedAt) }.getOrNull() ?: return null
+    val end = endedAt?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+    val startLabel = start.format(formatter)
+    return if (end == null) startLabel else "$startLabel – ${end.format(formatter)}"
 }

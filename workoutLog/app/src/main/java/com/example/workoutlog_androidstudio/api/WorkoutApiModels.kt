@@ -72,7 +72,8 @@ data class WorkoutDetailResponse(
     val startedAt: String,
     val endedAt: String?,
     val notes: String?,
-    val sets: List<SetEntryResponse>
+    val sets: List<SetEntryResponse>,
+    
 )
 
 @Serializable

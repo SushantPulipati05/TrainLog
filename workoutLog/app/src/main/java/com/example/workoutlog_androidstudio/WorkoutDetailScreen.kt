@@ -1,5 +1,7 @@
 package com.example.workoutlog_androidstudio
 
+import androidx.compose.ui.platform.LocalContext
+import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -519,15 +521,30 @@ fun WorkoutDetailScreen(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
+                // Date plus the time of day it happened, e.g. "TODAY · 6:42 PM – 7:36 PM".
+                // The time comes from the per-set detail, so it appears as soon as that loads.
+                val context = LocalContext.current
+                val timeLabel = detail?.let {
+                    workoutTimeRangeLabel(
+                        startedAt = it.startedAt,
+                        endedAt = it.endedAt,
+                        use24Hour = DateFormat.is24HourFormat(context)
+                    )
+                }
                 Text(
-                    text = workout.dateLabel,
+                    text = if (timeLabel != null) "${workout.dateLabel} · $timeLabel" else workout.dateLabel,
                     style = MaterialTheme.typography.bodyMedium,
                     color = AppAccent
                 )
 
                 if (workout.tags.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // FlowRow wraps extra tags onto the next line instead of
+                    // squeezing the last one into a tall, one-letter-wide chip.
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         workout.tags.forEach { tag -> TagChip(text = tag) }
                     }
                 }
