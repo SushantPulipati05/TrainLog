@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -464,7 +463,8 @@ private suspend fun syncWorkoutToServer(
                 exerciseId = exercise.exerciseId,
                 setNumber = set.setNumber,
                 reps = reps,
-                weightKg = set.kg.toDoubleOrNull()
+                weightKg = set.kg.toDoubleOrNull(),
+                loggedAtSeconds = set.loggedAtSeconds
             )
         }
     }
@@ -504,14 +504,15 @@ private fun ExerciseCard(
                     color = AppTextMuted
                 )
             }
-            IconButton(onClick = { }) {
-                Icon(imageVector = Icons.Filled.MoreVert, contentDescription = null, tint = AppTextSecondary)
-            }
         }
         Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(0.9f))
-            Spacer(modifier = Modifier.weight(1.1f))
+        // Column widths here must match SetRow's: 40dp set box, 44dp time, then KG/REPS split the rest.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.width(40.dp), textAlign = TextAlign.Center)
+            Text("TIME", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Text(
                 text = if (exercise.isBodyweight) "ADDED KG" else "KG",
                 style = MaterialTheme.typography.labelSmall,
@@ -520,7 +521,6 @@ private fun ExerciseCard(
                 textAlign = TextAlign.Center
             )
             Text("REPS", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
-            Spacer(modifier = Modifier.width(32.dp))
         }
         Spacer(modifier = Modifier.height(10.dp))
         exercise.sets.forEachIndexed { rowIndex, set ->
@@ -670,48 +670,47 @@ private fun SetRow(
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.weight(0.9f)
+        // Set number in a rounded square matching the KG/REPS boxes.
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(AppSurfaceVariant, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .background(AppSurfaceVariant, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(text = set.setNumber.toString(), color = AppTextPrimary, style = MaterialTheme.typography.labelSmall)
-            }
-            Spacer(modifier = Modifier.height(2.dp))
-            // The workout timer's value when this set was added - two
-            // consecutive sets' values show how much rest was taken
-            // between them.
             Text(
-                text = formatElapsedShort(set.loggedAtSeconds),
-                color = AppTextMuted,
-                style = MaterialTheme.typography.labelSmall
+                text = set.setNumber.toString(),
+                color = AppTextPrimary,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
             )
         }
-        Spacer(modifier = Modifier.weight(1.1f))
+        // The workout timer's value when this set was added - two
+        // consecutive sets' values show how much rest was taken
+        // between them.
+        Text(
+            text = formatElapsedShort(set.loggedAtSeconds),
+            color = AppTextMuted,
+            style = MaterialTheme.typography.labelMedium,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.width(44.dp)
+        )
         SetInputField(
             value = set.kg,
             onValueChange = onKgChange,
             backgroundColor = AppSurfaceVariant,
             textColor = AppTextPrimary,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
+            modifier = Modifier.weight(1f)
         )
         SetInputField(
             value = set.reps,
             onValueChange = onRepsChange,
             backgroundColor = AppSurfaceVariant,
             textColor = AppTextPrimary,
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 4.dp)
+            modifier = Modifier.weight(1f)
         )
     }
 }

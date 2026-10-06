@@ -71,6 +71,9 @@ object SetEntries : Table("set_entries") {
     // exercise done with no added weight) - that's different from "0kg" and
     // should just display as blank, not skip the set entirely.
     val weightKg = double("weight_kg").nullable()
+    // The workout timer's value (seconds since the workout started) when the
+    // set was added in the app. Null for sets logged before this existed.
+    val loggedAtSeconds = integer("logged_at_seconds").nullable()
     val createdAt = datetime("created_at")
 
     override val primaryKey = PrimaryKey(id)

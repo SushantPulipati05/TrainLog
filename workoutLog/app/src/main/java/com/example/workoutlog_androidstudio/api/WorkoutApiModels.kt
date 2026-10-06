@@ -45,7 +45,8 @@ data class NewSetRequest(
     val exerciseId: Int,
     val setNumber: Int,
     val reps: Int,
-    val weightKg: Double?
+    val weightKg: Double?,
+    val loggedAtSeconds: Int? = null
 )
 
 /** What one logged set looks like coming back from the backend. */
@@ -56,7 +57,8 @@ data class SetEntryResponse(
     val exerciseId: Int,
     val setNumber: Int,
     val reps: Int,
-    val weightKg: Double?
+    val weightKg: Double?,
+    val loggedAtSeconds: Int? = null
 )
 
 /** What we send the backend when ending a workout. Notes are optional. */
@@ -73,7 +75,7 @@ data class WorkoutDetailResponse(
     val endedAt: String?,
     val notes: String?,
     val sets: List<SetEntryResponse>,
-    
+
 )
 
 @Serializable

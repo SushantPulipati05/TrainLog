@@ -917,9 +917,16 @@ private fun ExerciseDetailCard(
             )
         }
 
+        // TIME = the workout timer when the set was added. Workouts logged
+        // before set times were saved have none, so the column is hidden.
+        val showTime = sets.any { it.loggedAtSeconds != null }
+
         Spacer(modifier = Modifier.height(12.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
             Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(1f))
+            if (showTime) {
+                Text("TIME", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
+            }
             Text("LOAD", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
             Text("REPS", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
         }
@@ -938,6 +945,15 @@ private fun ExerciseDetailCard(
                     color = AppTextSecondary,
                     modifier = Modifier.weight(1f)
                 )
+                if (showTime) {
+                    Text(
+                        text = set.loggedAtSeconds?.let { formatElapsedShort(it) } ?: "-",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextMuted,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 Text(
                     text = formatLoad(set.weightKg),
                     style = MaterialTheme.typography.bodyMedium,

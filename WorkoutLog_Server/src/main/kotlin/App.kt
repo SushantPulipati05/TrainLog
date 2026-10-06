@@ -129,7 +129,10 @@ data class NewSetRequest(
     val exerciseId: Int,
     val setNumber: Int,
     val reps: Int,
-    val weightKg: Double?
+    val weightKg: Double?,
+    // Workout timer value when the set was added (seconds). Optional so older
+    // app versions that don't send it keep working.
+    val loggedAtSeconds: Int? = null
 )
 
 /** What one logged set looks like as JSON, sent back to the app. */
@@ -140,7 +143,8 @@ data class SetEntryResponse(
     val exerciseId: Int,
     val setNumber: Int,
     val reps: Int,
-    val weightKg: Double?
+    val weightKg: Double?,
+    val loggedAtSeconds: Int? = null
 )
 
 /** What the app sends us when ending a workout. Notes are optional. */
@@ -372,6 +376,7 @@ fun Application.module() {
     migrateAthleteProfileWeeklyTarget()
     migrateMultiUser()
     migrateAthleteProfileOnboarding()
+    migrateSetEntriesLoggedAt()
 
     seedExercisesIfNeeded()
     seedWorkoutTemplatesIfNeeded()
@@ -558,7 +563,8 @@ fun Application.module() {
                                     exerciseId = exerciseId,
                                     setNumber = row[SetEntries.setNumber],
                                     reps = row[SetEntries.reps],
-                                    weightKg = row[SetEntries.weightKg]
+                                    weightKg = row[SetEntries.weightKg],
+                                    loggedAtSeconds = row[SetEntries.loggedAtSeconds]
                                 )
                             }
                         )
@@ -776,11 +782,13 @@ fun Application.module() {
                             .singleOrNull()
                             ?: return@transaction "not_found"
 
-                        // Distinct exercise ids, in the order each first appears -
-                        // same ordering approach as /workouts/summary's tag list.
+                        // Distinct exercise ids, in the order each first appears.
+                        // Ordered by id (= insertion order = the order sets were
+                        // logged); setNumber restarts at 1 for every exercise, so
+                        // ordering by it would interleave exercises arbitrarily.
                         val exerciseIds = SetEntries.selectAll()
                             .where { SetEntries.workoutId eq workoutId }
-                            .orderBy(SetEntries.setNumber)
+                            .orderBy(SetEntries.id)
                             .map { it[SetEntries.exerciseId] }
                             .distinct()
 
@@ -934,9 +942,12 @@ fun Application.module() {
                         .singleOrNull()
                         ?: return@transaction null
 
+                    // Ordered by id, i.e. the order the sets were logged in, so the
+                    // app shows exercises in the order they were done. (setNumber
+                    // restarts at 1 per exercise, so it can't order exercises.)
                     val sets = SetEntries.selectAll()
                         .where { SetEntries.workoutId eq workoutId }
-                        .orderBy(SetEntries.setNumber)
+                        .orderBy(SetEntries.id)
                         .map { row ->
                             SetEntryResponse(
                                 id = row[SetEntries.id],
@@ -944,7 +955,8 @@ fun Application.module() {
                                 exerciseId = row[SetEntries.exerciseId],
                                 setNumber = row[SetEntries.setNumber],
                                 reps = row[SetEntries.reps],
-                                weightKg = row[SetEntries.weightKg]
+                                weightKg = row[SetEntries.weightKg],
+                                loggedAtSeconds = row[SetEntries.loggedAtSeconds]
                             )
                         }
 
@@ -1017,6 +1029,7 @@ fun Application.module() {
                         it[setNumber] = request.setNumber
                         it[reps] = request.reps
                         it[weightKg] = request.weightKg
+                        it[loggedAtSeconds] = request.loggedAtSeconds
                         it[createdAt] = nowUtc()
                     } get SetEntries.id
 
@@ -1026,7 +1039,8 @@ fun Application.module() {
                         exerciseId = request.exerciseId,
                         setNumber = request.setNumber,
                         reps = request.reps,
-                        weightKg = request.weightKg
+                        weightKg = request.weightKg,
+                        loggedAtSeconds = request.loggedAtSeconds
                     )
                 }
 
@@ -1191,7 +1205,8 @@ fun Application.module() {
                             exerciseId = row[SetEntries.exerciseId],
                             setNumber = row[SetEntries.setNumber],
                             reps = row[SetEntries.reps],
-                            weightKg = row[SetEntries.weightKg]
+                            weightKg = row[SetEntries.weightKg],
+                            loggedAtSeconds = row[SetEntries.loggedAtSeconds]
                         )
                     }.singleOrNull()
                 }
@@ -1369,6 +1384,7 @@ fun Application.module() {
                             it[setNumber] = set.setNumber
                             it[reps] = set.reps
                             it[weightKg] = set.weightKg
+                            it[loggedAtSeconds] = set.loggedAtSeconds
                             it[createdAt] = now
                         }
                     }
@@ -1735,6 +1751,17 @@ private fun migrateWorkoutTemplatesCustomFields() {
  *  weekly workout target column for anyone whose database predates it,
  *  backfilling the existing single profile row to the same default (6) the
  *  table definition gives a brand-new one. */
+/** Adds set_entries.logged_at_seconds (the workout timer value when each set
+ *  was added) for databases that predate it. Existing sets stay NULL - the
+ *  app just shows no time for them. */
+private fun migrateSetEntriesLoggedAt() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE set_entries ADD COLUMN IF NOT EXISTS logged_at_seconds INTEGER")
+        }
+    }
+}
+
 private fun migrateAthleteProfileWeeklyTarget() {
     DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
         connection.createStatement().use { statement ->
