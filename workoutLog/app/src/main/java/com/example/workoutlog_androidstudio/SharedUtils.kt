@@ -26,12 +26,16 @@ fun weeksOfMonth(monthAnchor: LocalDate): List<List<LocalDate>> {
         .chunked(7)
 }
 
+/** Number of exercises in a day at which a heatmap cell turns full colour. */
+const val HEATMAP_FULL_AT_EXERCISES = 7
+
+/**
+ * Heatmap opacity for a day: 1 exercise = 0.2, each extra exercise adds 0.1
+ * (6 exercises = 0.7), and 7 or more exercises shows the full colour.
+ */
 fun heatmapIntensity(exerciseCount: Int): Float = when {
-    exerciseCount >= 5 -> 1f
-    exerciseCount == 4 -> 0.8f
-    exerciseCount == 3 -> 0.6f
-    exerciseCount == 2 -> 0.4f
-    exerciseCount == 1 -> 0.2f
+    exerciseCount >= HEATMAP_FULL_AT_EXERCISES -> 1f
+    exerciseCount >= 1 -> 0.1f + 0.1f * exerciseCount
     else -> 0f
 }
 

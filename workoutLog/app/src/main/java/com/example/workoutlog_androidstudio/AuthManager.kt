@@ -170,8 +170,21 @@ class AuthInterceptor : Interceptor {
         newBuilder().header("Authorization", "Bearer $token").build()
 }
 
-/** A message safe to show a person for whatever went wrong signing in. */
-fun friendlyAuthError(e: Throwable): String = when (e) {
+/** A message safe to show a person for whatever went wrong signing in.
+ *  The real error is also written to Logcat (tag "TrainLogAuth") and, unless
+ *  it's an ordinary user mistake like a wrong password, sent to Crashlytics -
+ *  so a vague "no connection" can be traced to its actual cause. */
+fun friendlyAuthError(e: Throwable): String {
+    android.util.Log.w("TrainLogAuth", "Sign-in failed: ${e.javaClass.simpleName}: ${e.message}", e)
+    val isUserMistake = e is FirebaseAuthInvalidCredentialsException ||
+        e is FirebaseAuthInvalidUserException ||
+        e is FirebaseAuthUserCollisionException ||
+        e is GetCredentialCancellationException
+    if (!isUserMistake) CrashReporting.record(e)
+    return friendlyAuthMessage(e)
+}
+
+private fun friendlyAuthMessage(e: Throwable): String = when (e) {
     is FirebaseAuthWeakPasswordException -> "That password is too weak. Use at least 8 characters."
     is FirebaseAuthUserCollisionException -> "An account with that email already exists. Try logging in instead."
     is FirebaseAuthInvalidCredentialsException ->

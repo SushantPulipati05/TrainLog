@@ -13,7 +13,10 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.workoutlog_androidstudio"
+        // The app's permanent identity on Google Play and in Firebase - it
+        // can never change once uploaded. The code's own package (namespace
+        // above) stays as it is; Play only cares about this one.
+        applicationId = "dev.sushnt.trainlog"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

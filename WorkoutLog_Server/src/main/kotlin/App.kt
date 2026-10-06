@@ -586,13 +586,32 @@ fun Application.module() {
             get("/workout-templates") {
                 val me = call.userId()
                 val zone = call.userZone()
+                // Three queries in total, however many templates there are:
+                // the templates, every template's exercises (with muscle
+                // group), and this user's finished workouts for the "last
+                // done" labels. (It used to be several queries per template.)
                 val templates = transaction {
-                    WorkoutTemplates.selectAll().where { visibleTemplates(me) }.map { row ->
-                        val templateId = row[WorkoutTemplates.id]
-                        val exerciseIds = WorkoutTemplateExercises.selectAll()
-                            .where { WorkoutTemplateExercises.templateId eq templateId }
+                    val templateRows = WorkoutTemplates.selectAll().where { visibleTemplates(me) }.toList()
+                    val templateIds = templateRows.map { it[WorkoutTemplates.id] }
+
+                    val muscleGroupsByTemplate: Map<Int, List<String?>> = if (templateIds.isEmpty()) {
+                        emptyMap()
+                    } else {
+                        (WorkoutTemplateExercises innerJoin Exercises)
+                            .selectAll()
+                            .where { WorkoutTemplateExercises.templateId inList templateIds }
                             .orderBy(WorkoutTemplateExercises.position)
-                            .map { it[WorkoutTemplateExercises.exerciseId] }
+                            .map { it[WorkoutTemplateExercises.templateId] to it[Exercises.muscleGroup] }
+                            .groupBy({ it.first }, { it.second })
+                    }
+
+                    val lastStartedByName = lastFinishedStartByWorkoutName(me)
+                    val today = LocalDate.now(zone)
+
+                    templateRows.map { row ->
+                        val templateId = row[WorkoutTemplates.id]
+                        val muscleGroups = muscleGroupsByTemplate[templateId].orEmpty()
+                        val lastStarted = lastStartedByName[row[WorkoutTemplates.name]]
 
                         WorkoutTemplateSummaryResponse(
                             id = templateId,
@@ -600,9 +619,11 @@ fun Application.module() {
                             category = row[WorkoutTemplates.category],
                             level = row[WorkoutTemplates.level],
                             estimatedMinutes = row[WorkoutTemplates.estimatedMinutes],
-                            exerciseCount = exerciseIds.size,
-                            muscleGroups = computeMuscleGroups(exerciseIds),
-                            lastLoggedDaysAgo = computeLastLoggedDaysAgo(row[WorkoutTemplates.name], me, zone),
+                            exerciseCount = muscleGroups.size,
+                            muscleGroups = muscleGroups.filterNotNull().map { it.uppercase() }.distinct().take(3),
+                            lastLoggedDaysAgo = lastStarted?.let {
+                                ChronoUnit.DAYS.between(it.toZone(zone).toLocalDate(), today).toInt().coerceAtLeast(0)
+                            },
                             isCustom = row[WorkoutTemplates.isCustom]
                         )
                     }
@@ -832,9 +853,13 @@ fun Application.module() {
             get("/workouts/summary") {
                 val me = call.userId()
                 val zone = call.userZone()
+                // Two queries in total, however long the history is: the
+                // finished workouts, and every one of their sets joined with
+                // its exercise. (It used to be one query per workout plus one
+                // per exercise in it, which grows slow with months of data.)
                 val summaries = transaction {
-                    // Now a real value from the athlete profile instead of a
-                    // hardcoded guess - falls back to the old guess only if the
+                    // Bodyweight exercises count the athlete's own weight
+                    // toward volume; falls back to an estimate only if the
                     // profile row is somehow missing.
                     val userBodyweightKg = AthleteProfile.selectAll()
                         .where { AthleteProfile.userId eq me }
@@ -842,50 +867,24 @@ fun Application.module() {
                         ?.get(AthleteProfile.weightKg)
                         ?: 83.0
 
+                    val setsByWorkout = finishedSetsByWorkout(me)
+                    val today = LocalDate.now(zone)
+
                     Workouts.selectAll()
-                        .where { Workouts.userId eq me }
+                        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
                         .orderBy(Workouts.startedAt, SortOrder.DESC)
                         .mapNotNull { workoutRow ->
-                            // Skip workouts that were started but never ended - there's
-                            // nothing meaningful to summarize yet for those.
                             val endedAt = workoutRow[Workouts.endedAt]?.toZone(zone) ?: return@mapNotNull null
                             val workoutId = workoutRow[Workouts.id]
                             val startedAt = workoutRow[Workouts.startedAt].toZone(zone)
 
-                            val sets = SetEntries.selectAll()
-                                .where { SetEntries.workoutId eq workoutId }
-                                .toList()
-
-                            val totalSets = sets.size
-
-                            // Look up each distinct exercise used in this workout once -
-                            // its muscle group feeds the tags below, and its equipment
-                            // tells us whether it's a bodyweight movement, for the volume
-                            // calc right after. A small handful of lookups per workout is
-                            // fine at this app's scale.
-                            val exerciseById = sets.map { it[SetEntries.exerciseId] }.distinct()
-                                .mapNotNull { exerciseId ->
-                                    Exercises.selectAll()
-                                        .where { Exercises.id eq exerciseId }
-                                        .singleOrNull()
-                                        ?.let { row -> exerciseId to row }
-                                }
-                                .toMap()
-
-                            // A bodyweight exercise (equipment == "Body Only") still counts
-                            // as real training volume even with nothing added, so the
-                            // athlete's actual bodyweight (fetched above) is folded in here
-                            // rather than only counting added weight.
-                            val totalVolume = sets.sumOf { set ->
-                                val equipment = exerciseById[set[SetEntries.exerciseId]]?.get(Exercises.equipment)
-                                val isBodyweight = equipment.equals("Body Only", ignoreCase = true)
-                                val addedWeight = set[SetEntries.weightKg] ?: 0.0
-                                val load = if (isBodyweight) userBodyweightKg + addedWeight else addedWeight
-                                load * set[SetEntries.reps]
-                            }
-
-                            val tags = exerciseById.values
-                                .mapNotNull { row -> row[Exercises.muscleGroup] }
+                            val sets = setsByWorkout[workoutId].orEmpty()
+                            val totalVolume = sets.sumOf { setVolumeKg(it, userBodyweightKg) }
+                            // Distinct exercises in the order they were logged -
+                            // their muscle groups become the card's tags.
+                            val distinctExercises = sets.distinctBy { it.exerciseId }
+                            val tags = distinctExercises
+                                .mapNotNull { it.muscleGroup }
                                 .map { it.uppercase() }
                                 .distinct()
 
@@ -896,7 +895,6 @@ fun Application.module() {
                                 "${minutes}m"
                             }
 
-                            val today = LocalDate.now(zone)
                             val startedDate = startedAt.toLocalDate()
                             val dateLabel = when (startedDate) {
                                 today -> "TODAY"
@@ -904,17 +902,15 @@ fun Application.module() {
                                 else -> startedAt.format(DateTimeFormatter.ofPattern("MMM d", Locale.ENGLISH)).uppercase()
                             }
 
-                            val volumeLabel = "%,.0f KG".format(totalVolume)
-
                             WorkoutSummaryResponse(
                                 id = workoutId,
                                 dateLabel = dateLabel,
                                 date = startedDate.toString(),
                                 title = workoutRow[Workouts.workoutName],
                                 duration = durationLabel,
-                                totalSets = totalSets,
-                                exerciseCount = exerciseById.size,
-                                volumeLabel = volumeLabel,
+                                totalSets = sets.size,
+                                exerciseCount = distinctExercises.size,
+                                volumeLabel = "%,.0f KG".format(totalVolume),
                                 tags = tags
                             )
                         }
@@ -1888,32 +1884,14 @@ private fun loadProfileResponse(me: Int, zone: ZoneId): ProfileResponse? = trans
 
     val bodyweightKg = profile[AthleteProfile.weightKg]
 
-    // Same per-workout volume calc as /workouts/summary, just totaled across
-    // every finished workout instead of returned one at a time.
-    var workoutsLogged = 0
-    var totalVolumeKg = 0.0
-
-    Workouts.selectAll().where { Workouts.userId eq me }.forEach { workoutRow ->
-        if (workoutRow[Workouts.endedAt] == null) return@forEach
-        workoutsLogged++
-
-        val workoutId = workoutRow[Workouts.id]
-        val sets = SetEntries.selectAll().where { SetEntries.workoutId eq workoutId }.toList()
-
-        val exerciseById = sets.map { it[SetEntries.exerciseId] }.distinct()
-            .mapNotNull { exerciseId ->
-                Exercises.selectAll().where { Exercises.id eq exerciseId }.singleOrNull()
-                    ?.let { row -> exerciseId to row }
-            }
-            .toMap()
-
-        totalVolumeKg += sets.sumOf { set ->
-            val equipment = exerciseById[set[SetEntries.exerciseId]]?.get(Exercises.equipment)
-            val isBodyweight = equipment.equals("Body Only", ignoreCase = true)
-            val addedWeight = set[SetEntries.weightKg] ?: 0.0
-            val load = if (isBodyweight) bodyweightKg + addedWeight else addedWeight
-            load * set[SetEntries.reps]
-        }
+    // Same volume calc as /workouts/summary, totaled across every finished
+    // workout - two queries in total rather than a few per workout.
+    val workoutsLogged = Workouts.selectAll()
+        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
+        .map { it[Workouts.id] }
+        .size
+    val totalVolumeKg = finishedSetsByWorkout(me).values.sumOf { sets ->
+        sets.sumOf { setVolumeKg(it, bodyweightKg) }
     }
 
     val heightM = profile[AthleteProfile.heightCm] / 100.0
@@ -2255,3 +2233,59 @@ private fun nowUtc(): LocalDateTime = LocalDateTime.now(ZoneOffset.UTC)
 /** A stored (UTC) timestamp as wall-clock time in [zone]. */
 private fun LocalDateTime.toZone(zone: ZoneId): LocalDateTime =
     atOffset(ZoneOffset.UTC).atZoneSameInstant(zone).toLocalDateTime()
+
+// ---------------------------------------------------------------------------
+// Workout stats, fetched in bulk
+// ---------------------------------------------------------------------------
+
+/** One logged set plus the two things about its exercise that the stats
+ *  need (muscle group for tags, equipment to spot bodyweight moves). */
+private data class SetWithExercise(
+    val workoutId: Int,
+    val exerciseId: Int,
+    val reps: Int,
+    val weightKg: Double?,
+    val muscleGroup: String?,
+    val equipment: String?
+)
+
+/** Every set of this user's FINISHED workouts, joined with its exercise, in
+ *  one query - grouped by workout id, sets in the order they were logged.
+ *  Must be called from inside a transaction { } block. */
+private fun finishedSetsByWorkout(me: Int): Map<Int, List<SetWithExercise>> =
+    (SetEntries innerJoin Workouts innerJoin Exercises)
+        .selectAll()
+        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
+        .orderBy(SetEntries.id)
+        .map { row ->
+            SetWithExercise(
+                workoutId = row[SetEntries.workoutId],
+                exerciseId = row[SetEntries.exerciseId],
+                reps = row[SetEntries.reps],
+                weightKg = row[SetEntries.weightKg],
+                muscleGroup = row[Exercises.muscleGroup],
+                equipment = row[Exercises.equipment]
+            )
+        }
+        .groupBy { it.workoutId }
+
+/** A set's volume: weight x reps, where a bodyweight exercise ("Body Only")
+ *  counts the athlete's own weight plus anything added. */
+private fun setVolumeKg(set: SetWithExercise, bodyweightKg: Double): Double {
+    val isBodyweight = set.equipment.equals("Body Only", ignoreCase = true)
+    val addedWeight = set.weightKg ?: 0.0
+    val load = if (isBodyweight) bodyweightKg + addedWeight else addedWeight
+    return load * set.reps
+}
+
+/** For each workout name, the (UTC) start time of this user's most recent
+ *  FINISHED workout with that name - one query, used for every template's
+ *  "last done X days ago" at once. Must be called inside a transaction. */
+private fun lastFinishedStartByWorkoutName(me: Int): Map<String, LocalDateTime> {
+    val latest = HashMap<String, LocalDateTime>()
+    Workouts.selectAll()
+        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
+        .orderBy(Workouts.startedAt, SortOrder.DESC)
+        .forEach { row -> latest.putIfAbsent(row[Workouts.workoutName], row[Workouts.startedAt]) }
+    return latest
+}
