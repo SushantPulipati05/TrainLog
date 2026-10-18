@@ -41,11 +41,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
@@ -579,37 +576,9 @@ private fun SwipeToDeleteWorkoutCard(
     onClick: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { targetValue ->
-            if (targetValue == SwipeToDismissBoxValue.EndToStart) {
-                onRequestDelete()
-            }
-
-            false
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AppDanger)
-                    .padding(horizontal = 22.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete workout",
-                    tint = Color.White
-                )
-            }
-        }
+    SwipeToDeleteBox(
+        onRequestDelete = onRequestDelete,
+        contentDescription = "Delete workout"
     ) {
         WorkoutCard(workout = workout, onClick = onClick)
     }
