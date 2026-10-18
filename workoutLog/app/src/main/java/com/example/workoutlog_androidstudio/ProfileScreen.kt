@@ -80,6 +80,7 @@ private fun initialsFor(name: String): String =
 @Composable
 fun ProfileScreen(
     onOpenTargets: () -> Unit,
+    onOpenTrainingPlan: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
 
@@ -396,6 +397,10 @@ fun ProfileScreen(
                                 Text(text = saveError.orEmpty(), style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        TrainingPlanEntryRow(onClick = onOpenTrainingPlan)
 
                         Spacer(modifier = Modifier.height(16.dp))
 

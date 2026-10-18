@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Re-arms the gym reminder after the phone restarts. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:allowBackup="true"
@@ -56,6 +58,20 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/workout_heatmap_widget_info" />
+        </receiver>
+        <!-- Gym reminders (Profile -> Training plan): fires the reminder, handles
+             "Skip today", and re-schedules after a reboot, clock or time zone
+             change, or an app update. Not exported - these broadcasts come from
+             the app's own alarm and from the system. -->
+        <receiver
+            android:name=".GymReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
         </receiver>
     </application>
 

@@ -12,7 +12,10 @@ data class WorkoutSummary(
     val totalSets: Int,
     val exerciseCount: Int,     // distinct exercises logged - drives the consistency heatmap's intensity
     val volumeLabel: String,    // e.g. "4,820 KG"
-    val tags: List<String>
+    val tags: List<String>,
+    /** Sets logged per muscle group (e.g. CHEST -> 9), cardio excluded -
+     *  how Up next tells what a workout was. Empty from an older server. */
+    val muscleSets: Map<String, Int> = emptyMap()
 )
 
 /** One row in an exercise's set table during an active workout. Serializable

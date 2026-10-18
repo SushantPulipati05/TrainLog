@@ -98,6 +98,7 @@ private sealed class Screen {
     data class WorkoutDetail(val workout: WorkoutSummary) : Screen()
     data class TemplateDetail(val template: WorkoutTemplateSummaryResponse) : Screen()
     data class ExerciseHistory(val exerciseId: Int, val exerciseName: String) : Screen()
+    object TrainingPlan : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -113,6 +114,10 @@ class MainActivity : ComponentActivity() {
         // Brings back a workout that was still in progress if Android killed
         // the app (it's saved on the phone with every change).
         ActiveWorkoutState.init(this)
+        // The training plan + gym reminder (Profile -> Training plan). Re-arming
+        // here is cheap and makes sure the next reminder is always scheduled.
+        TrainingPlanStore.init(this)
+        GymReminderScheduler.reschedule(this)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
         handleIntent(intent)
@@ -124,6 +129,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(AuthManager.isSignedIn) {
                     if (!AuthManager.isSignedIn) {
                         AppDataCache.clear()
+                        TrainingPlanStore.clear(this@MainActivity)
                         ActiveWorkoutState.end()
                         ActiveWorkoutNotificationService.stop(this@MainActivity)
                     }
@@ -202,6 +208,36 @@ class MainActivity : ComponentActivity() {
                 var selectedTab by remember { mutableStateOf(MainTab.HOME) }
                 val coroutineScope = rememberCoroutineScope()
 
+                // Starts today's planned workout (from Home's "Today" button or a
+                // gym reminder's "Start workout"): from the template linked to that
+                // split day, pre-filled with its exercises, or an empty workout
+                // named after the day if none is linked. If a workout is already
+                // going, just brings it to the front.
+                suspend fun startPlannedWorkout(label: String) {
+                    if (ActiveWorkoutState.workout != null) {
+                        ActiveWorkoutState.isMinimized = false
+                        return
+                    }
+                    try {
+                        val templates = runCatching { AppDataCache.loadTemplates() }.getOrDefault(emptyList())
+                        val templateId = TrainingPlanStore.plan?.templateIdFor(label, templates)
+                        val template = templateId?.let { id -> runCatching { AppDataCache.loadTemplateDetail(id) }.getOrNull() }
+                        val started = NetworkClient.workoutApi.startWorkout(
+                            NewWorkoutRequest(workoutName = template?.name ?: plannedWorkoutName(label))
+                        )
+                        pendingPrefillExercises = template?.exercises ?: emptyList()
+                        screenStack = emptyList()
+                        ActiveWorkoutState.start(started)
+                    } catch (e: Exception) {
+                        Log.e("StartWorkout", "Failed to start planned workout", e)
+                    }
+                }
+                LaunchedEffect(TrainingPlanStore.pendingStartPlanLabel) {
+                    val label = TrainingPlanStore.pendingStartPlanLabel ?: return@LaunchedEffect
+                    TrainingPlanStore.pendingStartPlanLabel = null
+                    startPlannedWorkout(label)
+                }
+
                 // System back button. Handlers registered later win, so the
                 // order below is lowest to highest priority: a root tab other
                 // than Home goes back to Home, an open chevron screen pops
@@ -263,7 +299,9 @@ class MainActivity : ComponentActivity() {
                             },
                             onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) },
                             onOpenCalendar = { push(Screen.Calendar) },
-                            onOpenAllWorkouts = { push(Screen.AllWorkouts) }
+                            onOpenAllWorkouts = { push(Screen.AllWorkouts) },
+                            onOpenTrainingPlan = { push(Screen.TrainingPlan) },
+                            onStartPlannedWorkout = { label -> coroutineScope.launch { startPlannedWorkout(label) } }
                         )
                     }
                     Box(
@@ -285,7 +323,8 @@ class MainActivity : ComponentActivity() {
                             }
                     ) {
                         ProfileScreen(
-                            onOpenTargets = { push(Screen.Targets) }
+                            onOpenTargets = { push(Screen.Targets) },
+                            onOpenTrainingPlan = { push(Screen.TrainingPlan) }
                         )
                     }
 
@@ -381,6 +420,9 @@ class MainActivity : ComponentActivity() {
                             Screen.Targets -> {
                                 TargetsScreen(onBack = { pop() })
                             }
+                            Screen.TrainingPlan -> {
+                                TrainingPlanScreen(onBack = { pop() })
+                            }
                             Screen.AllWorkouts -> {
                                 AllWorkoutsScreen(
                                     onBack = { pop() },
@@ -447,6 +489,8 @@ class MainActivity : ComponentActivity() {
                                     // just closes the screen.
                                     Log.d("EndWorkout", "Ended workout ${workout.id}: $notes")
                                     endActiveWorkout()
+                                    // Trained today - no gym reminder needed today.
+                                    TrainingPlanStore.markTrainedToday(this@MainActivity)
                                     // Pull the finished workout into Home's list
                                     // (and the totals it changes) right away.
                                     coroutineScope.launch { AppDataCache.refreshAfterWorkoutEnded() }
@@ -490,6 +534,15 @@ class MainActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent?.action == ActiveWorkoutNotificationService.ACTION_RESTORE) {
             ActiveWorkoutState.isMinimized = false
+        }
+        // "Start workout" on a gym reminder - picked up by the LaunchedEffect
+        // in setContent once the user is signed in.
+        if (intent?.action == GymReminderReceiver.ACTION_START) {
+            androidx.core.app.NotificationManagerCompat.from(this).cancel(GymReminderReceiver.NOTIFICATION_ID)
+            TrainingPlanStore.pendingStartPlanLabel =
+                intent.getStringExtra(GymReminderReceiver.EXTRA_PLAN_LABEL) ?: ""
+            // Consumed - don't start it again if the activity is recreated.
+            intent.action = null
         }
     }
 

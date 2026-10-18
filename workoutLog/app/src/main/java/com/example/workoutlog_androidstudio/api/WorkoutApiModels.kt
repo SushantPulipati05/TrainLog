@@ -36,7 +36,8 @@ data class WorkoutSummaryResponse(
     val totalSets: Int,
     val exerciseCount: Int,
     val volumeLabel: String,
-    val tags: List<String>
+    val tags: List<String>,
+    val muscleSets: Map<String, Int> = emptyMap()
 )
 
 /** What we send the backend when logging one set during a workout. */

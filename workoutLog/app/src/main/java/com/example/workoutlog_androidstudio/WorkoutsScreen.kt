@@ -256,7 +256,7 @@ fun WorkoutsScreen(
             )
         }
 
-        DeletedToast(visible = toastVisible, message = "\"${deletedTemplateName.orEmpty()}\" deleted")
+        DeletedToast(visible = toastVisible, message = "\"${deletedTemplateName.orEmpty()}\" deleted", aboveTabBar = true)
     }
 }
 

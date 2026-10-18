@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -227,13 +228,27 @@ fun DeleteConfirmationPopup(
     }
 }
 
+/** Space a toast needs to clear the floating tab bar: the bar's 16dp gap
+ *  from the bottom + its 66dp height (46dp highlight + 10dp padding each
+ *  side) + 14dp breathing room. */
+private val TAB_BAR_CLEARANCE = 96.dp
+
+/** A short confirmation that slides in at the bottom-right. Pass
+ *  [aboveTabBar] = true on the tab screens (Home, Workouts, Profile) so it
+ *  sits above the floating tab bar instead of underneath it. */
 @Composable
-fun BoxScope.DeletedToast(visible: Boolean, message: String, tint: Color = AppSuccess) {
+fun BoxScope.DeletedToast(
+    visible: Boolean,
+    message: String,
+    tint: Color = AppSuccess,
+    aboveTabBar: Boolean = false
+) {
     AnimatedVisibility(
         visible = visible,
         modifier = Modifier
             .align(Alignment.BottomEnd)
-            .padding(end = 20.dp, bottom = 32.dp),
+            .navigationBarsPadding()
+            .padding(end = 20.dp, bottom = if (aboveTabBar) TAB_BAR_CLEARANCE else 32.dp),
         enter = slideInHorizontally(initialOffsetX = { fullWidth -> fullWidth }) + fadeIn(),
         exit = slideOutHorizontally(targetOffsetX = { fullWidth -> -fullWidth }) + fadeOut()
     ) {

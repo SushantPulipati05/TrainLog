@@ -199,7 +199,11 @@ data class WorkoutSummaryResponse(
     val totalSets: Int,
     val exerciseCount: Int,    // number of distinct exercises logged, used for the consistency heatmap's intensity
     val volumeLabel: String,   // e.g. "4,820 KG"
-    val tags: List<String>
+    val tags: List<String>,
+    // Sets per muscle group, e.g. {"CHEST": 9, "TRICEPS": 6} - cardio
+    // excluded. The app uses it to tell what kind of workout this was
+    // (push / pull / legs ...) from what was trained, not from its name.
+    val muscleSets: Map<String, Int> = emptyMap()
 )
 
 /** The athlete profile screen's full payload - stored fields (name, age,
@@ -895,6 +899,11 @@ fun Application.module() {
                                 .mapNotNull { it.muscleGroup }
                                 .map { it.uppercase() }
                                 .distinct()
+                            val muscleSets = sets
+                                .filterNot { it.category.equals("Cardio", ignoreCase = true) }
+                                .mapNotNull { it.muscleGroup?.trim()?.uppercase()?.ifEmpty { null } }
+                                .groupingBy { it }
+                                .eachCount()
 
                             val minutes = Duration.between(startedAt, endedAt).toMinutes()
                             val durationLabel = if (minutes >= 60) {
@@ -919,7 +928,8 @@ fun Application.module() {
                                 totalSets = sets.size,
                                 exerciseCount = distinctExercises.size,
                                 volumeLabel = "%,.0f KG".format(totalVolume),
-                                tags = tags
+                                tags = tags,
+                                muscleSets = muscleSets
                             )
                         }
                 }
@@ -2265,15 +2275,17 @@ private fun LocalDateTime.toZone(zone: ZoneId): LocalDateTime =
 // Workout stats, fetched in bulk
 // ---------------------------------------------------------------------------
 
-/** One logged set plus the two things about its exercise that the stats
- *  need (muscle group for tags, equipment to spot bodyweight moves). */
+/** one logged set plus the things about its exercise that the stats
+ *  need (muscle group for tags, equipment to spot bodyweight moves,
+ *  category so cardio sets stay out of the per-muscle counts). */
 private data class SetWithExercise(
     val workoutId: Int,
     val exerciseId: Int,
     val reps: Int,
     val weightKg: Double?,
     val muscleGroup: String?,
-    val equipment: String?
+    val equipment: String?,
+    val category: String? = null
 )
 
 /** Every set of this user's FINISHED workouts, joined with its exercise, in
@@ -2291,7 +2303,8 @@ private fun finishedSetsByWorkout(me: Int): Map<Int, List<SetWithExercise>> =
                 reps = row[SetEntries.reps],
                 weightKg = row[SetEntries.weightKg],
                 muscleGroup = row[Exercises.muscleGroup],
-                equipment = row[Exercises.equipment]
+                equipment = row[Exercises.equipment],
+                category = row[Exercises.category]
             )
         }
         .groupBy { it.workoutId }

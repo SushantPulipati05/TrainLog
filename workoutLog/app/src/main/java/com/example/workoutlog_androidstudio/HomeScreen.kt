@@ -47,6 +47,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +57,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -99,8 +102,11 @@ fun HomeScreen(
     onOpenWorkout: (WorkoutSummary) -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenAllWorkouts: () -> Unit,
+    onOpenTrainingPlan: () -> Unit = {},
+    onStartPlannedWorkout: (label: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showNewWorkoutDialog by remember { mutableStateOf(false) }
 
     // Read straight from the shared cache (it's Compose state), so anything
@@ -168,8 +174,17 @@ fun HomeScreen(
         }
     }
 
+    // What's up next, worked out from the workout history (and the split,
+    // if one is set). Saved so the reminder can name it too, and used to
+    // pre-fill the workout name.
+    val upNext = remember(previousWorkouts, TrainingPlanStore.plan) {
+        computeUpNext(previousWorkouts, TrainingPlanStore.plan)
+    }
+    LaunchedEffect(upNext) { TrainingPlanStore.saveUpNext(context, upNext) }
+
     NewWorkoutDialog(
         visible = showNewWorkoutDialog,
+        suggestedName = upNext?.display,
         onConfirm = { name ->
             showNewWorkoutDialog = false
             onStartWorkout(name)
@@ -215,7 +230,34 @@ fun HomeScreen(
             Spacer(modifier = Modifier.height(20.dp))
             WeeklyTargetWidget(completedDays = completedDaysThisWeek, targetDays = weeklyWorkoutTarget)
             Spacer(modifier = Modifier.height(20.dp))
-            QuickStartCard(onStartEmptyWorkout = { showNewWorkoutDialog = true })
+            QuickStartCard(
+                onStartEmptyWorkout = { showNewWorkoutDialog = true },
+                plan = TrainingPlanStore.plan,
+                upNext = upNext,
+                onOpenTrainingPlan = onOpenTrainingPlan
+            )
+            // The user's real split order differs from the plan's: offer to
+            // update it. Nothing changes unless they tap Update.
+            val usualOrder = remember(previousWorkouts, TrainingPlanStore.plan) {
+                detectUsualOrder(previousWorkouts, TrainingPlanStore.plan)
+            }
+            if (usualOrder != null && orderLabel(usualOrder) != TrainingPlanStore.dismissedOrder) {
+                Spacer(modifier = Modifier.height(12.dp))
+                SplitOrderPromptCard(
+                    order = usualOrder,
+                    onUpdate = { TrainingPlanStore.acceptOrder(context, usualOrder) },
+                    onKeep = { TrainingPlanStore.dismissOrder(context, usualOrder) }
+                )
+            }
+            // One-time nudge after the first workout: set up a plan to get
+            // gym reminders. Gone once a plan exists or it's dismissed.
+            if (previousWorkouts.isNotEmpty() && TrainingPlanStore.plan == null && !TrainingPlanStore.promptDismissed) {
+                Spacer(modifier = Modifier.height(12.dp))
+                GymReminderPromptCard(
+                    onSetUp = onOpenTrainingPlan,
+                    onDismiss = { TrainingPlanStore.dismissPrompt(context) }
+                )
+            }
             Spacer(modifier = Modifier.height(28.dp))
             Row(
                 modifier = Modifier
@@ -309,17 +351,28 @@ fun HomeScreen(
         )
     }
 
-    DeletedToast(visible = toastVisible, message = "\"${deletedWorkoutTitle.orEmpty()}\" deleted")
+    DeletedToast(visible = toastVisible, message = "\"${deletedWorkoutTitle.orEmpty()}\" deleted", aboveTabBar = true)
     }
 }
 
 @Composable
 private fun NewWorkoutDialog(
     visible: Boolean,
+    suggestedName: String?,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
+    var field by remember { mutableStateOf(TextFieldValue("")) }
+    val name = field.text
+
+    // Each time the sheet opens, pre-fill the up-next workout's name, fully
+    // selected - Start keeps it, typing replaces it.
+    LaunchedEffect(visible) {
+        if (visible) {
+            val prefill = suggestedName.orEmpty()
+            field = TextFieldValue(prefill, selection = TextRange(0, prefill.length))
+        }
+    }
 
     AppBottomSheet(visible = visible, onDismissRequest = onDismiss) {
         Text(
@@ -327,10 +380,18 @@ private fun NewWorkoutDialog(
             style = MaterialTheme.typography.titleLarge,
             color = AppTextPrimary
         )
+        if (!suggestedName.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Up next, based on your last workouts. Type to change it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = AppTextMuted
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
+            value = field,
+            onValueChange = { field = it },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text(text = "e.g. Push Day", color = AppTextMuted) },
@@ -406,14 +467,59 @@ private fun WeeklyTargetWidget(completedDays: Int, targetDays: Int) {
     }
 }
 
+/**
+ * Quick Start - an empty workout. A small line on top says what's up next
+ * (from history and the split) and the gym time ("UP NEXT · PULL DAY
+ * · 6:30 PM"); tapping it opens the plan.
+ */
 @Composable
-private fun QuickStartCard(onStartEmptyWorkout: () -> Unit) {
+private fun QuickStartCard(
+    onStartEmptyWorkout: () -> Unit,
+    plan: TrainingPlan? = null,
+    upNext: UpNext? = null,
+    onOpenTrainingPlan: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(AppSurface, RoundedCornerShape(20.dp))
             .padding(20.dp)
     ) {
+        if (upNext != null || plan != null) {
+            val restToday = plan != null && !plan.isTrainingDay(java.time.LocalDate.now().dayOfWeek)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenTrainingPlan),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = when {
+                        restToday && upNext != null -> "REST DAY · NEXT: ${upNext.display.uppercase()}"
+                        restToday -> "REST DAY"
+                        upNext?.recovering == true -> "REST SUGGESTED · NEXT: ${upNext.display.uppercase()}"
+                        upNext != null -> "UP NEXT · ${upNext.display.uppercase()}"
+                        else -> "TODAY · TRAINING DAY"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = AppAccent,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (plan != null && !restToday) {
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = formatGymTime(LocalContext.current, plan.hour, plan.minute),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppTextMuted
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
