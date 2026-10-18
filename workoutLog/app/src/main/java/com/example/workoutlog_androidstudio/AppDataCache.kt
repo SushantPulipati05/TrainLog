@@ -169,6 +169,9 @@ object AppDataCache {
      *  still loads for itself the next time it opens. */
     suspend fun refreshAfterWorkoutEnded() {
         exerciseHistories = emptyMap()
+        // Reloaded on next use, so "your exercises" (times logged / last
+        // used) includes this workout.
+        exercises = null
         try {
             loadWorkoutSummaries(force = true)
         } catch (e: Exception) {
@@ -202,5 +205,18 @@ object AppDataCache {
 
     fun invalidateExerciseHistory(exerciseId: Int) {
         exerciseHistories = exerciseHistories - exerciseId
+    }
+
+    /** After two exercises were merged: sets moved between them, so drop
+     *  everything that shows sets or exercise names and reload the list. */
+    suspend fun refreshAfterExercisesMerged() {
+        exerciseHistories = emptyMap()
+        workoutDetails = emptyMap()
+        templateDetails = emptyMap()
+        try {
+            loadExercises(force = true)
+        } catch (e: Exception) {
+            exercises = null
+        }
     }
 }

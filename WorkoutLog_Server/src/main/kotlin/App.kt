@@ -88,7 +88,26 @@ data class ExerciseResponse(
     val equipment: String?,
     // "Cardio", "Strength", "Calisthenics", "Strength/Calisthenics", or
     // "Mobility/Flexibility".
-    val category: String?
+    val category: String?,
+    // How many of this user's finished workouts logged it, and when the
+    // latest one started (ISO date-time) - so the app can list "your"
+    // exercises first. 0 / null when never logged.
+    val timesLogged: Int = 0,
+    val lastLoggedAt: String? = null
+)
+
+/** POST /exercises/merge: every one of this user's sets of
+ *  [fromExerciseId] becomes [intoExerciseId], and [fromExerciseId] leaves
+ *  their exercise list. */
+@Serializable
+data class MergeExercisesRequest(
+    val fromExerciseId: Int,
+    val intoExerciseId: Int
+)
+
+@Serializable
+data class MergeExercisesResponse(
+    val movedSets: Int
 )
 
 /** What the app sends us when starting a new workout. */
@@ -371,7 +390,7 @@ fun Application.module() {
         // Creates any of these tables that don't already exist yet. Safe to run
         // on every startup (including every future deploy) - it never touches
         // a table that's already there.
-        SchemaUtils.create(Users, Exercises, Workouts, SetEntries, AthleteProfile, WorkoutTemplates, WorkoutTemplateExercises)
+        SchemaUtils.create(Users, Exercises, Workouts, SetEntries, AthleteProfile, WorkoutTemplates, WorkoutTemplateExercises, HiddenExercises)
     }
 
     migrateSetEntriesWeightNullable()
@@ -430,15 +449,41 @@ fun Application.module() {
                 val me = call.userId()
                 val zone = call.userZone()
                 val exercises = transaction {
-                    Exercises.selectAll().where { visibleExercises(me) }.map { row ->
-                        ExerciseResponse(
-                            id = row[Exercises.id],
-                            name = row[Exercises.name],
-                            muscleGroup = row[Exercises.muscleGroup],
-                            equipment = row[Exercises.equipment],
-                            category = row[Exercises.category]
-                        )
-                    }
+                    // Ones this user merged away.
+                    val hidden = HiddenExercises.selectAll()
+                        .where { HiddenExercises.userId eq me }
+                        .map { it[HiddenExercises.exerciseId] }
+                        .toSet()
+
+                    // Per exercise: how many finished workouts logged it, and
+                    // when the latest of those started.
+                    val workoutsByExercise = HashMap<Int, MutableSet<Int>>()
+                    val lastStart = HashMap<Int, LocalDateTime>()
+                    (SetEntries innerJoin Workouts)
+                        .selectAll()
+                        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
+                        .forEach { row ->
+                            val exerciseId = row[SetEntries.exerciseId]
+                            workoutsByExercise.getOrPut(exerciseId) { HashSet() }.add(row[SetEntries.workoutId])
+                            val started = row[Workouts.startedAt]
+                            val previous = lastStart[exerciseId]
+                            if (previous == null || started.isAfter(previous)) lastStart[exerciseId] = started
+                        }
+
+                    Exercises.selectAll().where { visibleExercises(me) }
+                        .filter { it[Exercises.id] !in hidden }
+                        .map { row ->
+                            val id = row[Exercises.id]
+                            ExerciseResponse(
+                                id = id,
+                                name = row[Exercises.name],
+                                muscleGroup = row[Exercises.muscleGroup],
+                                equipment = row[Exercises.equipment],
+                                category = row[Exercises.category],
+                                timesLogged = workoutsByExercise[id]?.size ?: 0,
+                                lastLoggedAt = lastStart[id]?.toZone(zone)?.toString()
+                            )
+                        }
                 }
                 call.respond(exercises)
             }
@@ -501,6 +546,74 @@ fun Application.module() {
                     call.respondText("an exercise with that name already exists", status = HttpStatusCode.Conflict)
                 } else {
                     call.respond(HttpStatusCode.Created, created)
+                }
+            }
+
+            // Merges two exercises for this user: all their sets of "from"
+            // become "into" (so history, charts and PRs combine), their own
+            // templates switch over too, and "from" leaves their list -
+            // deleted if it's their custom exercise, hidden if it's a built-in
+            // one (other people still have it). Nobody else's data changes.
+            post("/exercises/merge") {
+                val me = call.userId()
+                val request = try {
+                    call.receive<MergeExercisesRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid merge body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val fromId = request.fromExerciseId
+                val intoId = request.intoExerciseId
+                if (fromId == intoId) {
+                    call.respondText("can't merge an exercise into itself", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+                val moved = transaction {
+                    val visible = Exercises.selectAll()
+                        .where { (Exercises.id inList listOf(fromId, intoId)) and visibleExercises(me) }
+                        .associateBy { it[Exercises.id] }
+                    val fromRow = visible[fromId]
+                    if (fromRow == null || visible[intoId] == null) return@transaction null
+
+                    val myWorkoutIds = Workouts.selectAll()
+                        .where { Workouts.userId eq me }
+                        .map { it[Workouts.id] }
+                    var movedSets = 0
+                    myWorkoutIds.chunked(1000).forEach { chunk ->
+                        movedSets += SetEntries.update({ (SetEntries.exerciseId eq fromId) and (SetEntries.workoutId inList chunk) }) {
+                            it[exerciseId] = intoId
+                        }
+                    }
+
+                    val myTemplateIds = WorkoutTemplates.selectAll()
+                        .where { WorkoutTemplates.userId eq me }
+                        .map { it[WorkoutTemplates.id] }
+                    myTemplateIds.chunked(1000).forEach { chunk ->
+                        WorkoutTemplateExercises.update({
+                            (WorkoutTemplateExercises.exerciseId eq fromId) and
+                                (WorkoutTemplateExercises.templateId inList chunk)
+                        }) {
+                            it[exerciseId] = intoId
+                        }
+                    }
+
+                    if (fromRow[Exercises.userId] == me) {
+                        // Their own custom exercise - nothing else can point at it now.
+                        Exercises.deleteWhere { (Exercises.id eq fromId) and (Exercises.userId eq me) }
+                    } else {
+                        HiddenExercises.insertIgnore {
+                            it[userId] = me
+                            it[exerciseId] = fromId
+                        }
+                    }
+                    movedSets
+                }
+
+                if (moved == null) {
+                    call.respondText("exercise not found", status = HttpStatusCode.NotFound)
+                } else {
+                    call.respond(MergeExercisesResponse(movedSets = moved))
                 }
             }
 
@@ -2088,6 +2201,7 @@ private fun deleteAccount(me: Int) {
         }
         WorkoutTemplates.deleteWhere { WorkoutTemplates.userId eq me }
 
+        HiddenExercises.deleteWhere { HiddenExercises.userId eq me }
         Exercises.deleteWhere { Exercises.userId eq me }
         AthleteProfile.deleteWhere { AthleteProfile.userId eq me }
         Users.deleteWhere { Users.id eq me }

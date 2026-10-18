@@ -84,6 +84,9 @@ interface WorkoutApi {
 
     @POST("workouts/{id}/complete")
     suspend fun completeWorkout(@Path("id") workoutId: Int, @Body request: CompleteWorkoutRequest): WorkoutResponse
+
+    @POST("exercises/merge")
+    suspend fun mergeExercises(@Body request: com.example.workoutlog_androidstudio.MergeExercisesRequest): com.example.workoutlog_androidstudio.MergeExercisesResponse
 }
 
 object NetworkClient {

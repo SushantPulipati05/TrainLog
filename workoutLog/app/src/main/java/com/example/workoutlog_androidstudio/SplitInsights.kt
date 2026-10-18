@@ -371,3 +371,18 @@ private fun rotateTo(order: List<String>, first: String): List<String> {
 
 /** "Legs → Pull → Push" */
 fun orderLabel(order: List<String>): String = order.joinToString(" → ")
+
+/**
+ * The most recent past workout "like" one named [name] - for "Add from your
+ * last Pull day". Same name first ("Pull Day" = "pull"); otherwise, if
+ * [name] names one of the plan's split days, the last workout whose muscles
+ * made it that day (so a "Back & Bis" session still counts as Pull).
+ */
+fun findPreviousSimilarWorkout(name: String, workouts: List<WorkoutSummary>, plan: TrainingPlan?): WorkoutSummary? {
+    val history = chronological(workouts)
+    val key = normalizeWorkoutName(name)
+    if (key.isNotEmpty()) history.lastOrNull { normalizeWorkoutName(it.title) == key }?.let { return it }
+    val days = plan?.orderedDays().orEmpty().distinct()
+    val day = days.firstOrNull { nameMatches(name, it) } ?: return null
+    return classifyHistory(history, days).lastOrNull { it.second == day }?.first
+}

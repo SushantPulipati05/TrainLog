@@ -23,7 +23,9 @@ data class ExerciseResponse(
     // "Cardio", "Strength", "Calisthenics", "Strength/Calisthenics", or
     // "Mobility/Flexibility". Nullable/optional since older custom exercises
     // (created before this field existed) won't have one.
-    val category: String? = null
+    val category: String? = null,
+    val timesLogged: Int = 0,
+    val lastLoggedAt: String? = null
 )
 
 @Serializable

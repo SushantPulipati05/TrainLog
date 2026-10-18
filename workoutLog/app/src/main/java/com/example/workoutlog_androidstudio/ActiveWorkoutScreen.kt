@@ -130,6 +130,28 @@ fun ActiveWorkoutScreen(
         }
     }
 
+    // "From your last Pull day": the exercises of the last workout like this
+    // one (same name, or the same split day), in the order they were logged.
+    // Loaded the first time the Add Exercise sheet opens.
+    var lastLikeThis by remember { mutableStateOf<Pair<String, List<Int>>?>(null) }
+    LaunchedEffect(showAddExerciseDialog) {
+        if (!showAddExerciseDialog || lastLikeThis != null) return@LaunchedEffect
+        val summaries = AppDataCache.workoutSummaries
+            ?: runCatching { AppDataCache.loadWorkoutSummaries() }.getOrNull()
+            ?: return@LaunchedEffect
+        val previous = findPreviousSimilarWorkout(
+            workout.workoutName,
+            summaries.filter { it.id != workout.id },
+            TrainingPlanStore.plan
+        ) ?: return@LaunchedEffect
+        val detail = runCatching { AppDataCache.loadWorkoutDetail(previous.id) }.getOrNull() ?: return@LaunchedEffect
+        lastLikeThis = "your last ${previous.title}" to detail.sets.map { it.exerciseId }.distinct()
+    }
+    // Minus anything already added to this workout.
+    val fromLastExercises = lastLikeThis?.second.orEmpty()
+        .filter { id -> exercises.none { it.exerciseId == id } }
+        .mapNotNull { id -> availableExercises.firstOrNull { it.id == id } }
+
     fun addExerciseToWorkout(selected: ExerciseResponse) {
         val isBodyweight = selected.equipment.equals("Body Only", ignoreCase = true)
         exercises = exercises + ActiveExercise(
@@ -204,6 +226,12 @@ fun ActiveWorkoutScreen(
             customExerciseError = null
             showAddExerciseDialog = false
             showCustomExerciseDialog = true
+        },
+        fromLastTitle = lastLikeThis?.first,
+        fromLastExercises = fromLastExercises,
+        onAddAll = { all ->
+            all.forEach { addExerciseToWorkout(it) }
+            showAddExerciseDialog = false
         }
     )
 
@@ -215,6 +243,11 @@ fun ActiveWorkoutScreen(
         isSubmitting = isCreatingCustomExercise,
         errorMessage = customExerciseError,
         onDismiss = { showCustomExerciseDialog = false },
+        existingExercises = availableExercises,
+        onSelectExisting = { existing ->
+            addExerciseToWorkout(existing)
+            showCustomExerciseDialog = false
+        },
         onSubmit = { name, muscleGroup, isBodyweight ->
             isCreatingCustomExercise = true
             customExerciseError = null

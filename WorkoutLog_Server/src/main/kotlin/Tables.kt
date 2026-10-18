@@ -46,6 +46,19 @@ object Exercises : Table("exercises") {
 }
 
 /** One workout "session" - started when the user starts a workout, ended when they finish. */
+/**
+ * Built-in exercises a user merged into another one (see POST
+ * /exercises/merge), so they no longer show in that user's exercise list.
+ * A merged *custom* exercise is deleted outright instead - only its owner
+ * could ever see it.
+ */
+object HiddenExercises : Table("hidden_exercises") {
+    val userId = integer("user_id").references(Users.id)
+    val exerciseId = integer("exercise_id").references(Exercises.id)
+
+    override val primaryKey = PrimaryKey(userId, exerciseId)
+}
+
 object Workouts : Table("workouts") {
     val id = integer("id").autoIncrement()
     val workoutName = varchar("workout_name", 100)

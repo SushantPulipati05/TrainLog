@@ -345,6 +345,11 @@ fun WorkoutDetailScreen(
         isSubmitting = isCreatingCustomExercise,
         errorMessage = customExerciseError,
         onDismiss = { showCustomExerciseDialog = false },
+        existingExercises = exercises,
+        onSelectExisting = { existing ->
+            editableExercises = editableExercises + existing.toNewEditableExercise()
+            showCustomExerciseDialog = false
+        },
         onSubmit = { name, muscleGroup, isBodyweight ->
             isCreatingCustomExercise = true
             customExerciseError = null

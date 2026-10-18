@@ -37,12 +37,14 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,7 @@ import com.example.workoutlog_androidstudio.api.ExerciseHistoryResponse
 import com.example.workoutlog_androidstudio.api.SetEntryResponse
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /** The exercise analytics screen, opened by tapping an exercise card on a
@@ -91,6 +94,9 @@ fun ExerciseHistoryScreen(
 
     LaunchedEffect(exerciseId) { reload() }
 
+    val scope = rememberCoroutineScope()
+    var showMergePicker by remember(exerciseId) { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -104,7 +110,27 @@ fun ExerciseHistoryScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             BackChevronRow(onBack = onBack, label = "EXERCISE ANALYTICS")
+            Spacer(modifier = Modifier.weight(1f))
+            // Same exercise logged under two names? Combine them.
+            TextButton(onClick = { showMergePicker = true }) {
+                Text(text = "Merge", color = AppAccent, style = MaterialTheme.typography.labelLarge)
+            }
         }
+
+        ExerciseMergeControls(
+            exerciseId = exerciseId,
+            showPicker = showMergePicker,
+            onDismissPicker = { showMergePicker = false },
+            onMerged = { keptId, _ ->
+                if (keptId == exerciseId) {
+                    // The other one's sets are now this one's - reload.
+                    scope.launch { reload(force = true) }
+                } else {
+                    // This exercise was merged away into the other one.
+                    onBack()
+                }
+            }
+        )
 
         LoadingOrError(isLoading = isLoading, errorMessage = errorMessage) {
             val current = history
