@@ -30,9 +30,10 @@ import kotlinx.coroutines.launch
  * notification every time that shared state changes, so it always matches
  * whatever ActiveWorkoutScreen (or the floating mini-player) is showing.
  *
- * Running as a foreground service is also what keeps the app's process -
- * and so the workout's timer, which lives entirely in ActiveWorkoutScreen's
- * composition - alive while the app is backgrounded or the screen is off.
+ * Running as a foreground service also keeps the app's process alive while
+ * it's backgrounded. The time shown is a system chronometer started from
+ * the workout's (pause-adjusted) start time, so Android keeps it ticking on
+ * its own - right even with the screen off and the app asleep.
  */
 class ActiveWorkoutNotificationService : Service() {
 
@@ -79,9 +80,11 @@ class ActiveWorkoutNotificationService : Service() {
     private fun observeWorkoutState() {
         if (observeJob != null) return
         observeJob = serviceScope.launch {
+            // Only real changes re-post the notification (start, pause/resume,
+            // end) - the chronometer ticks by itself in between.
             snapshotFlow {
-                Triple(ActiveWorkoutState.workout, ActiveWorkoutState.elapsedSeconds, ActiveWorkoutState.isPaused)
-            }.collect { (workout, _, _) ->
+                ActiveWorkoutState.workout to ActiveWorkoutState.isPaused
+            }.collect { (workout, _) ->
                 if (workout == null) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
@@ -99,10 +102,13 @@ class ActiveWorkoutNotificationService : Service() {
 
     private fun buildNotification(): Notification {
         val workout = ActiveWorkoutState.workout
-        val statusText = if (ActiveWorkoutState.isPaused) {
+        val paused = ActiveWorkoutState.isPaused
+        // Paused: a fixed time in the text. Running: "In progress" plus a
+        // chronometer Android advances itself.
+        val statusText = if (paused) {
             "Paused • ${formatElapsed(ActiveWorkoutState.elapsedSeconds)}"
         } else {
-            "In progress • ${formatElapsed(ActiveWorkoutState.elapsedSeconds)}"
+            "In progress"
         }
 
         val contentIntent = PendingIntent.getActivity(
@@ -134,6 +140,9 @@ class ActiveWorkoutNotificationService : Service() {
             .setColorized(true)
             .setContentTitle(workout?.workoutName ?: "Workout")
             .setContentText(statusText)
+            .setShowWhen(!paused)
+            .setUsesChronometer(!paused)
+            .setWhen(if (paused) System.currentTimeMillis() else ActiveWorkoutState.effectiveStartMillis)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)

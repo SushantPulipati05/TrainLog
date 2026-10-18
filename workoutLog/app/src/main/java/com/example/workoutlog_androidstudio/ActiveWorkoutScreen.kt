@@ -145,7 +145,8 @@ fun ActiveWorkoutScreen(
                     previousLabel = "-",
                     kg = if (isBodyweight) "0" else "",
                     reps = "",
-                    loggedAtSeconds = elapsedSeconds
+                    // Read from the clock at the tap, not the value from the last redraw.
+                    loggedAtSeconds = ActiveWorkoutState.elapsedSeconds
                 )
             )
         )
@@ -555,7 +556,8 @@ private fun ExerciseCard(
                         previousLabel = "-",
                         kg = defaultKg,
                         reps = "",
-                        loggedAtSeconds = elapsedSeconds
+                        // Read from the clock at the tap, not the value from the last redraw.
+                        loggedAtSeconds = ActiveWorkoutState.elapsedSeconds
                     )
                 )
             },

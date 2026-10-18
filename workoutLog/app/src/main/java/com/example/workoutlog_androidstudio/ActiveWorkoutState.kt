@@ -3,6 +3,7 @@ package com.example.workoutlog_androidstudio
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.example.workoutlog_androidstudio.api.WorkoutResponse
@@ -22,6 +23,12 @@ import kotlinx.serialization.json.Json
  * person left off, timer included. Nothing is sent to the server until the
  * workout is ended (see ActiveWorkoutScreen), so there's nothing half-saved
  * there either.
+ *
+ * The timer is worked out from the clock, not counted: it's the seconds
+ * built up before the last pause plus the time since the last start/resume.
+ * With the screen off the phone's CPU sleeps and a once-a-second counter
+ * would simply miss seconds; a clock-based timer can't fall behind, and a
+ * set added right after turning the screen back on gets the right time.
  */
 object ActiveWorkoutState {
     private const val PREFS_NAME = "active_workout"
@@ -35,23 +42,57 @@ object ActiveWorkoutState {
     var isMinimized by mutableStateOf(false)
 
     private var pausedState by mutableStateOf(false)
-    private var elapsedState by mutableStateOf(0)
+    /** Seconds built up before the current run (i.e. up to the last pause). */
+    private var accumulatedSeconds by mutableStateOf(0)
+    /** Wall-clock time the timer last started or resumed; null while paused. */
+    private var runningSinceMillis by mutableStateOf<Long?>(null)
+    /** Bumped by [tick] once a second only so the screen redraws the time -
+     *  the time itself never depends on it. */
+    private var nowMillis by mutableLongStateOf(System.currentTimeMillis())
     private var exercisesState by mutableStateOf<List<ActiveExercise>>(emptyList())
     private var notesState by mutableStateOf("")
 
     var isPaused: Boolean
         get() = pausedState
         set(value) {
+            if (value == pausedState) return
+            val now = System.currentTimeMillis()
+            if (value) {
+                // Pausing: bank the time run so far.
+                accumulatedSeconds = secondsAt(now)
+                runningSinceMillis = null
+            } else {
+                runningSinceMillis = now
+            }
             pausedState = value
+            nowMillis = now
             persist()
         }
 
-    var elapsedSeconds: Int
-        get() = elapsedState
-        set(value) {
-            elapsedState = value
-            persist()
+    /** The workout's elapsed time, worked out fresh from the clock on every
+     *  read. Read from Compose, it updates whenever [tick] runs. */
+    val elapsedSeconds: Int
+        get() {
+            nowMillis // read so Compose re-reads this every tick
+            return secondsAt(System.currentTimeMillis())
         }
+
+    /** Wall-clock time the workout would have started if it had never been
+     *  paused - for the notification's self-running timer. */
+    val effectiveStartMillis: Long
+        get() = System.currentTimeMillis() - elapsedSeconds * 1000L
+
+    private fun secondsAt(now: Long): Int {
+        val since = runningSinceMillis ?: return accumulatedSeconds
+        val running = ((now - since) / 1000L).toInt().coerceAtLeast(0)
+        return accumulatedSeconds + running
+    }
+
+    /** Called about once a second by the Active Workout screen so the time
+     *  on screen moves. Missing ticks (screen off) loses nothing. */
+    fun tick() {
+        nowMillis = System.currentTimeMillis()
+    }
 
     var exercises: List<ActiveExercise>
         get() = exercisesState
@@ -78,7 +119,8 @@ object ActiveWorkoutState {
     fun start(workout: WorkoutResponse) {
         this.workout = workout
         pausedState = false
-        elapsedState = 0
+        accumulatedSeconds = 0
+        runningSinceMillis = System.currentTimeMillis()
         exercisesState = emptyList()
         notesState = ""
         isMinimized = false
@@ -88,7 +130,8 @@ object ActiveWorkoutState {
     fun end() {
         workout = null
         pausedState = false
-        elapsedState = 0
+        accumulatedSeconds = 0
+        runningSinceMillis = null
         exercisesState = emptyList()
         notesState = ""
         isMinimized = false
@@ -99,16 +142,22 @@ object ActiveWorkoutState {
         val raw = prefs?.getString(KEY_STATE, null) ?: return
         try {
             val saved = json.decodeFromString(SavedActiveWorkout.serializer(), raw)
-            // While the app was dead the clock kept running (unless paused),
-            // so add the time that passed since the last save.
-            val secondsAway = if (saved.isPaused) {
-                0
-            } else {
-                ((System.currentTimeMillis() - saved.savedAtMillis) / 1000L).toInt().coerceAtLeast(0)
-            }
+            val now = System.currentTimeMillis()
             workout = saved.workout
             pausedState = saved.isPaused
-            elapsedState = saved.elapsedSeconds + secondsAway
+            if (saved.version >= 2) {
+                // The start time was saved, so the clock simply carries on.
+                accumulatedSeconds = saved.accumulatedSeconds
+                runningSinceMillis = if (saved.isPaused) null else saved.runningSinceMillis ?: now
+            } else {
+                // Saved by the old counting timer: its count plus the time
+                // since that save (unless paused), then run from now.
+                val secondsAway = if (saved.isPaused) 0
+                else ((now - saved.savedAtMillis) / 1000L).toInt().coerceAtLeast(0)
+                accumulatedSeconds = saved.elapsedSeconds + secondsAway
+                runningSinceMillis = if (saved.isPaused) null else now
+            }
+            nowMillis = now
             exercisesState = saved.exercises
             notesState = saved.notes
             isMinimized = false
@@ -130,9 +179,12 @@ object ActiveWorkoutState {
             workout = current,
             exercises = exercisesState,
             notes = notesState,
-            elapsedSeconds = elapsedState,
+            elapsedSeconds = secondsAt(System.currentTimeMillis()),
             isPaused = pausedState,
-            savedAtMillis = System.currentTimeMillis()
+            savedAtMillis = System.currentTimeMillis(),
+            accumulatedSeconds = accumulatedSeconds,
+            runningSinceMillis = runningSinceMillis,
+            version = 2
         )
         store.edit().putString(KEY_STATE, json.encodeToString(SavedActiveWorkout.serializer(), saved)).apply()
     }
@@ -144,7 +196,11 @@ private data class SavedActiveWorkout(
     val workout: WorkoutResponse,
     val exercises: List<ActiveExercise>,
     val notes: String,
+    /** Version 1 (the old counting timer) only had this and [savedAtMillis]. */
     val elapsedSeconds: Int,
     val isPaused: Boolean,
-    val savedAtMillis: Long
+    val savedAtMillis: Long,
+    val accumulatedSeconds: Int = 0,
+    val runningSinceMillis: Long? = null,
+    val version: Int = 1
 )

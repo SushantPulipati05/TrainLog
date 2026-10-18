@@ -464,7 +464,7 @@ class MainActivity : ComponentActivity() {
                             ActiveWorkoutScreen(
                                 workout = workout,
                                 elapsedSeconds = ActiveWorkoutState.elapsedSeconds,
-                                onTick = { ActiveWorkoutState.elapsedSeconds++ },
+                                onTick = { ActiveWorkoutState.tick() },
                                 isPaused = ActiveWorkoutState.isPaused,
                                 onTogglePause = { ActiveWorkoutState.isPaused = !ActiveWorkoutState.isPaused },
                                 prefillExercises = pendingPrefillExercises,
