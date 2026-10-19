@@ -1,7 +1,6 @@
 package com.example.workoutlog_androidstudio
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -219,7 +218,17 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = AppTextMuted) },
                 placeholder = { Text(text = "Search exercises or muscles", color = AppTextMuted) },
                 modifier = Modifier.fillMaxWidth(),
-                colors = appTextFieldColors()
+                // Fully rounded and filled, like the mockup.
+                shape = RoundedCornerShape(50),
+                colors = androidx.compose.material3.OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = AppSurface,
+                    unfocusedContainerColor = AppSurface,
+                    focusedBorderColor = AppBorder,
+                    unfocusedBorderColor = AppBorder,
+                    focusedTextColor = AppTextPrimary,
+                    unfocusedTextColor = AppTextPrimary,
+                    cursorColor = AppAccent
+                )
             )
             Spacer(modifier = Modifier.height(10.dp))
             Row(
@@ -326,7 +335,6 @@ private fun PrCard(pr: ProgressPrResponse, onClick: () -> Unit) {
             .width(150.dp)
             .clip(shape)
             .background(AppSurface)
-            .border(1.dp, AppAccent.copy(alpha = 0.4f), shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
