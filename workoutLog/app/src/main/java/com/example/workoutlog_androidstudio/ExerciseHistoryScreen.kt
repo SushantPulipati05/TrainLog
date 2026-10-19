@@ -50,6 +50,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -163,12 +175,14 @@ private enum class HistoryTimeRange(val label: String) {
  *  straight from real logged data. */
 private enum class HistoryMetric(val label: String) {
     HEAVIEST_SET("Heaviest set"),
+    EST_1RM("Est. 1RM"),
     TOTAL_VOLUME("Volume")
 }
 
 private fun metricValue(point: ExerciseHistoryPointResponse, metric: HistoryMetric, isBodyweight: Boolean): Float =
     when (metric) {
         HistoryMetric.HEAVIEST_SET -> if (isBodyweight) point.maxReps.toFloat() else (point.maxWeightKg ?: 0.0).toFloat()
+        HistoryMetric.EST_1RM -> (bestE1rm(point)?.first ?: 0.0).toFloat()
         HistoryMetric.TOTAL_VOLUME -> point.totalVolumeKg.toFloat()
     }
 
@@ -324,13 +338,13 @@ private fun ExerciseHistoryContent(exerciseName: String, history: ExerciseHistor
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Change from the first to the last session in view, e.g. "+50%".
-            val values = filtered.map { metricValue(it.first, selectedMetric, history.isBodyweight) }
-            val change = if (values.size >= 2 && values.first() > 0f) {
-                ((values.last() - values.first()) / values.first()) * 100f
+            // Est. 1RM needs weight on the bar, so bodyweight moves don't get it.
+            val metrics = if (history.isBodyweight) {
+                listOf(HistoryMetric.HEAVIEST_SET, HistoryMetric.TOTAL_VOLUME)
             } else {
-                null
+                HistoryMetric.values().toList()
             }
+            val values = filtered.map { metricValue(it.first, selectedMetric, history.isBodyweight) }
             // The window the range picker covers, e.g. "7/7 – 6/10 · 2 sessions" -
             // updates on every range tap so the change is always visible.
             val windowStart = cutoff ?: points.firstOrNull()?.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
@@ -346,7 +360,7 @@ private fun ExerciseHistoryContent(exerciseName: String, history: ExerciseHistor
                     .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)
             ) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    HistoryMetric.values().forEach { metric ->
+                    metrics.forEach { metric ->
                         ChartChip(
                             text = metric.label,
                             selected = metric == selectedMetric,
@@ -354,17 +368,50 @@ private fun ExerciseHistoryContent(exerciseName: String, history: ExerciseHistor
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                     }
-                    Spacer(modifier = Modifier.weight(1f))
-                    if (change != null && kotlin.math.abs(change) >= 0.5f) {
-                        Text(
-                            text = "${if (change > 0f) "+" else ""}${change.roundToInt()}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (change > 0f) AppSuccess else AppDanger
-                        )
-                    }
                 }
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+                // Headline: the latest session's number and the change over
+                // the range, e.g. "20 kg × 5 · 17/10      ▲ 10 kg in 3M".
+                filtered.lastOrNull()?.first?.let { latest ->
+                    val unit = if (selectedMetric == HistoryMetric.HEAVIEST_SET && history.isBodyweight) "reps" else "kg"
+                    val detail = when (selectedMetric) {
+                        HistoryMetric.HEAVIEST_SET ->
+                            if (history.isBodyweight) "reps" else topSetOf(latest.sets)?.let { "kg × ${it.reps}" } ?: "kg"
+                        HistoryMetric.EST_1RM -> "kg est."
+                        HistoryMetric.TOTAL_VOLUME -> "kg"
+                    }
+                    val delta = if (values.size >= 2) values.last() - values.first() else 0f
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Text(
+                            text = oneDecimal(values.last().toDouble()),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = AppTextPrimary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "$detail · ${formatBarDate(latest.date)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = AppTextSecondary,
+                            modifier = Modifier.padding(bottom = 3.dp)
+                        )
+                        Spacer(modifier = Modifier.weight(1f))
+                        if (kotlin.math.abs(delta) >= 0.05f) {
+                            val over = if (selectedRange == HistoryTimeRange.ALL) "overall" else "in ${selectedRange.label}"
+                            Text(
+                                text = "${if (delta > 0f) "▲" else "▼"} ${oneDecimal(kotlin.math.abs(delta).toDouble())} $unit $over",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (delta > 0f) AppSuccess else AppDanger,
+                                modifier = Modifier.padding(bottom = 3.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(2.dp))
+                }
                 AnimatedContent(
                     targetState = windowLabel,
                     transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(120)) },
@@ -384,12 +431,24 @@ private fun ExerciseHistoryContent(exerciseName: String, history: ExerciseHistor
                     transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(150)) },
                     label = "chart"
                 ) { (_, metric) ->
-                    SessionBarChart(
-                        sessions = filtered,
-                        valueFor = { metricValue(it, metric, history.isBodyweight) },
-                        axisBaseStep = metricAxisBaseStep(metric, history.isBodyweight),
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (metric == HistoryMetric.TOTAL_VOLUME) {
+                        // Volume jumps around session to session - bars read
+                        // better than a zig-zag line.
+                        SessionBarChart(
+                            sessions = filtered,
+                            valueFor = { metricValue(it, metric, history.isBodyweight) },
+                            axisBaseStep = metricAxisBaseStep(metric, history.isBodyweight),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    } else {
+                        SessionLineChart(
+                            sessions = filtered,
+                            valueFor = { metricValue(it, metric, history.isBodyweight) },
+                            axisBaseStep = metricAxisBaseStep(metric, history.isBodyweight),
+                            tooltipFor = { point -> lineTooltip(point, metric, history.isBodyweight) },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 RangeChips(selected = selectedRange, onSelect = { selectedRange = it })
@@ -544,6 +603,7 @@ private val GridLine = Color(0xFF2A2A2E)
  *  data would need more than 5 gaps, so a 100 kg lift doesn't get 40 lines. */
 private fun metricAxisBaseStep(metric: HistoryMetric, isBodyweight: Boolean): Float = when (metric) {
     HistoryMetric.HEAVIEST_SET -> if (isBodyweight) 1f else 2.5f
+    HistoryMetric.EST_1RM -> 2.5f
     HistoryMetric.TOTAL_VOLUME -> 25f
 }
 
@@ -881,5 +941,214 @@ private fun formatHistoryDateShort(iso: String): String {
         LocalDate.parse(iso).format(DateTimeFormatter.ofPattern("d MMM"))
     } catch (e: Exception) {
         iso
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Line chart (Heaviest set / Est. 1RM)
+// ---------------------------------------------------------------------------
+
+private val LINE_CHART_HEIGHT = 170.dp
+private val LINE_DATE_ROW = 18.dp
+
+/** Best estimated one-rep max of a session (Epley: weight × (1 + reps / 30)),
+ *  from sets of 1-15 reps with weight on the bar, and the set it came from. */
+private fun bestE1rm(point: ExerciseHistoryPointResponse): Pair<Double, SetEntryResponse>? =
+    point.sets
+        .filter { (it.weightKg ?: 0.0) > 0.0 && it.reps in 1..15 }
+        .map { (it.weightKg ?: 0.0) * (1 + it.reps / 30.0) to it }
+        .maxByOrNull { it.first }
+
+/**
+ * Each session as a dot on a line, oldest on the left, spaced by date (so a
+ * two-week break shows as a longer stretch), with a soft fade underneath.
+ * Sessions that set a new best get a bigger solid dot. Tap anywhere to pick
+ * the nearest session and see [tooltipFor] it; tap the same one to clear.
+ * The y axis starts just under the lowest value rather than at 0, so the
+ * climb is visible.
+ */
+@Composable
+private fun SessionLineChart(
+    sessions: List<Pair<ExerciseHistoryPointResponse, Boolean>>,
+    valueFor: (ExerciseHistoryPointResponse) -> Float,
+    axisBaseStep: Float,
+    tooltipFor: (ExerciseHistoryPointResponse) -> Pair<String, String>,
+    modifier: Modifier = Modifier
+) {
+    if (sessions.isEmpty()) {
+        Box(
+            modifier = modifier.height(LINE_CHART_HEIGHT + LINE_DATE_ROW),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = "No sessions in this range.", style = MaterialTheme.typography.bodySmall, color = AppTextMuted)
+        }
+        return
+    }
+
+    val values = sessions.map { valueFor(it.first) }
+    val maxValue = values.maxOrNull()?.takeIf { it > 0f } ?: axisBaseStep
+    val minValue = values.filter { it > 0f }.minOrNull() ?: 0f
+    val step = axisStepFor((maxValue - minValue).coerceAtLeast(axisBaseStep), axisBaseStep)
+    val axisMax = (kotlin.math.ceil(maxValue / step) * step).let { if (it < maxValue + step * 0.15f) it + step else it }
+    val axisMin = (kotlin.math.floor(minValue / step) * step - step).coerceAtLeast(0f)
+    val gridValues = generateSequence(axisMin) { it + step }.takeWhile { it <= axisMax + step / 2 }.toList()
+
+    val dates = sessions.map { runCatching { LocalDate.parse(it.first.date) }.getOrNull() ?: LocalDate.now() }
+    val firstDay = dates.first().toEpochDay()
+    val spanDays = (dates.last().toEpochDay() - firstDay).coerceAtLeast(0L)
+
+    var selected by remember(sessions) { mutableStateOf<Int?>(null) }
+    val textMeasurer = rememberTextMeasurer()
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = AppTextMuted)
+    val tipTitleStyle = MaterialTheme.typography.labelSmall.copy(color = AppTextSecondary)
+    val tipValueStyle = MaterialTheme.typography.labelLarge.copy(color = AppTextPrimary, fontWeight = FontWeight.Bold)
+
+    Row(modifier = modifier) {
+        // Y axis labels, each centred on its gridline (same as the bar chart).
+        Box(modifier = Modifier.width(Y_AXIS_WIDTH).height(LINE_CHART_HEIGHT)) {
+            gridValues.forEach { value ->
+                val y = LINE_CHART_HEIGHT * (1f - (value - axisMin) / (axisMax - axisMin))
+                Text(
+                    text = formatAxisValue(value),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = AppTextMuted,
+                    maxLines = 1,
+                    modifier = Modifier.offset(y = y - 7.dp)
+                )
+            }
+        }
+
+        Canvas(
+            modifier = Modifier
+                .weight(1f)
+                .height(LINE_CHART_HEIGHT + LINE_DATE_ROW)
+                .pointerInput(sessions) {
+                    detectTapGestures { tap ->
+                        val pad = 8.dp.toPx()
+                        val usable = size.width - pad * 2
+                        val xs = dates.map { d ->
+                            if (spanDays == 0L) size.width / 2f
+                            else pad + usable * (d.toEpochDay() - firstDay) / spanDays.toFloat()
+                        }
+                        val nearest = xs.indices.minByOrNull { kotlin.math.abs(xs[it] - tap.x) }
+                        selected = if (nearest == selected) null else nearest
+                    }
+                }
+        ) {
+            val chartH = LINE_CHART_HEIGHT.toPx()
+            val pad = 8.dp.toPx()
+            val usable = size.width - pad * 2
+            fun xOf(i: Int): Float =
+                if (spanDays == 0L) size.width / 2f
+                else pad + usable * (dates[i].toEpochDay() - firstDay) / spanDays.toFloat()
+            fun yOf(v: Float): Float = chartH * (1f - (v - axisMin) / (axisMax - axisMin))
+
+            // Gridlines.
+            gridValues.forEach { value ->
+                val y = yOf(value)
+                drawLine(GridLine, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+            }
+
+            val pts = values.indices.map { Offset(xOf(it), yOf(values[it].coerceAtLeast(axisMin))) }
+
+            // Fade under the line, then the line.
+            if (pts.size >= 2) {
+                val line = Path().apply {
+                    moveTo(pts.first().x, pts.first().y)
+                    pts.drop(1).forEach { lineTo(it.x, it.y) }
+                }
+                val area = Path().apply {
+                    addPath(line)
+                    lineTo(pts.last().x, chartH)
+                    lineTo(pts.first().x, chartH)
+                    close()
+                }
+                drawPath(
+                    area,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(AppAccent.copy(alpha = 0.32f), AppAccent.copy(alpha = 0f)),
+                        startY = 0f,
+                        endY = chartH
+                    )
+                )
+                drawPath(
+                    line,
+                    color = AppAccent,
+                    style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+                )
+            }
+
+            // Dots: big and solid for a new best, small and hollow otherwise.
+            sessions.forEachIndexed { i, (_, isNewBest) ->
+                if (isNewBest) {
+                    drawCircle(AppSurface, radius = 6.dp.toPx(), center = pts[i])
+                    drawCircle(AppAccent, radius = 4.5.dp.toPx(), center = pts[i])
+                } else {
+                    drawCircle(AppSurface, radius = 2.4.dp.toPx(), center = pts[i])
+                    drawCircle(AppAccent, radius = 2.4.dp.toPx(), center = pts[i], style = Stroke(1.4.dp.toPx()))
+                }
+            }
+
+            // Date labels: up to 5, evenly picked, never overlapping the edges.
+            val labelCount = minOf(5, sessions.size)
+            val labelIdx = if (labelCount <= 1) listOf(0)
+            else (0 until labelCount).map { it * (sessions.size - 1) / (labelCount - 1) }.distinct()
+            labelIdx.forEach { i ->
+                val layout = textMeasurer.measure(formatBarDate(sessions[i].first.date), labelStyle)
+                val x = (pts[i].x - layout.size.width / 2f).coerceIn(0f, size.width - layout.size.width)
+                drawText(layout, topLeft = Offset(x, chartH + 4.dp.toPx()))
+            }
+
+            // The tapped session: a dashed guide, a ringed dot and its numbers.
+            selected?.let { i ->
+                val p = pts.getOrNull(i) ?: return@let
+                drawLine(
+                    AppTextSecondary,
+                    Offset(p.x, 0f),
+                    Offset(p.x, chartH),
+                    strokeWidth = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f))
+                )
+                drawCircle(AppAccent, radius = 6.dp.toPx(), center = p)
+                drawCircle(AppTextPrimary, radius = 4.dp.toPx(), center = p)
+
+                val (title, value) = tooltipFor(sessions[i].first)
+                val t = textMeasurer.measure(title, tipTitleStyle)
+                val v = textMeasurer.measure(value, tipValueStyle)
+                val boxW = maxOf(t.size.width, v.size.width) + 20.dp.toPx()
+                val boxH = t.size.height + v.size.height + 14.dp.toPx()
+                val bx = (p.x - boxW / 2f).coerceIn(0f, size.width - boxW)
+                val by = (p.y - boxH - 10.dp.toPx()).let { if (it < 0f) p.y + 12.dp.toPx() else it }
+                drawRoundRect(
+                    color = AppBorder,
+                    topLeft = Offset(bx, by),
+                    size = Size(boxW, boxH),
+                    cornerRadius = CornerRadius(8.dp.toPx())
+                )
+                drawText(t, topLeft = Offset(bx + 10.dp.toPx(), by + 6.dp.toPx()))
+                drawText(v, topLeft = Offset(bx + 10.dp.toPx(), by + 6.dp.toPx() + t.size.height))
+            }
+        }
+    }
+}
+
+/** What a tapped dot shows: "14/10 · top set" over "17.5 kg × 10". */
+private fun lineTooltip(point: ExerciseHistoryPointResponse, metric: HistoryMetric, isBodyweight: Boolean): Pair<String, String> {
+    val date = formatBarDate(point.date)
+    return when (metric) {
+        HistoryMetric.EST_1RM -> {
+            val best = bestE1rm(point)
+            "$date · est. 1RM" to (best?.let { (e1rm, set) ->
+                "${oneDecimal(e1rm)} kg (${formatDecimal(set.weightKg ?: 0.0)} × ${set.reps})"
+            } ?: "-")
+        }
+        else -> {
+            val top = topSetOf(point.sets)
+            "$date · top set" to when {
+                top == null -> "-"
+                isBodyweight && (top.weightKg ?: 0.0) <= 0.0 -> "${point.maxReps} reps"
+                else -> "${formatDecimal(top.weightKg ?: 0.0)} kg × ${top.reps}"
+            }
+        }
     }
 }
