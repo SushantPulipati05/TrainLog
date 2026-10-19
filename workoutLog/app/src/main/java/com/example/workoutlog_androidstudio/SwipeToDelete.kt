@@ -57,9 +57,10 @@ fun SwipeToDeleteBox(
     onRequestDelete: () -> Unit,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    cornerRadius: androidx.compose.ui.unit.Dp = 18.dp,
     content: @Composable () -> Unit
 ) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(cornerRadius)
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val offset = remember { Animatable(0f) }

@@ -38,11 +38,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SwipeToDismissBox
-import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material.icons.filled.Edit
@@ -737,7 +734,9 @@ private fun ExerciseCard(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** An exercise card that can be swiped left to delete - using the strict
+ *  swipe from SwipeToDelete.kt, so scrolling never triggers it. Deleting
+ *  still asks first (onDelete opens the confirmation). */
 @Composable
 private fun SwipeToDeleteExerciseCard(
     exercise: ActiveExercise,
@@ -745,44 +744,15 @@ private fun SwipeToDeleteExerciseCard(
     onSetsChange: (List<ExerciseSet>) -> Unit,
     onDelete: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { targetValue ->
-            if (targetValue == SwipeToDismissBoxValue.EndToStart) {
-                // Ask first; returning false snaps the card back until the
-                // user confirms in the popup.
-                onDelete()
-            }
-            false
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(AppDanger)
-                    .padding(horizontal = 22.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete exercise",
-                    tint = Color.White
-                )
-            }
-        }
-    ) {
+    SwipeToDeleteBox(onRequestDelete = onDelete, contentDescription = "Delete exercise") {
         ExerciseCard(exercise = exercise, elapsedSeconds = elapsedSeconds, onSetsChange = onSetsChange)
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** A set row that can be swiped left to delete it. Same strict swipe: it
+ *  only starts on a clearly sideways drag and only deletes when let go past
+ *  40% of the width, so scrolling through sets can't remove one. The row's
+ *  own swipe wins over the exercise card's. */
 @Composable
 private fun SwipeToDeleteSetRow(
     set: ExerciseSet,
@@ -790,41 +760,7 @@ private fun SwipeToDeleteSetRow(
     onRepsChange: (String) -> Unit,
     onDelete: () -> Unit
 ) {
-    val dismissState = rememberSwipeToDismissBoxState(
-        confirmValueChange = { targetValue ->
-            if (targetValue == SwipeToDismissBoxValue.EndToStart) {
-                onDelete()
-                true
-            } else {
-                false
-            }
-        }
-    )
-
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = true,
-        backgroundContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(AppDanger)
-                    .padding(horizontal = 14.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = "Delete set",
-                    tint = Color.White,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-    ) {
-
+    SwipeToDeleteBox(onRequestDelete = onDelete, contentDescription = "Delete set", cornerRadius = 10.dp) {
         Box(modifier = Modifier.fillMaxWidth().background(AppSurface)) {
             SetRow(set = set, onKgChange = onKgChange, onRepsChange = onRepsChange)
         }
