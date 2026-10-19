@@ -70,8 +70,22 @@ data class TrainingPlan(
     /** The order the user really trains the split's days in, once they've
      *  confirmed it (see [detectUsualOrder]) - e.g. Legs, Pull, Push for a
      *  Push / Pull / Legs split. Empty = the split's own order. */
-    val dayOrder: List<String> = emptyList()
+    val dayOrder: List<String> = emptyList(),
+    /** ISO date (always a Monday) of the first week missed days are judged
+     *  in - heatmap outlines. Set to the week *after* the plan is made or its
+     *  training days change, so days before the plan existed never count.
+     *  Adjustable on the Training plan screen ("Track missed days from"),
+     *  but never to before the plan was made. Whole weeks only. */
+    val trainingDaysSince: String? = null,
+    /** ISO date the plan was first set up. null for plans made before this
+     *  was saved. */
+    val createdOn: String? = null
 ) {
+    /** The earliest week missed days may be judged in: the week after the
+     *  plan was set up (null = unknown, for older plans). */
+    fun earliestTrackedWeek(): LocalDate? =
+        createdOn?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.let { weekStartOf(it).plusWeeks(1) }
+
     fun splitDays(): List<String> = if (split == TrainingSplit.CUSTOM) customDays else split.days
 
     /** The split's days in the user's order. A saved order that no longer
@@ -104,6 +118,9 @@ data class TrainingPlan(
         return templates.firstOrNull { normalizeWorkoutName(it.name) == wanted }?.id
     }
 }
+
+/** The Monday of [date]'s week - missed days are judged in whole weeks. */
+fun weekStartOf(date: LocalDate): LocalDate = date.minusDays((date.dayOfWeek.value - 1).toLong())
 
 /** Value stored in [TrainingPlan.templateIds] for "no template, start empty". */
 const val EMPTY_WORKOUT = -1
@@ -175,6 +192,13 @@ object TrainingPlanStore {
         prefs = p
         plan = p.getString(KEY_PLAN, null)?.let { raw ->
             runCatching { json.decodeFromString(TrainingPlan.serializer(), raw) }.getOrNull()
+        }?.let { loaded ->
+            // A plan saved before this date existed: start judging from today.
+            if (loaded.trainingDaysSince != null) loaded else {
+                val stamped = loaded.copy(trainingDaysSince = weekStartOf(LocalDate.now()).toString())
+                p.edit().putString(KEY_PLAN, json.encodeToString(TrainingPlan.serializer(), stamped)).apply()
+                stamped
+            }
         }
         promptDismissed = p.getBoolean(KEY_PROMPT_DISMISSED, false)
         dismissedOrder = p.getString(KEY_DISMISSED_ORDER, null)
@@ -182,8 +206,18 @@ object TrainingPlanStore {
 
     fun save(context: Context, newPlan: TrainingPlan) {
         init(context)
-        plan = newPlan
-        prefs?.edit()?.putString(KEY_PLAN, json.encodeToString(TrainingPlan.serializer(), newPlan))?.apply()
+        val old = plan
+        val today = LocalDate.now()
+        var stamped = newPlan
+        // First save of a brand-new plan: remember the day it was set up.
+        if (old == null && stamped.createdOn == null) stamped = stamped.copy(createdOn = today.toString())
+        // No start week yet, or the training days changed: missed days are
+        // judged from next week on - never on days the plan didn't cover.
+        if (stamped.trainingDaysSince == null || (old != null && old.trainingDays != stamped.trainingDays)) {
+            stamped = stamped.copy(trainingDaysSince = weekStartOf(today).plusWeeks(1).toString())
+        }
+        plan = stamped
+        prefs?.edit()?.putString(KEY_PLAN, json.encodeToString(TrainingPlan.serializer(), stamped))?.apply()
         GymReminderScheduler.reschedule(context)
     }
 

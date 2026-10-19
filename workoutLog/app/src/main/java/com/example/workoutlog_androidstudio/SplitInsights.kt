@@ -386,3 +386,113 @@ fun findPreviousSimilarWorkout(name: String, workouts: List<WorkoutSummary>, pla
     val day = days.firstOrNull { nameMatches(name, it) } ?: return null
     return classifyHistory(history, days).lastOrNull { it.second == day }?.first
 }
+
+// ---------------------------------------------------------------------------
+// Heatmap: how full each day's training was, and which planned days were missed.
+// ---------------------------------------------------------------------------
+
+/** With no history to compare against yet, this many sets counts as a full session. */
+private const val DEFAULT_FULL_SETS = 15
+
+/** How far back "your usual" looks. */
+private const val USUAL_WEEKS = 8L
+
+private fun median(values: List<Int>): Double {
+    val sorted = values.sorted()
+    val mid = sorted.size / 2
+    return if (sorted.size % 2 == 1) sorted[mid].toDouble() else (sorted[mid - 1] + sorted[mid]) / 2.0
+}
+
+private fun WorkoutSummary.setCount(): Int = if (totalSets > 0) totalSets else muscleSets.values.sum()
+
+/**
+ * How complete each day's training was, 0..1, for the heatmap's shading.
+ *
+ * Each workout's sets are compared with the user's usual for that kind of
+ * workout (Push / Pull / Legs ..., read from its muscles like Up next): the
+ * median sets of that type over the last [USUAL_WEEKS] weeks. With fewer
+ * than 3 of that type it compares with their usual across all workouts, and
+ * with fewer than 3 workouts at all, with [DEFAULT_FULL_SETS] sets.
+ *
+ * Steps: about 90% of usual or more = 1 (full), 60-90% = 0.75, 30-60% = 0.5,
+ * anything less = 0.3. Two workouts on one day add up.
+ */
+fun heatmapLevels(
+    workouts: List<WorkoutSummary>,
+    plan: TrainingPlan?,
+    today: LocalDate = LocalDate.now()
+): Map<LocalDate, Float> {
+    val history = chronological(workouts)
+    // A plan's split if there is one; otherwise Push / Pull / Legs is just
+    // used to group similar sessions, so a short Legs day is compared with
+    // other Legs days.
+    val days = plan?.orderedDays().orEmpty().distinct().ifEmpty { TrainingSplit.PPL.days }
+    val classified = classifyHistory(history, days)
+
+    val recentFrom = today.minusWeeks(USUAL_WEEKS)
+    val recent = classified.filter { (w, _) -> w.localDate()?.let { !it.isBefore(recentFrom) } == true && w.setCount() > 0 }
+    val overall = recent.map { it.first.setCount() }
+    val usualOverall = if (overall.size >= 3) median(overall) else DEFAULT_FULL_SETS.toDouble()
+    val usualByType = recent.filter { it.second != null }
+        .groupBy({ it.second!! }, { it.first.setCount() })
+        .filterValues { it.size >= 3 }
+        .mapValues { median(it.value) }
+
+    val ratioByDate = HashMap<LocalDate, Double>()
+    classified.forEach { (w, type) ->
+        val date = w.localDate() ?: return@forEach
+        val sets = w.setCount()
+        val usual = type?.let { usualByType[it] } ?: usualOverall
+        val ratio = if (sets == 0) 0.1 else sets / usual.coerceAtLeast(1.0)
+        ratioByDate[date] = (ratioByDate[date] ?: 0.0) + ratio
+    }
+    return ratioByDate.mapValues { (_, r) ->
+        when {
+            r >= 0.9 -> 1f
+            r >= 0.6 -> 0.75f
+            r >= 0.3 -> 0.5f
+            else -> 0.3f
+        }
+    }
+}
+
+/**
+ * Planned training days that were missed and not made up - outlined on the
+ * heatmap and calendar.
+ *
+ * Only whole weeks from [TrainingPlan.trainingDaysSince] (a Monday) on are
+ * judged, and never today (it isn't over). Counted per week: if the week so far has fewer workout days than
+ * planned days, that many planned-but-empty days are marked, newest first.
+ * So training on a rest day makes up for a skipped one.
+ */
+fun missedDays(
+    workouts: List<WorkoutSummary>,
+    plan: TrainingPlan?,
+    today: LocalDate = LocalDate.now()
+): Set<LocalDate> {
+    plan ?: return emptySet()
+    if (plan.trainingDays.isEmpty()) return emptySet()
+    // Whole weeks: judging starts on the Monday of the chosen week.
+    val chosen = plan.trainingDaysSince?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+        ?.let { weekStartOf(it) } ?: return emptySet()
+    // Never before the week after the plan was set up.
+    val earliest = plan.earliestTrackedWeek()
+    val since = if (earliest != null && earliest.isAfter(chosen)) earliest else chosen
+    if (!since.isBefore(today)) return emptySet()
+
+    val trainedDates = workouts.mapNotNull { it.localDate() }.toSet()
+    val missed = HashSet<LocalDate>()
+    var weekStart = since.minusDays((since.dayOfWeek.value - 1).toLong())
+    while (weekStart.isBefore(today)) {
+        val judged = (0L..6L).map { weekStart.plusDays(it) }
+            .filter { !it.isBefore(since) && it.isBefore(today) }
+        val planned = judged.filter { plan.isTrainingDay(it.dayOfWeek) }
+        val done = judged.count { it in trainedDates }
+        val short = planned.size - done
+        if (short > 0) {
+            planned.filter { it !in trainedDates }.takeLast(short).forEach { missed.add(it) }
+        }
+        weekStart = weekStart.plusWeeks(1)
+    }
+    return missed
+}

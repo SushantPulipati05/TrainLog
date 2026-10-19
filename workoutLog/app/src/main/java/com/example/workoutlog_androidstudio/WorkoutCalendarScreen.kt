@@ -88,6 +88,11 @@ fun WorkoutCalendarScreen(
         allWorkouts.mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }.toSet()
     }
 
+    // Planned training days that were missed (same rule as the Home heatmap).
+    val missedDates = remember(allWorkouts, TrainingPlanStore.plan) {
+        missedDays(allWorkouts, TrainingPlanStore.plan, today)
+    }
+
     val selectedDateIso = remember(selectedDate) { selectedDate.toString() }
     val sessionsForSelectedDay = remember(workoutsByDate, selectedDateIso) {
         workoutsByDate[selectedDateIso].orEmpty()
@@ -198,6 +203,7 @@ fun WorkoutCalendarScreen(
                 CalendarMonthGrid(
                     monthAnchor = displayedMonth,
                     workoutDates = workoutDatesInMonth,
+                    missedDates = missedDates,
                     selectedDate = selectedDate,
                     today = today,
                     onSelectDate = { selectedDate = it }
@@ -257,6 +263,7 @@ private fun parseVolumeKg(label: String): Double {
 private fun CalendarMonthGrid(
     monthAnchor: LocalDate,
     workoutDates: Set<LocalDate>,
+    missedDates: Set<LocalDate>,
     selectedDate: LocalDate,
     today: LocalDate,
     onSelectDate: (LocalDate) -> Unit
@@ -283,6 +290,7 @@ private fun CalendarMonthGrid(
                             isSelected = date == selectedDate,
                             isToday = date == today,
                             hasWorkout = workoutDates.contains(date),
+                            isMissed = inMonth && date in missedDates,
                             onClick = { onSelectDate(date) }
                         )
                     }
@@ -299,6 +307,7 @@ private fun CalendarDayCell(
     isSelected: Boolean,
     isToday: Boolean,
     hasWorkout: Boolean,
+    isMissed: Boolean,
     onClick: () -> Unit
 ) {
     val textColor = when {
@@ -331,7 +340,16 @@ private fun CalendarDayCell(
             color = textColor
         )
         Spacer(modifier = Modifier.height(3.dp))
-        Box(modifier = Modifier.size(4.dp).background(dotColor, CircleShape))
+        if (isMissed && !hasWorkout) {
+            // A planned day that was missed: a hollow dot instead of a filled one.
+            Box(
+                modifier = Modifier
+                    .size(5.dp)
+                    .border(1.dp, if (isSelected) AppOnAccent else AppAccent.copy(alpha = 0.6f), CircleShape)
+            )
+        } else {
+            Box(modifier = Modifier.size(4.dp).background(dotColor, CircleShape))
+        }
     }
 }
 

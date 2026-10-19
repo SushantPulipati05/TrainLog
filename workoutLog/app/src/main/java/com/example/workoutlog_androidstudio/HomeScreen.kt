@@ -8,6 +8,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -722,16 +725,14 @@ private fun SkeletonWorkoutCard() {
 @Composable
 private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: () -> Unit) {
     val today = remember { LocalDate.now() }
-    val nextMonthAnchor = remember(today) { today.plusMonths(1) }
+    val lastMonthAnchor = remember(today) { today.minusMonths(1) }
+    val plan = TrainingPlanStore.plan
 
-    val exerciseCountByDate = remember(workouts) {
-        workouts
-            .mapNotNull { workout ->
-                runCatching { LocalDate.parse(workout.date) }.getOrNull()?.let { it to workout.exerciseCount }
-            }
-            .groupBy({ it.first }, { it.second })
-            .mapValues { (_, counts) -> counts.sum() }
-    }
+    // How full each day's training was, compared with the user's usual for
+    // that kind of workout, and which planned days were missed (see
+    // SplitInsights.kt).
+    val levelByDate = remember(workouts, plan) { heatmapLevels(workouts, plan, today) }
+    val missed = remember(workouts, plan) { missedDays(workouts, plan, today) }
 
     // The whole heatmap is one tap target that opens the calendar - the
     // cells themselves aren't separately tappable.
@@ -740,18 +741,23 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
             .fillMaxWidth()
             .clickable(onClickLabel = "Open workout calendar", onClick = onOpenCalendar)
     ) {
+        // Last month + this month, so the whole grid is real history.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             MonthGrid(
-                monthAnchor = today,
-                exerciseCountByDate = exerciseCountByDate,
+                monthAnchor = lastMonthAnchor,
+                levelByDate = levelByDate,
+                missed = missed,
+                today = today,
                 modifier = Modifier.weight(1f)
             )
             MonthGrid(
-                monthAnchor = nextMonthAnchor,
-                exerciseCountByDate = exerciseCountByDate,
+                monthAnchor = today,
+                levelByDate = levelByDate,
+                missed = missed,
+                today = today,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -763,27 +769,41 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
         ) {
             Text(text = "Less", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
             Spacer(modifier = Modifier.width(6.dp))
-            listOf(0f, 0.2f, 0.4f, 0.6f, 0.8f, 1f).forEach { alpha ->
+            listOf(0.3f, 0.5f, 0.75f, 1f).forEach { level ->
                 Box(
                     modifier = Modifier
                         .padding(horizontal = 2.dp)
                         .size(10.dp)
-                        .background(
-                            if (alpha == 0f) AppSurfaceVariant else AppAccent.copy(alpha = alpha),
-                            RoundedCornerShape(3.dp)
-                        )
+                        .background(AppAccent.copy(alpha = level), RoundedCornerShape(3.dp))
                 )
             }
             Spacer(modifier = Modifier.width(6.dp))
             Text(text = "More", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+            if (plan != null) {
+                Spacer(modifier = Modifier.width(12.dp))
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .border(1.dp, MISSED_OUTLINE, RoundedCornerShape(3.dp))
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "Missed", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+            }
         }
     }
 }
 
+/** Outline for a planned training day that was missed - a hint, not an alarm. */
+private val MISSED_OUTLINE = AppAccent.copy(alpha = 0.6f)
+
+private val WEEKDAY_LETTERS = listOf("M", "T", "W", "T", "F", "S", "S")
+
 @Composable
 private fun MonthGrid(
     monthAnchor: LocalDate,
-    exerciseCountByDate: Map<LocalDate, Int>,
+    levelByDate: Map<LocalDate, Float>,
+    missed: Set<LocalDate>,
+    today: LocalDate,
     modifier: Modifier = Modifier
 ) {
     val weeks = remember(monthAnchor) { weeksOfMonth(monthAnchor) }
@@ -794,7 +814,23 @@ private fun MonthGrid(
             style = MaterialTheme.typography.labelSmall,
             color = AppTextMuted
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            WEEKDAY_LETTERS.forEach { letter ->
+                Text(
+                    text = letter,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 9.sp,
+                    color = AppTextMuted,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(4.dp))
         weeks.forEach { week ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -802,10 +838,11 @@ private fun MonthGrid(
             ) {
                 week.forEach { date ->
                     val inMonth = date.month == monthAnchor.month && date.year == monthAnchor.year
-                    val exerciseCount = exerciseCountByDate[date] ?: 0
                     HeatmapCell(
                         inCurrentMonth = inMonth,
-                        exerciseCount = exerciseCount,
+                        isFuture = date.isAfter(today),
+                        level = levelByDate[date] ?: 0f,
+                        isMissed = inMonth && date in missed,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -816,10 +853,25 @@ private fun MonthGrid(
 }
 
 @Composable
-private fun HeatmapCell(inCurrentMonth: Boolean, exerciseCount: Int, modifier: Modifier = Modifier) {
+private fun HeatmapCell(
+    inCurrentMonth: Boolean,
+    isFuture: Boolean,
+    level: Float,
+    isMissed: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val shape = RoundedCornerShape(4.dp)
+    val color = when {
+        !inCurrentMonth -> Color.Transparent
+        level > 0f -> AppAccent.copy(alpha = level)
+        isMissed -> Color.Transparent
+        isFuture -> AppSurfaceVariant.copy(alpha = 0.45f)
+        else -> AppSurfaceVariant
+    }
     Box(
         modifier = modifier
             .aspectRatio(1f)
-            .background(heatmapCellColor(inCurrentMonth, exerciseCount), RoundedCornerShape(4.dp))
+            .background(color, shape)
+            .then(if (isMissed && level == 0f) Modifier.border(1.dp, MISSED_OUTLINE, shape) else Modifier)
     )
 }

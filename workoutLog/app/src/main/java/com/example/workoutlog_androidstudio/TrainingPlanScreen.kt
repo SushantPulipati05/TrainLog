@@ -86,6 +86,7 @@ fun TrainingPlanScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     var showSplitDialog by remember { mutableStateOf(false) }
     var showCustomDialog by remember { mutableStateOf(false) }
     var showTimeDialog by remember { mutableStateOf(false) }
+    var showTrackFromDialog by remember { mutableStateOf(false) }
     var splitDayBeingLinked by remember { mutableStateOf<String?>(null) }
 
     // Templates, for linking each split day to the one it starts from.
@@ -199,6 +200,13 @@ fun TrainingPlanScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                     label = "Gym time",
                     value = formatGymTime(context, plan.hour, plan.minute),
                     onClick = { showTimeDialog = true }
+                )
+                PlanDivider()
+                // The first week the heatmap and calendar mark missed days in.
+                PlanRow(
+                    label = "Track missed days from",
+                    value = trackFromLabel(plan.trainingDaysSince),
+                    onClick = { showTrackFromDialog = true }
                 )
             }
 
@@ -362,6 +370,34 @@ fun TrainingPlanScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 TextButton(onClick = { showCustomDialog = false }) { Text("Cancel", color = AppTextSecondary) }
             }
         )
+    }
+
+    if (showTrackFromDialog) {
+        val thisWeek = weekStartOf(LocalDate.now())
+        val current = plan.trainingDaysSince?.let { runCatching { weekStartOf(LocalDate.parse(it)) }.getOrNull() } ?: thisWeek
+        // Never before the plan existed: from the week after it was set up
+        // (or up to 8 weeks back for plans older than that date being saved).
+        val earliest = plan.earliestTrackedWeek()
+        ChoiceDialog(title = "Track missed days from", onDismiss = { showTrackFromDialog = false }) {
+            (-1L..8L).forEach { weeksAgo ->
+                val monday = thisWeek.minusWeeks(weeksAgo)
+                if (earliest != null && monday.isBefore(earliest) && weeksAgo >= 0L) return@forEach
+                ChoiceRow(
+                    title = when (weeksAgo) {
+                        -1L -> "Next week"
+                        0L -> "This week"
+                        1L -> "Last week"
+                        else -> "$weeksAgo weeks ago"
+                    },
+                    subtitle = "Week of ${monday.format(WEEK_OF)}",
+                    selected = current == monday,
+                    onClick = {
+                        showTrackFromDialog = false
+                        update(plan.copy(trainingDaysSince = monday.toString()))
+                    }
+                )
+            }
+        }
     }
 
     if (showTimeDialog) {
@@ -793,5 +829,19 @@ private fun UpNextWhyCard(explanation: UpNextExplanation, expanded: Boolean, onT
                 }
             }
         }
+    }
+}
+
+private val WEEK_OF: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM", Locale.ENGLISH)
+
+/** "This week", "Last week" or "Week of 5 Oct" for the start week. */
+private fun trackFromLabel(since: String?): String {
+    val thisWeek = weekStartOf(LocalDate.now())
+    val monday = since?.let { runCatching { weekStartOf(LocalDate.parse(it)) }.getOrNull() } ?: thisWeek
+    return when (monday) {
+        thisWeek.plusWeeks(1) -> "Next week"
+        thisWeek -> "This week"
+        thisWeek.minusWeeks(1) -> "Last week"
+        else -> "Week of ${monday.format(WEEK_OF)}"
     }
 }
