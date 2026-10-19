@@ -24,7 +24,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Balance
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -62,7 +65,9 @@ data class ProgressExerciseResponse(
     val lastDate: String,
     val topWeightKg: Double? = null,
     val topReps: Int = 0,
-    val change3m: Double? = null
+    val change3m: Double? = null,
+    val change3mReps: Int? = null,
+    val e1rmChange3m: Double? = null
 )
 
 @Serializable
@@ -71,14 +76,51 @@ data class ProgressPrResponse(
     val name: String,
     val weightKg: Double? = null,
     val reps: Int,
-    val date: String
+    val date: String,
+    /** "WEIGHT" = heavier than ever; "REP" = more reps than ever at a weight already lifted. */
+    val kind: String = "WEIGHT",
+    /** The record it beat: old best weight (WEIGHT) or old best reps at that weight (REP). */
+    val previous: Double? = null
+)
+
+/** One insight card: "FORM" check-in, "NOT_DONE" lately, or a small "WIN". */
+@Serializable
+data class ProgressInsightResponse(
+    val kind: String,
+    val exerciseId: Int,
+    val name: String,
+    val message: String
 )
 
 @Serializable
 data class ProgressResponse(
     val exercises: List<ProgressExerciseResponse> = emptyList(),
-    val recentPrs: List<ProgressPrResponse> = emptyList()
+    val recentPrs: List<ProgressPrResponse> = emptyList(),
+    val insights: List<ProgressInsightResponse> = emptyList()
 )
+
+/** Insight cards the user crossed off, until when (millis). A form check-in
+ *  stays away 4 weeks, "not done lately" 3 weeks, a small win 2 months
+ *  (a different win for the same exercise can still show). */
+private object DismissedInsights {
+    private const val PREFS = "progress_insights"
+
+    private fun key(i: ProgressInsightResponse) = "${i.kind}:${i.exerciseId}:${if (i.kind == "WIN") i.message.hashCode() else 0}"
+
+    private fun prefs(context: android.content.Context) =
+        context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+
+    fun isHidden(context: android.content.Context, i: ProgressInsightResponse): Boolean =
+        prefs(context).getLong(key(i), 0L) > System.currentTimeMillis()
+
+    fun dismiss(context: android.content.Context, i: ProgressInsightResponse) {
+        val days = when (i.kind) { "FORM" -> 28L; "NOT_DONE" -> 21L; else -> 60L }
+        prefs(context).edit().putLong(key(i), System.currentTimeMillis() + days * 24 * 60 * 60 * 1000).apply()
+    }
+}
+
+/** How "Your exercises" is ordered. */
+private enum class ExerciseSort(val label: String) { MOST_USED("Most used"), RECENT("Recently done"), BIGGEST_GAIN("Biggest gain") }
 
 /** The muscle groups the Progress tab talks about, and the exercise-list
  *  muscle names that belong to each. */
@@ -94,36 +136,6 @@ private val PROGRESS_GROUPS: List<Pair<String, Set<String>>> = listOf(
 private fun groupOf(muscleGroup: String?): String? {
     val m = muscleGroup?.trim()?.uppercase() ?: return null
     return PROGRESS_GROUPS.firstOrNull { m in it.second }?.first
-}
-
-/** One muscle group's sets this week against a usual week. */
-private data class WeekBalance(val group: String, val thisWeek: Int, val usual: Int)
-
-/**
- * Sets per muscle group this week (Monday to today) and in a usual week:
- * the average of the 4 full weeks before this one. Groups with nothing in
- * either are left out.
- */
-private fun weekBalance(workouts: List<WorkoutSummary>, today: LocalDate = LocalDate.now()): List<WeekBalance> {
-    val thisMonday = weekStartOf(today)
-    val fromUsual = thisMonday.minusWeeks(4)
-    val thisWeek = HashMap<String, Int>()
-    val usualTotal = HashMap<String, Int>()
-    workouts.forEach { w ->
-        val date = runCatching { LocalDate.parse(w.date) }.getOrNull() ?: return@forEach
-        val target = when {
-            !date.isBefore(thisMonday) && !date.isAfter(today) -> thisWeek
-            !date.isBefore(fromUsual) && date.isBefore(thisMonday) -> usualTotal
-            else -> return@forEach
-        }
-        w.muscleWork().forEach { (muscle, sets) ->
-            val group = groupOf(muscle) ?: return@forEach
-            target[group] = (target[group] ?: 0) + sets
-        }
-    }
-    return PROGRESS_GROUPS.map { (group, _) ->
-        WeekBalance(group, thisWeek[group] ?: 0, Math.round((usualTotal[group] ?: 0) / 4.0).toInt())
-    }.filter { it.thisWeek > 0 || it.usual > 0 }
 }
 
 private val SHORT_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("EEE d/M", Locale.ENGLISH)
@@ -147,6 +159,9 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var group by remember { mutableStateOf<String?>(null) }
+    var sort by remember { mutableStateOf(ExerciseSort.MOST_USED) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var dismissTick by remember { mutableStateOf(0) }
 
     // Reload whenever the workout list changes (a workout ended or was
     // deleted) or the exercise list does (a merge).
@@ -161,13 +176,25 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
     }
     LaunchedEffect(Unit) { if (summaries == null) runCatching { AppDataCache.loadWorkoutSummaries() } }
 
-    val balance = remember(summaries) { weekBalance(summaries.orEmpty()) }
     val exercises = progress?.exercises.orEmpty()
-    val shown = remember(exercises, query, group) {
-        exercises.filter { e ->
-            (group == null || groupOf(e.muscleGroup) == group) &&
-                matchesExerciseQuery(query, e.name, e.muscleGroup)
-        }
+    val shown = remember(exercises, query, group, sort) {
+        exercises
+            .filter { e ->
+                (group == null || groupOf(e.muscleGroup) == group) &&
+                    matchesExerciseQuery(query, e.name, e.muscleGroup)
+            }
+            .let { list ->
+                when (sort) {
+                    ExerciseSort.MOST_USED -> list.sortedWith(compareByDescending<ProgressExerciseResponse> { it.sessions }.thenByDescending { it.lastDate })
+                    ExerciseSort.RECENT -> list.sortedByDescending { it.lastDate }
+                    // Estimated 1RM change; exercises without one go last.
+                    ExerciseSort.BIGGEST_GAIN -> list.sortedWith(compareByDescending<ProgressExerciseResponse> { it.e1rmChange3m ?: Double.NEGATIVE_INFINITY })
+                }
+            }
+    }
+    // At most 3, form check-ins first (the server sends them in that order).
+    val insights = remember(progress, dismissTick) {
+        progress?.insights.orEmpty().filterNot { DismissedInsights.isHidden(context, it) }.take(3)
     }
 
     LazyColumn(
@@ -244,33 +271,26 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
             }
         }
 
-        // ---- Sets per muscle this week ----
-        if (balance.isNotEmpty() && query.isBlank() && group == null) {
-            item {
-                SectionLabel("SETS THIS WEEK")
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(AppSurface, RoundedCornerShape(18.dp))
-                        .padding(16.dp)
-                ) {
-                    Text(
-                        text = "Each bar fills up as you reach your usual week (your average over the last 4 weeks).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppTextSecondary
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    balance.forEach { BalanceRow(it) }
-                }
+        // ---- Insights: separate cards, each can be crossed off ----
+        if (insights.isNotEmpty() && query.isBlank() && group == null) {
+            item { SectionLabel("INSIGHTS") }
+            items(insights, key = { "${it.kind}:${it.exerciseId}" }) { insight ->
+                InsightCard(
+                    insight = insight,
+                    onOpen = { onOpenExercise(insight.exerciseId, insight.name) },
+                    onDismiss = {
+                        DismissedInsights.dismiss(context, insight)
+                        dismissTick++
+                    }
+                )
             }
         }
 
         // ---- Your exercises ----
         item {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel("YOUR EXERCISES · ${shown.size}", modifier = Modifier.weight(1f))
-                if (query.isBlank()) SectionLabel("MOST USED")
-            }
+            SectionLabel("YOUR EXERCISES · ${shown.size}")
+            SortControl(selected = sort, onSelect = { sort = it })
+            Spacer(modifier = Modifier.height(10.dp))
         }
         if (shown.isEmpty()) {
             item {
@@ -278,7 +298,11 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
             }
         } else {
             items(shown, key = { it.exerciseId }) { exercise ->
-                ExerciseProgressRow(exercise = exercise, onClick = { onOpenExercise(exercise.exerciseId, exercise.name) })
+                ExerciseProgressRow(
+                    exercise = exercise,
+                    showE1rm = sort == ExerciseSort.BIGGEST_GAIN,
+                    onClick = { onOpenExercise(exercise.exerciseId, exercise.name) }
+                )
             }
         }
     }
@@ -299,13 +323,28 @@ private fun PrCard(pr: ProgressPrResponse, onClick: () -> Unit) {
     val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = Modifier
-            .width(140.dp)
+            .width(150.dp)
             .clip(shape)
             .background(AppSurface)
             .border(1.dp, AppAccent.copy(alpha = 0.4f), shape)
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
+        val isRep = pr.kind == "REP"
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(if (isRep) AppSurfaceVariant else AppAccent)
+                .padding(horizontal = 6.dp, vertical = 3.dp)
+        ) {
+            Text(
+                text = if (isRep) "REP PR" else "WEIGHT PR",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = if (isRep) AppAccent else AppOnAccent
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = pr.name,
             style = MaterialTheme.typography.labelMedium,
@@ -322,60 +361,38 @@ private fun PrCard(pr: ProgressPrResponse, onClick: () -> Unit) {
             maxLines = 1
         )
         Spacer(modifier = Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.EmojiEvents, contentDescription = null, tint = AppAccent, modifier = Modifier.size(12.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(text = shortDate(pr.date), style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
-        }
-    }
-}
-
-/** "Legs  [=====-----]  8 of 18 sets". A full bar = a usual week. Groups
- *  well behind (under 60%) get a fainter bar and an orange number. */
-@Composable
-private fun BalanceRow(b: WeekBalance) {
-    val fraction = when {
-        b.usual <= 0 -> if (b.thisWeek > 0) 1f else 0f
-        else -> (b.thisWeek.toFloat() / b.usual).coerceIn(0f, 1f)
-    }
-    val behind = b.usual > 0 && b.thisWeek < b.usual * 0.6f
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = b.group, style = MaterialTheme.typography.bodyMedium, color = AppTextPrimary, modifier = Modifier.width(78.dp))
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(AppSurfaceVariant)
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction)
-                    .background(AppAccent.copy(alpha = if (behind) 0.45f else 1f), RoundedCornerShape(4.dp))
-            )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
         Text(
-            text = if (b.usual > 0) "${b.thisWeek} of ${b.usual} sets" else "${b.thisWeek} sets",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = if (behind) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (behind) AppAccent else AppTextSecondary,
-            modifier = Modifier.width(84.dp),
-            maxLines = 1
+            text = shortDate(pr.date) + (pr.previous?.let { prev ->
+                when {
+                    pr.kind == "REP" && pr.weightKg != null -> " · best at ${formatDecimal(pr.weightKg)} was × ${prev.toInt()}"
+                    pr.kind == "REP" -> " · best was ${prev.toInt()} reps"
+                    else -> " · was ${formatDecimal(prev)} kg"
+                }
+            } ?: ""),
+            style = MaterialTheme.typography.labelSmall,
+            color = AppTextMuted,
+            maxLines = 2
         )
     }
 }
 
-/** One exercise: name, muscle and sessions; latest top set and its change
- *  over 3 months; a chevron - the whole row opens its analytics. */
+/** One exercise: name, muscle and sessions; latest top set ("60 kg × 12")
+ *  and its change over 3 months - in kg, or in reps when the weight held,
+ *  or in estimated 1RM when sorting by Biggest gain; a chevron. The whole
+ *  row opens its analytics. */
 @Composable
-private fun ExerciseProgressRow(exercise: ProgressExerciseResponse, onClick: () -> Unit) {
+private fun ExerciseProgressRow(exercise: ProgressExerciseResponse, showE1rm: Boolean, onClick: () -> Unit) {
+    fun oneDp(x: Double) = formatDecimal(Math.round(x * 10) / 10.0)
+    val change: Pair<String, Boolean>? = when {
+        showE1rm -> exercise.e1rmChange3m?.takeIf { kotlin.math.abs(it) >= 0.05 }?.let {
+            "${if (it > 0) "+" else "−"}${oneDp(kotlin.math.abs(it))} kg (est. 1RM)" to (it > 0)
+        }
+        exercise.change3m != null && kotlin.math.abs(exercise.change3m) >= 0.05 ->
+            "${if (exercise.change3m > 0) "+" else "−"}${oneDp(kotlin.math.abs(exercise.change3m))} kg" to (exercise.change3m > 0)
+        exercise.change3mReps != null && exercise.change3mReps != 0 ->
+            "${if (exercise.change3mReps > 0) "+" else "−"}${kotlin.math.abs(exercise.change3mReps)} reps" to (exercise.change3mReps > 0)
+        else -> null
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -407,20 +424,98 @@ private fun ExerciseProgressRow(exercise: ProgressExerciseResponse, onClick: () 
         Spacer(modifier = Modifier.width(10.dp))
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = exercise.topWeightKg?.let { "${formatDecimal(it)} kg" } ?: "${exercise.topReps} reps",
+                text = topSetLabel(exercise.topWeightKg, exercise.topReps),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.SemiBold,
-                color = AppTextPrimary
+                color = AppTextPrimary,
+                maxLines = 1
             )
-            exercise.change3m?.takeIf { kotlin.math.abs(it) >= 0.05 }?.let { change ->
-                val unit = if (exercise.topWeightKg != null) "kg" else "reps"
+            change?.let { (text, up) ->
                 Text(
-                    text = "${if (change > 0) "+" else "−"}${formatDecimal(Math.round(kotlin.math.abs(change) * 10) / 10.0)} $unit",
+                    text = text,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (change > 0) AppAccent else AppTextMuted
+                    color = if (up) AppAccent else AppTextMuted,
+                    maxLines = 1
                 )
             }
         }
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = AppTextMuted, modifier = Modifier.padding(start = 4.dp))
+    }
+}
+
+/** Most used · Recently done · Biggest gain. */
+@Composable
+private fun SortControl(selected: ExerciseSort, onSelect: (ExerciseSort) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppSurface)
+            .padding(3.dp)
+    ) {
+        ExerciseSort.values().forEach { option ->
+            val on = option == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(if (on) AppSurfaceVariant else androidx.compose.ui.graphics.Color.Transparent)
+                    .clickable { onSelect(option) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = option.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (on) AppTextPrimary else AppTextSecondary
+                )
+            }
+        }
+    }
+}
+
+/** One insight on its own card: an icon for the kind, the exercise, the
+ *  message, and an × to cross it off. Tapping the card opens the exercise. */
+@Composable
+private fun InsightCard(insight: ProgressInsightResponse, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    val (icon, tint) = when (insight.kind) {
+        "FORM" -> Icons.Filled.Balance to AppAccent
+        "NOT_DONE" -> Icons.Filled.Schedule to AppTextSecondary
+        else -> Icons.Filled.TrendingUp to AppAccent
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppSurface)
+            .clickable(onClick = onOpen)
+            .padding(start = 14.dp, top = 14.dp, bottom = 14.dp, end = 4.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(AppSurfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = if (insight.kind == "FORM") "${insight.name} · form check-in" else insight.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = AppTextPrimary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = insight.message, style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
+        }
+        androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
+            Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = AppTextMuted, modifier = Modifier.size(18.dp))
+        }
     }
 }

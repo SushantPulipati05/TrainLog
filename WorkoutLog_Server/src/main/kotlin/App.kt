@@ -96,9 +96,9 @@ data class ExerciseResponse(
     val lastLoggedAt: String? = null
 )
 
-/** One exercise on the Progress tab: how often it's been done and where
- *  its top set is now vs ~3 months ago. Weights are kg; for a bodyweight
- *  move with nothing added, [topWeightKg] is null and [topReps] is the best. */
+/** One exercise on the Progress tab: how often it's been done, its latest
+ *  top set, and how that compares with ~3 months ago. Weights are kg; for a
+ *  bodyweight move with nothing added, [topWeightKg] is null. */
 @Serializable
 data class ProgressExerciseResponse(
     val exerciseId: Int,
@@ -109,26 +109,44 @@ data class ProgressExerciseResponse(
     val lastDate: String,
     val topWeightKg: Double?,
     val topReps: Int,
-    // Latest session's top weight minus the first session's in the last 90
-    // days (or reps, for bodyweight). null with fewer than 2 sessions there.
-    val change3m: Double?
+    // Against the first session in the last 90 days (null with fewer than 2
+    // sessions there): top-set weight change, reps change when the weight
+    // is the same, and estimated-1RM change (Epley).
+    val change3m: Double?,
+    val change3mReps: Int? = null,
+    val e1rmChange3m: Double? = null
 )
 
-/** A session that beat every earlier one for its exercise. */
+/** A session that set a record for its exercise. kind: "WEIGHT" = heavier
+ *  than ever ([previous] = old best weight); "REP" = more reps than ever at
+ *  a weight already lifted ([previous] = old best reps at that weight). */
 @Serializable
 data class ProgressPrResponse(
     val exerciseId: Int,
     val name: String,
     val weightKg: Double?,
     val reps: Int,
-    val date: String
+    val date: String,
+    val kind: String = "WEIGHT",
+    val previous: Double? = null
 )
 
-/** GET /progress - everything the Progress tab lists, in one request. */
+/** One insight card. kind: "FORM" (weight climbing fast while reps drop),
+ *  "NOT_DONE" (a regular exercise missing lately) or "WIN" (a small gain). */
+@Serializable
+data class ProgressInsightResponse(
+    val kind: String,
+    val exerciseId: Int,
+    val name: String,
+    val message: String
+)
+
+/** GET /progress - everything the Progress tab shows, in one request. */
 @Serializable
 data class ProgressResponse(
     val exercises: List<ProgressExerciseResponse>,
-    val recentPrs: List<ProgressPrResponse>
+    val recentPrs: List<ProgressPrResponse>,
+    val insights: List<ProgressInsightResponse> = emptyList()
 )
 
 /** POST /exercises/merge: every one of this user's sets of
@@ -1013,80 +1031,14 @@ fun Application.module() {
             // The Progress tab: every exercise this user has logged (most
             // done first) with its latest top set and 3-month change, plus
             // their most recent personal records. One pass over their sets.
+            // The Progress tab: every exercise this user has logged (most
+            // done first) with its latest top set and 3-month change, their
+            // recent weight and rep PRs, and a few insights. One pass over
+            // their sets; see progressFor().
             get("/progress") {
                 val me = call.userId()
                 val zone = call.userZone()
-                val response = transaction {
-                    val setsByWorkout = finishedSetsByWorkout(me)
-                    if (setsByWorkout.isEmpty()) return@transaction ProgressResponse(emptyList(), emptyList())
-
-                    val startedById = Workouts.selectAll()
-                        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
-                        .associate { it[Workouts.id] to it[Workouts.startedAt].toZone(zone) }
-                    val exerciseIds = setsByWorkout.values.flatten().map { it.exerciseId }.distinct()
-                    val names = Exercises.selectAll()
-                        .where { Exercises.id inList exerciseIds }
-                        .associate { it[Exercises.id] to it[Exercises.name] }
-
-                    data class Session(val date: LocalDateTime, val weight: Double?, val reps: Int)
-                    val today = LocalDate.now(zone)
-                    val exercises = ArrayList<ProgressExerciseResponse>()
-                    val prs = ArrayList<ProgressPrResponse>()
-
-                    setsByWorkout.values.flatten()
-                        .filterNot { it.category.equals("Cardio", ignoreCase = true) }
-                        .groupBy { it.exerciseId }
-                        .forEach { (exerciseId, sets) ->
-                            val name = names[exerciseId] ?: return@forEach
-                            val first = sets.first()
-                            val bodyweight = first.equipment.equals("Body Only", ignoreCase = true)
-                            // Each workout's top set: heaviest, then most reps.
-                            val sessions = sets.groupBy { it.workoutId }.mapNotNull { (workoutId, workoutSets) ->
-                                val date = startedById[workoutId] ?: return@mapNotNull null
-                                val top = workoutSets.maxWithOrNull(compareBy({ it.weightKg ?: 0.0 }, { it.reps })) ?: return@mapNotNull null
-                                Session(date, top.weightKg?.takeIf { it > 0.0 }, top.reps)
-                            }.sortedBy { it.date }
-                            if (sessions.isEmpty()) return@forEach
-
-                            // What "better" means: weight, or reps when there's no weight.
-                            fun score(x: Session): Double = x.weight ?: (x.reps / 1000.0)
-                            var best = Double.NEGATIVE_INFINITY
-                            sessions.forEachIndexed { i, session ->
-                                val value = score(session)
-                                if (i > 0 && value > best) {
-                                    prs.add(ProgressPrResponse(exerciseId, name, session.weight, session.reps, session.date.toLocalDate().toString()))
-                                }
-                                if (value > best) best = value
-                            }
-
-                            val latest = sessions.last()
-                            val window = sessions.filter { !it.date.toLocalDate().isBefore(today.minusDays(90)) }
-                            val change = if (window.size >= 2) {
-                                if (latest.weight != null && window.first().weight != null) latest.weight - window.first().weight!!
-                                else if (latest.weight == null && window.first().weight == null) (latest.reps - window.first().reps).toDouble()
-                                else null
-                            } else null
-
-                            exercises.add(
-                                ProgressExerciseResponse(
-                                    exerciseId = exerciseId,
-                                    name = name,
-                                    muscleGroup = first.muscleGroup,
-                                    isBodyweight = bodyweight && latest.weight == null,
-                                    sessions = sessions.size,
-                                    lastDate = latest.date.toLocalDate().toString(),
-                                    topWeightKg = latest.weight,
-                                    topReps = latest.reps,
-                                    change3m = change
-                                )
-                            )
-                        }
-
-                    ProgressResponse(
-                        exercises = exercises.sortedWith(compareByDescending<ProgressExerciseResponse> { it.sessions }.thenByDescending { it.lastDate }),
-                        recentPrs = prs.sortedByDescending { it.date }.take(8)
-                    )
-                }
+                val response = transaction { progressFor(me, zone) }
                 call.respond(response)
             }
 
@@ -2557,4 +2509,194 @@ private fun lastFinishedStartByWorkoutName(me: Int): Map<String, LocalDateTime> 
         .orderBy(Workouts.startedAt, SortOrder.DESC)
         .forEach { row -> latest.putIfAbsent(row[Workouts.workoutName], row[Workouts.startedAt]) }
     return latest
+}
+
+
+// ---------------------------------------------------------------------------
+// Progress tab
+// ---------------------------------------------------------------------------
+
+private fun epley(weightKg: Double, reps: Int): Double = weightKg * (1 + reps / 30.0)
+
+private fun kg(value: Double): String {
+    val rounded = Math.round(value * 10) / 10.0
+    return if (rounded == rounded.toLong().toDouble()) rounded.toLong().toString() else rounded.toString()
+}
+
+/** Everything GET /progress returns. Must be called inside a transaction. */
+private fun progressFor(me: Int, zone: ZoneId): ProgressResponse {
+    val setsByWorkout = finishedSetsByWorkout(me)
+    if (setsByWorkout.isEmpty()) return ProgressResponse(emptyList(), emptyList())
+
+    val startedById = Workouts.selectAll()
+        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
+        .associate { it[Workouts.id] to it[Workouts.startedAt].toZone(zone) }
+    val exerciseIds = setsByWorkout.values.flatten().map { it.exerciseId }.distinct()
+    val names = Exercises.selectAll()
+        .where { Exercises.id inList exerciseIds }
+        .associate { it[Exercises.id] to it[Exercises.name] }
+
+    // One workout's sets of one exercise.
+    class Session(val date: LocalDate, val sets: List<SetWithExercise>) {
+        val top: SetWithExercise = sets.maxWithOrNull(compareBy({ it.weightKg ?: 0.0 }, { it.reps }))!!
+        val topWeight: Double? = top.weightKg?.takeIf { it > 0.0 }
+        val e1rm: Double = sets.filter { (it.weightKg ?: 0.0) > 0.0 && it.reps in 1..15 }
+            .maxOfOrNull { epley(it.weightKg!!, it.reps) } ?: 0.0
+        /** Best reps at each weight lifted this session. */
+        val repsAt: Map<Double, Int> = sets.filter { (it.weightKg ?: 0.0) > 0.0 }
+            .groupBy { it.weightKg!! }.mapValues { (_, s) -> s.maxOf { it.reps } }
+    }
+
+    val today = LocalDate.now(zone)
+    val exercises = ArrayList<ProgressExerciseResponse>()
+    val prs = ArrayList<ProgressPrResponse>()
+    val formInsights = ArrayList<ProgressInsightResponse>()
+    val notDoneInsights = ArrayList<ProgressInsightResponse>()
+    val winInsights = ArrayList<ProgressInsightResponse>()
+
+    setsByWorkout.values.flatten()
+        .filterNot { it.category.equals("Cardio", ignoreCase = true) }
+        .groupBy { it.exerciseId }
+        .forEach { (exerciseId, sets) ->
+            val name = names[exerciseId] ?: return@forEach
+            val bodyweightMove = sets.first().equipment.equals("Body Only", ignoreCase = true)
+            val sessions = sets.groupBy { it.workoutId }.mapNotNull { (workoutId, s) ->
+                val started = startedById[workoutId] ?: return@mapNotNull null
+                Session(started.toLocalDate(), s)
+            }.sortedBy { it.date }
+            if (sessions.isEmpty()) return@forEach
+
+            // ---- PRs: weight first, else reps at a weight already lifted ----
+            var bestWeight = 0.0
+            var bestBodyweightReps = 0
+            val bestRepsAt = HashMap<Double, Int>()
+            val weightPrSession = BooleanArray(sessions.size)
+            sessions.forEachIndexed { i, session ->
+                val w = session.topWeight
+                if (i > 0) {
+                    if (w != null && w > bestWeight) {
+                        weightPrSession[i] = true
+                        prs.add(ProgressPrResponse(exerciseId, name, w, session.top.reps, session.date.toString(), "WEIGHT", bestWeight.takeIf { it > 0.0 }))
+                    } else if (w == null && session.top.reps > bestBodyweightReps && bestBodyweightReps > 0) {
+                        prs.add(ProgressPrResponse(exerciseId, name, null, session.top.reps, session.date.toString(), "REP", bestBodyweightReps.toDouble()))
+                    } else {
+                        // Heaviest weight this session that beat its own reps record.
+                        session.repsAt.entries
+                            .filter { (weight, reps) -> bestRepsAt[weight]?.let { reps > it } == true }
+                            .maxByOrNull { it.key }
+                            ?.let { (weight, reps) ->
+                                prs.add(ProgressPrResponse(exerciseId, name, weight, reps, session.date.toString(), "REP", bestRepsAt[weight]?.toDouble()))
+                            }
+                    }
+                }
+                if (w != null && w > bestWeight) bestWeight = w
+                if (w == null) bestBodyweightReps = maxOf(bestBodyweightReps, session.top.reps)
+                session.repsAt.forEach { (weight, reps) -> bestRepsAt[weight] = maxOf(bestRepsAt[weight] ?: 0, reps) }
+            }
+
+            // ---- 3-month change ----
+            val latest = sessions.last()
+            val window = sessions.filter { !it.date.isBefore(today.minusDays(90)) }
+            var change: Double? = null
+            var changeReps: Int? = null
+            var e1rmChange: Double? = null
+            if (window.size >= 2) {
+                val first = window.first()
+                val lw = latest.topWeight
+                val fw = first.topWeight
+                if (lw != null && fw != null) {
+                    change = lw - fw
+                    if (lw == fw) changeReps = latest.top.reps - first.top.reps
+                } else if (lw == null && fw == null) {
+                    changeReps = latest.top.reps - first.top.reps
+                }
+                if (latest.e1rm > 0.0 && first.e1rm > 0.0) e1rmChange = latest.e1rm - first.e1rm
+            }
+            exercises.add(
+                ProgressExerciseResponse(
+                    exerciseId = exerciseId,
+                    name = name,
+                    muscleGroup = sets.first().muscleGroup,
+                    isBodyweight = bodyweightMove && latest.topWeight == null,
+                    sessions = sessions.size,
+                    lastDate = latest.date.toString(),
+                    topWeightKg = latest.topWeight,
+                    topReps = latest.top.reps,
+                    change3m = change,
+                    change3mReps = changeReps,
+                    e1rmChange3m = e1rmChange
+                )
+            )
+
+            // ---- Insight: form check-in ----
+            // Never in the first 8 weeks of an exercise (fast PRs are normal
+            // then). In the last 5 sessions: 3+ weight PRs, each a jump of
+            // 6%+, with the top-set reps falling as the weight went up.
+            val establishedSince = sessions.first().date.plusWeeks(8)
+            val recentIdx = (maxOf(0, sessions.size - 5) until sessions.size).toList()
+            val jumps = recentIdx.filter { i ->
+                weightPrSession[i] && i > 0 && run {
+                    val before = (0 until i).mapNotNull { sessions[it].topWeight }.maxOrNull() ?: return@run false
+                    (sessions[i].topWeight ?: 0.0) >= before * 1.06
+                }
+            }
+            if (!latest.date.isBefore(establishedSince) && jumps.size >= 3) {
+                val repsSeq = jumps.map { sessions[it].top.reps }
+                val falling = repsSeq.zipWithNext().all { (a, b) -> b <= a } && repsSeq.last() < repsSeq.first()
+                if (falling && !latest.date.isBefore(today.minusDays(21))) {
+                    val weights = jumps.map { kg(sessions[it].topWeight!!) }.joinToString(" → ")
+                    formInsights.add(
+                        ProgressInsightResponse(
+                            "FORM", exerciseId, name,
+                            "Weight went up ${jumps.size} times in your last ${recentIdx.size} sessions ($weights kg) " +
+                                "while reps dropped from ${repsSeq.first()} to ${repsSeq.last()}. Worth making sure form keeps up. " +
+                                "Adding reps before weight is a steady way to progress."
+                        )
+                    )
+                }
+            }
+
+            // ---- Insight: not done lately ----
+            if (sessions.size >= 4) {
+                val daysSince = java.time.temporal.ChronoUnit.DAYS.between(latest.date, today)
+                if (daysSince in 21..60) {
+                    val gaps = sessions.takeLast(6).zipWithNext { a, b -> java.time.temporal.ChronoUnit.DAYS.between(a.date, b.date) }.sorted()
+                    val usualGap = gaps.getOrNull(gaps.size / 2) ?: 0L
+                    val weeks = daysSince / 7
+                    val habit = when {
+                        usualGap in 1..8 -> " You usually do it every week."
+                        usualGap in 9..16 -> " You usually do it every couple of weeks."
+                        else -> ""
+                    }
+                    notDoneInsights.add(
+                        ProgressInsightResponse("NOT_DONE", exerciseId, name, "Last done $weeks ${if (weeks == 1L) "week" else "weeks"} ago.$habit")
+                    )
+                }
+            }
+
+            // ---- Insight: small win (only right after a session, and never
+            // alongside a form check-in for the same exercise) ----
+            if (!latest.date.isBefore(today.minusDays(7)) && formInsights.none { it.exerciseId == exerciseId }) {
+                val monthAgo = sessions.lastOrNull { s ->
+                    val d = java.time.temporal.ChronoUnit.DAYS.between(s.date, latest.date)
+                    d in 21..45
+                }
+                if (monthAgo != null) {
+                    val sameWeight = latest.topWeight?.let { w -> monthAgo.repsAt[w]?.let { w to it } }
+                    val moreReps = sameWeight?.let { (w, before) -> (latest.repsAt[w] ?: 0) - before }
+                    when {
+                        moreReps != null && moreReps >= 2 ->
+                            winInsights.add(ProgressInsightResponse("WIN", exerciseId, name, "$moreReps more reps at ${kg(sameWeight!!.first)} kg than a month ago."))
+                        latest.e1rm > 0.0 && monthAgo.e1rm > 0.0 && latest.e1rm >= monthAgo.e1rm * 1.05 ->
+                            winInsights.add(ProgressInsightResponse("WIN", exerciseId, name, "Estimated 1-rep max up ${kg(latest.e1rm - monthAgo.e1rm)} kg since last month."))
+                    }
+                }
+            }
+        }
+
+    return ProgressResponse(
+        exercises = exercises.sortedWith(compareByDescending<ProgressExerciseResponse> { it.sessions }.thenByDescending { it.lastDate }),
+        recentPrs = prs.sortedByDescending { it.date }.take(8),
+        insights = formInsights + notDoneInsights + winInsights
+    )
 }

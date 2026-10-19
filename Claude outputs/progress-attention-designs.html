@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress tab: Needs attention</title>
+<style>
+  :root{--bg:#0B0B0D;--surface:#19191C;--sv:#232327;--border:#2A2A2E;--accent:#FF6A3D;--text:#F5F5F7;--sec:#9A9AA0;--muted:#6E6E74;--onAccent:#1A0E08}
+  *{box-sizing:border-box}
+  body{margin:0;background:#050506;color:var(--text);font-family:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px}
+  h1{font-size:20px;margin:0 0 4px}
+  .intro{color:var(--sec);font-size:14px;margin:0 0 24px;max-width:980px;line-height:1.5}
+  .grid{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+  .opt{width:360px;max-width:100%}
+  .opt h2{font-size:15px;margin:0 0 4px}.opt h2 b{color:var(--accent);margin-right:6px}
+  .opt p.d{color:var(--sec);font-size:13px;line-height:1.45;margin:0 0 12px;min-height:74px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:28px;height:800px;position:relative;overflow:hidden}
+  .scroll{height:100%;overflow-y:auto;padding:20px 16px 100px}
+  .scroll::-webkit-scrollbar{display:none}
+  .nav{position:absolute;left:50%;transform:translateX(-50%);bottom:16px;background:var(--surface);border:1px solid var(--border);border-radius:36px;padding:10px;display:flex;gap:0}
+  .nav span{width:56px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+  .nav span.on{background:var(--sv)}
+  .title{font-size:26px;font-weight:800;margin:2px 0 14px}
+  .search{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 12px;color:var(--muted);font-size:13px;margin-bottom:10px}
+  .chips{display:flex;gap:6px;overflow-x:auto}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;font-size:12px;padding:7px 12px;border-radius:20px;background:var(--sv);color:var(--text)}
+  .chip.on{background:var(--accent);color:var(--onAccent)}
+  .lbl{font-size:10px;color:var(--muted);letter-spacing:.8px;margin:22px 0 10px;display:flex;justify-content:space-between;align-items:center}
+  .prs{display:flex;gap:8px;overflow-x:auto;margin:0 -16px;padding:0 16px}
+  .prs::-webkit-scrollbar{display:none}
+  .prc{flex:0 0 136px;background:var(--surface);border-radius:14px;padding:10px 12px;border:1px solid rgba(255,106,61,.4)}
+  .prc .e{font-size:11px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prc .w{font-size:16px;font-weight:700;margin:2px 0 4px}
+  .prc .dt{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px}
+  .card{background:var(--surface);border-radius:18px;padding:4px 14px}
+  .att{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+  .att:last-child{border:0}
+  .att .ic{flex:0 0 34px;height:34px;border-radius:10px;background:var(--sv);display:flex;align-items:center;justify-content:center}
+  .att .m{flex:1;min-width:0}
+  .att .m b{display:block;font-size:14px;font-weight:600}
+  .att .m span{font-size:12px;color:var(--sec)}
+  .grp{font-size:10px;color:var(--accent);letter-spacing:.8px;font-weight:700;padding:12px 0 2px}
+  .row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:16px;padding:13px 10px 13px 16px;margin-bottom:8px}
+  .row .m{flex:1;min-width:0}
+  .row .m b{display:block;font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .m span{font-size:11.5px;color:var(--muted)}
+  .row .r{text-align:right;font-size:14.5px;font-weight:600}
+  .row .r small{display:block;font-size:11.5px;color:var(--accent);font-weight:500}
+  .row .r small.down{color:var(--muted)}
+  .seg{display:flex;background:var(--surface);border-radius:12px;padding:3px;margin-bottom:10px}
+  .seg span{flex:1;text-align:center;font-size:12px;padding:7px 0;border-radius:9px;color:var(--sec)}
+  .seg span.on{background:var(--sv);color:var(--text);font-weight:600}
+  .sortbtn{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--accent);font-weight:600;letter-spacing:.4px}
+  .sheetwrap{position:absolute;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:flex-end}
+  .sheet{width:100%;background:var(--surface);border-radius:24px 24px 0 0;padding:20px}
+  .sheet h3{margin:0 0 12px;font-size:18px}
+  .opt2{display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--border);font-size:14px}
+  .opt2:last-child{border:0}
+  .opt2 span{font-size:12px;color:var(--muted);display:block;margin-top:2px}
+  .note{background:var(--surface);border-radius:16px;padding:16px;max-width:980px;margin-top:28px;color:var(--sec);font-size:13px;line-height:1.55}
+  .note b{color:var(--text)}
+</style>
+</head>
+<body>
+<h1>Progress tab — "Needs attention" + sorting</h1>
+<p class="intro">"Sets this week" is gone. In its place: a short <b>Needs attention</b> card (exercises that have stalled or quietly dropped out), and a way to <b>sort</b> Your exercises. Only the app's colours, no emoji — the icons are drawn in the app's orange and grey. Made-up data.</p>
+
+<div class="grid">
+  <div class="opt"><h2><b>A</b>One list + sort chips</h2>
+    <p class="d">Needs attention is a single list of up to 3 rows; the icon says which kind (flat line = stalled, clock = not done lately). Sorting is a row of 3 chips right above the list — always visible, one tap.</p>
+    <div class="phone"><div class="scroll" id="A"></div><div class="nav" id="navA"></div></div></div>
+
+  <div class="opt"><h2><b>B</b>Grouped + sort menu</h2>
+    <p class="d">Needs attention split into two small labelled groups, Stalled and Not done lately. Sorting is a small "Most used ▾" button that opens a sheet — less clutter, one extra tap.</p>
+    <div class="phone"><div class="scroll" id="B"></div><div class="nav" id="navB"></div></div></div>
+
+  <div class="opt"><h2><b>B</b>· sort menu open</h2>
+    <p class="d">What tapping "Most used ▾" shows. Each option says what it does in one line.</p>
+    <div class="phone"><div class="scroll" id="B2"></div><div class="nav" id="navB2"></div>
+      <div class="sheetwrap"><div class="sheet" id="sheet"></div></div></div></div>
+</div>
+
+<div class="note">
+  <b>How it decides</b> — <b>Stalled</b>: an exercise you've done at least 6 times whose top set hasn't beaten its earlier best in the last 4 sessions. <b>Not done lately</b>: one you did regularly (4+ sessions) but not in the last 3 weeks. At most 3 rows show, stalled first; tap a row to open the exercise. If nothing qualifies, the card isn't shown at all.<br><br>
+  <b>Sorts</b> — <b>Most used</b>: most sessions first (default). <b>Recently done</b>: latest session first. <b>Biggest gain</b>: largest top-set increase over 3 months first.
+</div>
+
+<script>
+const ICON = {
+  search: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E6E74" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>`,
+  trophy: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF6A3D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11"/><path d="M12 14v3M8.5 20h7M10 17h4"/></svg>`,
+  stalled: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF6A3D" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15l4-6 4 4h10"/><circle cx="21" cy="13" r="0.6" fill="#FF6A3D"/></svg>`,
+  clock: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9A9AA0" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 2"/></svg>`,
+  chev: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E6E74" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`,
+  caret: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FF6A3D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`,
+  check: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#FF6A3D" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`,
+  home: c=>`<svg width="22" height="22" viewBox="0 0 24 24" fill="${c}"><path d="M12 3l9 8h-3v9h-5v-6h-2v6H6v-9H3z"/></svg>`,
+  dumbbell: c=>`<svg width="22" height="22" viewBox="0 0 24 24" fill="${c}"><path d="M3 10h2V8h2v8H5v-2H3zm16-2h2v2h2v4h-2v2h-2zM8 11h8v2H8z"/></svg>`,
+  chart: c=>`<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-6 4 3 7-8"/></svg>`,
+  person: c=>`<svg width="22" height="22" viewBox="0 0 24 24" fill="${c}"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6z"/></svg>`
+};
+const navHtml = `<span>${ICON.home("#6E6E74")}</span><span>${ICON.dumbbell("#6E6E74")}</span><span class="on">${ICON.chart("#FF6A3D")}</span><span>${ICON.person("#6E6E74")}</span>`;
+["navA","navB","navB2"].forEach(id=>document.getElementById(id).innerHTML=navHtml);
+
+const header = `
+  <div class="title">Progress</div>
+  <div class="search">${ICON.search} Search exercises or muscles</div>
+  <div class="chips">${["All","Chest","Back","Shoulders","Arms","Legs","Abs"].map((c,i)=>`<span class="chip ${i?"":"on"}">${c}</span>`).join("")}</div>
+  <div class="lbl"><span>RECENT PRS</span></div>
+  <div class="prs">${[["Barbell Squat","100 kg × 5","Sat 17/10"],["Incline DB Bench","32.5 kg × 8","Thu 15/10"],["Lat Pulldown","65 kg × 10","Wed 14/10"]].map(p=>`<div class="prc"><div class="e">${p[0]}</div><div class="w">${p[1]}</div><div class="dt">${ICON.trophy} ${p[2]}</div></div>`).join("")}</div>`;
+
+const att = [
+  ["stalled","Overhead Press","Same top set (40 kg × 6) for 4 sessions"],
+  ["stalled","Cable Fly","No new best in 5 sessions"],
+  ["clock","Romanian Deadlift","Last done 3 weeks ago · usually weekly"]
+];
+const attRow = ([k,n,s]) => `<div class="att"><div class="ic">${k==="stalled"?ICON.stalled:ICON.clock}</div><div class="m"><b>${n}</b><span>${s}</span></div>${ICON.chev}</div>`;
+
+const lifts = [
+  ["Incline DB Bench","Chest · 24 sessions","32.5 kg","+7.5 kg"],
+  ["Barbell Squat","Quadriceps · 22 sessions","100 kg","+15 kg"],
+  ["Lat Pulldown","Lats · 21 sessions","65 kg","+10 kg"],
+  ["Romanian Deadlift","Hamstrings · 18 sessions","80 kg","+5 kg"],
+  ["Overhead Press","Shoulders · 15 sessions","40 kg","−2.5 kg"],
+  ["Incline DB Curl","Biceps · 14 sessions","17.5 kg","+5 kg"]
+];
+const liftRows = lifts.map(([n,s,v,c])=>`<div class="row"><div class="m"><b>${n}</b><span>${s}</span></div><div class="r">${v}<small class="${c.startsWith("−")?"down":""}">${c}</small></div>${ICON.chev}</div>`).join("");
+
+document.getElementById("A").innerHTML = header + `
+  <div class="lbl"><span>NEEDS ATTENTION</span></div>
+  <div class="card">${att.map(attRow).join("")}</div>
+  <div class="lbl"><span>YOUR EXERCISES · 9</span></div>
+  <div class="seg"><span class="on">Most used</span><span>Recently done</span><span>Biggest gain</span></div>
+  ${liftRows}`;
+
+const sortBtn = `<span class="sortbtn">MOST USED ${ICON.caret}</span>`;
+const bBody = header + `
+  <div class="lbl"><span>NEEDS ATTENTION</span></div>
+  <div class="card">
+    <div class="grp">STALLED</div>${att.slice(0,2).map(attRow).join("")}
+    <div class="grp" style="color:var(--sec)">NOT DONE LATELY</div>${att.slice(2).map(attRow).join("")}
+  </div>
+  <div class="lbl"><span>YOUR EXERCISES · 9</span>${sortBtn}</div>
+  ${liftRows}`;
+document.getElementById("B").innerHTML = bBody;
+document.getElementById("B2").innerHTML = bBody;
+document.getElementById("sheet").innerHTML = `<h3>Sort exercises</h3>` +
+  [["Most used","Most sessions first",true],["Recently done","Latest session first",false],["Biggest gain","Largest increase over 3 months first",false]]
+  .map(([t,s,on])=>`<div class="opt2"><div>${t}<span>${s}</span></div>${on?ICON.check:""}</div>`).join("");
+</script>
+</body>
+</html>
