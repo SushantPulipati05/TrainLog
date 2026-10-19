@@ -496,3 +496,35 @@ fun missedDays(
     }
     return missed
 }
+
+/** What kind of session a set of muscles adds up to - for naming workouts. */
+enum class WorkoutKind(val label: String) {
+    PUSH("Push"), PULL("Pull"), LEGS("Legs"), UPPER("Upper"), LOWER("Lower"), FULL("Full Body"), MIXED("Mixed")
+}
+
+/**
+ * Push / Pull / Legs / Upper / Lower / Full body / Mixed from sets per
+ * muscle. Over 60% on one group names it after that group; mostly upper
+ * body with little leg work is Upper; a real share of both is Full body.
+ * Leg days are "Lower" for someone on an Upper / Lower split.
+ */
+fun workoutKind(muscleSets: Map<String, Int>, plan: TrainingPlan?): WorkoutKind {
+    val work = muscleSets.mapKeys { it.key.trim().uppercase() }.filterKeys { it !in IGNORED_MUSCLES }
+    val total = work.values.sum().toDouble()
+    if (total <= 0.0) return WorkoutKind.MIXED
+    fun share(group: Set<String>) = work.filterKeys { it in group }.values.sum() / total
+    val push = share(PUSH_MUSCLES)
+    val pull = share(PULL_MUSCLES)
+    val legs = share(LEG_MUSCLES)
+    return when {
+        legs >= 0.6 -> if (plan?.split == TrainingSplit.UPPER_LOWER) WorkoutKind.LOWER else WorkoutKind.LEGS
+        push >= 0.6 -> WorkoutKind.PUSH
+        pull >= 0.6 -> WorkoutKind.PULL
+        legs <= 0.2 && push + pull >= 0.75 -> WorkoutKind.UPPER
+        legs >= 0.25 && push + pull >= 0.4 -> WorkoutKind.FULL
+        else -> WorkoutKind.MIXED
+    }
+}
+
+/** [workoutKind] for a past workout. */
+fun WorkoutSummary.kind(plan: TrainingPlan?): WorkoutKind = workoutKind(muscleWork(), plan)

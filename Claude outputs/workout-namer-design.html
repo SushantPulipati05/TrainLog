@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workout namer</title>
+<style>
+  :root{--bg:#0B0B0D;--surface:#19191C;--sv:#232327;--border:#2A2A2E;--accent:#FF6A3D;--text:#F5F5F7;--sec:#9A9AA0;--muted:#6E6E74;--onAccent:#1A0E08;--good:#4CAF50}
+  *{box-sizing:border-box}
+  body{margin:0;background:#050506;color:var(--text);font-family:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px}
+  h1{font-size:20px;margin:0 0 4px}
+  .intro{color:var(--sec);font-size:14px;margin:0 0 20px;max-width:900px;line-height:1.5}
+  .wrap{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+  .phone{width:360px;max-width:100%;height:700px;background:var(--bg);border:1px solid var(--border);border-radius:28px;position:relative;overflow:hidden}
+  .behind{padding:22px 18px;opacity:.35}
+  .behind .t{font-size:11px;color:var(--accent);letter-spacing:1px}
+  .behind .timer{font-size:44px;font-weight:300;margin:6px 0 18px}
+  .behind .ex{background:var(--surface);border-radius:16px;height:110px;margin-bottom:12px}
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:24px 24px 0 0;padding:22px 20px 20px}
+  .kicker{font-size:11px;letter-spacing:1.2px;color:var(--accent);font-weight:700}
+  .name{font-size:28px;font-weight:800;line-height:1.15;margin:8px 0 6px;min-height:66px;transition:opacity .18s, transform .18s}
+  .name.flip{opacity:0;transform:translateY(6px)}
+  .why{font-size:12.5px;color:var(--sec);margin-bottom:16px;min-height:18px}
+  .stats{display:flex;gap:8px;margin-bottom:18px}
+  .stat{flex:1;background:var(--sv);border-radius:12px;padding:10px}
+  .stat b{display:block;font-size:16px}
+  .stat span{font-size:10px;color:var(--muted);letter-spacing:.6px}
+  .row{display:flex;gap:8px}
+  .btn{flex:1;border:0;border-radius:14px;height:50px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+  .keep{background:#fff;color:#000}
+  .dice{flex:0 0 54px;background:var(--sv);color:var(--text);font-size:22px}
+  .edit{display:block;text-align:center;margin-top:12px;color:var(--sec);font-size:13px}
+  .controls{max-width:460px}
+  .controls h2{font-size:15px;margin:0 0 10px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+  .chip{font-size:12px;padding:7px 12px;border-radius:20px;background:var(--sv);color:var(--sec);cursor:pointer;border:0;font-family:inherit}
+  .chip.on{background:var(--accent);color:var(--onAccent);font-weight:600}
+  .lbl{font-size:10px;color:var(--muted);letter-spacing:.8px;margin:2px 0 6px}
+  .samples{background:var(--surface);border-radius:16px;padding:14px 16px;font-size:13.5px;line-height:1.9;color:var(--text)}
+  .samples div{border-bottom:1px solid var(--border)}
+  .samples div:last-child{border:0}
+  .note{color:var(--sec);font-size:12.5px;line-height:1.5;margin-top:14px}
+</style>
+</head>
+<body>
+<h1>"Today's workout is called…"</h1>
+<p class="intro">Shown when you tap End Workout. The name is built from what you actually did — workout type (from your muscles), PRs, length, time of day, comebacks and your real numbers. 🎲 rerolls, Keep saves it, "Edit name" lets you type your own. Try the scenarios on the right; every tap of 🎲 is a fresh name. No AI — just name parts + rules, so it works offline and instantly.</p>
+<div class="wrap">
+  <div class="phone">
+    <div class="behind"><div class="t">WORKOUT IN PROGRESS</div><div class="timer">01:04:27</div><div class="ex"></div><div class="ex"></div><div class="ex"></div></div>
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="kicker">TODAY'S WORKOUT IS CALLED…</div>
+      <div class="name" id="name"></div>
+      <div class="why" id="why"></div>
+      <div class="stats" id="stats"></div>
+      <div class="row"><button class="btn dice" id="roll" title="Another name">🎲</button><button class="btn keep">Keep it</button></div>
+      <span class="edit">Edit name</span>
+    </div>
+  </div>
+  <div class="controls">
+    <h2>Try a scenario</h2>
+    <div class="lbl">WORKOUT TYPE</div>
+    <div class="chips" id="types"></div>
+    <div class="lbl">WHAT HAPPENED</div>
+    <div class="chips" id="ctx"></div>
+    <div class="lbl">10 NAMES FOR THIS SCENARIO</div>
+    <div class="samples" id="samples"></div>
+    <p class="note">Special moments take priority: a PR beats "late night", a comeback beats "short". About 1 in 3 normal names use your real numbers (top lift, weekday, session count). The last 20 names are remembered so you don't see repeats.</p>
+  </div>
+</div>
+
+<script>
+// ---------------- Name parts ----------------
+const CORE = {
+  push: ["Push It Real Good","Chest Day, Best Day","Bench Press Conference","Pec Deck Diaries","Shoulder Season","Pushin' P","Tricep Treaty","The Pressing Matters","Bench Warmers","Chest Fest","Push Notifications","Delts & Dragons","Press Release","Pushover","Chesty La Rue"],
+  pull: ["Pull Up & Shut Up","Back That Thing Up","Row Row Row Your Bod","Lat Night Show","Back to the Future","Deadlift Society","Bicep Bistro","Pulling Strings","Row-mantic Evening","The Lat Pack","Back in Business","Curl Power","Pull Request","Got Your Back","Rows Before Bros"],
+  legs: ["Quadfather","Squat Happens","Never Skip","Leg Day (Survived)","Thigh Society","Hamstring Theory","Squat Goals","Calf Raise Your Hand","Glute Expectations","Knees Weak, Arms Spaghetti","Wheel Day","Leg-endary","Lunge Lizard","The Stairs Are Lava","Booty Camp"],
+  upper: ["Upper Management","Top Shelf","Upper Echelon","Shirt Stretcher","Sleeve Season","Above the Belt","Upper Cut","Torso Torment","The Top Half","Upper Class"],
+  lower: ["Lower Expectations","Lower Than Low","Down Under","Ground Floor","The Bottom Line","Lower Your Standards","Base Camp","Below Deck","Floor It","Lower Level"],
+  full:  ["Full Send","The Whole Enchilada","Head to Toe","All of the Above","Full Body Panic","Everything Everywhere All at Once","The Works","Total Package","No Muscle Left Behind","Grand Tour"],
+  mixed: ["Choose Your Own Adventure","A Bit of Everything","Chaos Theory","Gym Buffet","Freestyle Friday","Improv Night","Mystery Box","The Sampler Platter","Off Script","Wildcard"]
+};
+const SHORT = { push:"Push", pull:"Pull", legs:"Legs", upper:"Upper", lower:"Lower", full:"Full Body", mixed:"Mixed" };
+const OPENERS = ["Operation","Certified","The Return of","Attack of","Midweek","Ultimate","Deluxe","Classic","Unhinged","Legendary"];
+const ENDINGS = ["Part II","Director's Cut","(Survived)","Final Boss Edition","Remastered","Deluxe Edition","Electric Boogaloo","The Sequel","Unplugged","Live in Concert"];
+
+// Special moments: templates; {s} = short type, {c} = a core name, {w} = top weight, {x} = top exercise
+const SPECIAL = {
+  pr:       ["{s}: PR Edition","New Record: {c}","{c}: Record Breaker","The {w} kg Glow-Up","Personal Best of {s}","{s} Hall of Fame","Plot Twist: PR","Fresh PR, Who Dis"],
+  biggest:  ["{c}: Final Boss","The Heaviest {s} Ever","{s}: Maximum Overdrive","Volume Turned to 11","Biggest {s} Yet","{c}: Extended Universe"],
+  short:    ["{s} Speedrun","{s} Express","Quick {s}, No Lunch","{c} (Short Version)","{s} in a Hurry","The {s} Sprint","TL;DR {s}"],
+  long:     ["{c}: Extended Cut","The Never-Ending {s}","{s}: The Long Haul","{c} Marathon","Overtime {s}","{s} Till Closing"],
+  late:     ["Midnight {s}","{s} After Dark","Late Night {c}","Night Shift {s}","{s} by Moonlight","The {weekday} Night {s} Show"],
+  early:    ["Sunrise {s}","{s} Before Breakfast","Early Bird {s}","Dawn of the {s}","{s} & Coffee","Rise and {s}"],
+  comeback: ["The Return of the {s}","{s}: The Comeback","Guess Who's Back ({s})","{c} Reunion Tour","{s} Strikes Back","Back From the Couch"]
+};
+const NUMBERED = [
+  "The {w} kg Incident","{weekday} {s} Special","{s} Day No. {n}","{x} Appreciation Society","{x} & Friends","{w} kg of Pure {s}","Episode {n}: {c}"
+];
+
+// ---------------- Generator ----------------
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const recent = [];
+function fill(t, v){ return t.replace(/\{(\w+)\}/g, (_, k) => v[k] ?? ""); }
+
+function generate(type, ctx, stats){
+  const v = { s: SHORT[type], c: pick(CORE[type]), w: stats.top, x: stats.topEx, n: stats.count, weekday: stats.weekday };
+  // priority: pr > biggest > comeback > short/long > late/early > normal
+  const order = ["pr","biggest","comeback","short","long","late","early"];
+  const active = order.find(k => ctx.has(k));
+  for (let tries = 0; tries < 30; tries++) {
+    let name, why;
+    if (active && Math.random() < 0.85) {
+      name = fill(pick(SPECIAL[active]), v); why = REASON[active](stats);
+    } else {
+      const r = Math.random();
+      if (r < 0.33) { name = fill(pick(NUMBERED), v); why = "Named after your session's numbers"; }
+      else if (r < 0.55) { name = pick(OPENERS) + " " + pick(CORE[type]); why = `A ${v.s.toLowerCase()} session`; }
+      else if (r < 0.75) { name = pick(CORE[type]) + ": " + pick(ENDINGS); why = `A ${v.s.toLowerCase()} session`; }
+      else { name = pick(CORE[type]); why = `A ${v.s.toLowerCase()} session`; }
+    }
+    if (!recent.includes(name)) { recent.push(name); if (recent.length > 20) recent.shift(); return { name, why }; }
+  }
+  return { name: pick(CORE[type]), why: "" };
+}
+const REASON = {
+  pr: s => `🏆 New PR: ${s.topEx} ${s.top} kg`,
+  biggest: s => "Your biggest session of this type yet",
+  short: s => "In and out in 28 min",
+  long: s => "1 h 47 min — that's dedication",
+  late: s => "Started at 11:12 PM",
+  early: s => "Started at 6:05 AM",
+  comeback: s => "First session in 16 days — welcome back"
+};
+
+// ---------------- UI ----------------
+const TYPES = ["push","pull","legs","upper","lower","full","mixed"];
+const CTX = [["none","Nothing special"],["pr","New PR"],["biggest","Biggest ever"],["short","Short (<35 min)"],["long","Long (>90 min)"],["late","Late night"],["early","Early morning"],["comeback","Back after a break"]];
+let type = "push", ctxKey = "pr";
+const STATS = {
+  push: { top: 32.5, topEx: "Incline Bench", count: 42, weekday: "Tuesday" },
+  pull: { top: 20, topEx: "Barbell Row", count: 41, weekday: "Wednesday" },
+  legs: { top: 100, topEx: "Squat", count: 40, weekday: "Monday" },
+  upper:{ top: 30, topEx: "Bench Press", count: 18, weekday: "Thursday" },
+  lower:{ top: 90, topEx: "Deadlift", count: 17, weekday: "Friday" },
+  full: { top: 60, topEx: "Deadlift", count: 9, weekday: "Saturday" },
+  mixed:{ top: 25, topEx: "Cable Fly", count: 5, weekday: "Sunday" }
+};
+const el = id => document.getElementById(id);
+function chips(id, items, getOn, set){
+  el(id).innerHTML = items.map(([k,l]) => `<button class="chip ${getOn()===k?"on":""}" data-k="${k}">${l}</button>`).join("");
+  el(id).querySelectorAll("button").forEach(b => b.onclick = () => { set(b.dataset.k); render(); });
+}
+function show(){
+  const s = STATS[type]; const ctx = new Set(ctxKey === "none" ? [] : [ctxKey]);
+  const { name, why } = generate(type, ctx, s);
+  const n = el("name"); n.classList.add("flip");
+  setTimeout(() => { n.textContent = name; el("why").textContent = why; n.classList.remove("flip"); }, 160);
+  el("stats").innerHTML = `<div class="stat"><b>${ctxKey==="short"?"28m":ctxKey==="long"?"1h 47m":"1h 04m"}</b><span>DURATION</span></div><div class="stat"><b>18</b><span>SETS</span></div><div class="stat"><b>${s.top} kg</b><span>TOP LIFT</span></div>`;
+}
+function render(){
+  chips("types", TYPES.map(t => [t, SHORT[t]]), () => type, v => type = v);
+  chips("ctx", CTX, () => ctxKey, v => ctxKey = v);
+  show();
+  const s = STATS[type]; const ctx = new Set(ctxKey === "none" ? [] : [ctxKey]);
+  el("samples").innerHTML = Array.from({length:10}, () => `<div>${generate(type, ctx, s).name}</div>`).join("");
+}
+el("roll").onclick = show;
+render();
+</script>
+</body>
+</html>

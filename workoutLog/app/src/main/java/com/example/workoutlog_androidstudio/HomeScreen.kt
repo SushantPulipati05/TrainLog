@@ -231,7 +231,16 @@ fun HomeScreen(
             WeeklyTargetWidget(completedDays = completedDaysThisWeek, targetDays = weeklyWorkoutTarget)
             Spacer(modifier = Modifier.height(20.dp))
             QuickStartCard(
-                onStartEmptyWorkout = { showNewWorkoutDialog = true },
+                onStartEmptyWorkout = {
+                    // With fun names on, the workout gets its name when it
+                    // ends - so start straight away under a plain working
+                    // name. With them off, ask for the name up front.
+                    if (WorkoutNamer.enabled) {
+                        onStartWorkout(upNext?.display ?: "Workout")
+                    } else {
+                        showNewWorkoutDialog = true
+                    }
+                },
                 plan = TrainingPlanStore.plan,
                 upNext = upNext,
                 onOpenTrainingPlan = onOpenTrainingPlan

@@ -402,6 +402,12 @@ fun ProfileScreen(
 
                         TrainingPlanEntryRow(onClick = onOpenTrainingPlan)
 
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Fun names for finished workouts - off for people who
+                        // prefer naming their own.
+                        FunNamesSettingRow()
+
                         Spacer(modifier = Modifier.height(16.dp))
 
                         AccountSection()

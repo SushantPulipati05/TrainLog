@@ -117,6 +117,7 @@ class MainActivity : ComponentActivity() {
         // The training plan + gym reminder (Profile -> Training plan). Re-arming
         // here is cheap and makes sure the next reminder is always scheduled.
         TrainingPlanStore.init(this)
+        WorkoutNamer.init(this)
         GymReminderScheduler.reschedule(this)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()

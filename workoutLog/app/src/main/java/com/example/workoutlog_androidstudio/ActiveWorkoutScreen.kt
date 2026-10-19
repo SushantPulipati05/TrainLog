@@ -65,9 +65,12 @@ import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.NewExerciseRequest
 import com.example.workoutlog_androidstudio.api.NewSetRequest
+import com.example.workoutlog_androidstudio.api.UpdateWorkoutRequest
 import com.example.workoutlog_androidstudio.api.WorkoutResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.async
 
 @Composable
 fun ActiveWorkoutScreen(
@@ -101,6 +104,9 @@ fun ActiveWorkoutScreen(
     var isLoadingExercises by remember { mutableStateOf(false) }
     var exerciseLoadError by remember { mutableStateOf<String?>(null) }
     var isEndingWorkout by remember { mutableStateOf(false) }
+    // Fun workout names: the suggestion shown once the workout is saved.
+    var nameSuggestion by remember { mutableStateOf<Pair<SuggestedName, SessionFacts>?>(null) }
+    var isSavingName by remember { mutableStateOf(false) }
     // Set when End Workout couldn't reach the server; the screen stays open
     // (nothing is lost) so the person can simply try again.
     var endError by remember { mutableStateOf<String?>(null) }
@@ -179,6 +185,33 @@ fun ActiveWorkoutScreen(
         if (exercises.isEmpty()) {
             prefillExercises.forEach { addExerciseToWorkout(it) }
         }
+    }
+
+    nameSuggestion?.let { (suggestion, facts) ->
+        WorkoutNameCard(
+            suggestion = suggestion,
+            durationLabel = facts.durationMinutes.let { if (it >= 60) "${it / 60}h ${(it % 60).toString().padStart(2, '0')}m" else "${it}m" },
+            totalSets = facts.totalSets,
+            topLift = facts.topWeightKg?.let { "${formatDecimal(it)} kg" },
+            isSaving = isSavingName,
+            onSave = { chosen ->
+                isSavingName = true
+                coroutineScope.launch {
+                    if (chosen != workout.workoutName) {
+                        try {
+                            NetworkClient.workoutApi.updateWorkout(workout.id, UpdateWorkoutRequest(workoutName = chosen))
+                        } catch (e: Exception) {
+                            // The workout is saved either way - it just keeps its old name.
+                            Log.e("EndWorkout", "Couldn't rename workout ${workout.id}", e)
+                        }
+                    }
+                    WorkoutNamer.remember(context, chosen)
+                    isSavingName = false
+                    nameSuggestion = null
+                    onEndWorkout(notesText)
+                }
+            }
+        )
     }
 
     if (showDiscardConfirm) {
@@ -409,17 +442,27 @@ fun ActiveWorkoutScreen(
                         CrashReporting.record(e)
                         false
                     }
-                    isEndingWorkout = false
                     if (saved) {
                         try {
                             WorkoutHeatmapWidget().updateAll(context)
                         } catch (e: Exception) {
                             Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
                         }
-                        // Only now does the screen close - a failed save
-                        // keeps everything here to try again.
-                        onEndWorkout(notesText)
+                        WorkoutNamer.init(context)
+                        if (WorkoutNamer.enabled) {
+                            // Freeze the clock while the name card is up.
+                            ActiveWorkoutState.isPaused = true
+                            val facts = sessionFactsAfterSave(workout.id, exercises, ActiveWorkoutState.elapsedSeconds)
+                            nameSuggestion = WorkoutNamer.suggest(facts) to facts
+                            isEndingWorkout = false
+                        } else {
+                            isEndingWorkout = false
+                            // Only now does the screen close - a failed save
+                            // keeps everything here to try again.
+                            onEndWorkout(notesText)
+                        }
                     } else {
+                        isEndingWorkout = false
                         endError = "Couldn't save your workout. Check your connection and tap End Workout again - your sets are safe on this phone."
                     }
                 }
@@ -810,4 +853,41 @@ private fun NotesField(
             }
         )
     }
+}
+
+/**
+ * Facts about a just-saved workout for its fun name. Checks the server's PR
+ * flags for each exercise (in parallel, giving up after a few seconds -
+ * without them the name just won't mention a PR) and compares with the
+ * previous workouts.
+ */
+private suspend fun sessionFactsAfterSave(
+    workoutId: Int,
+    exercises: List<ActiveExercise>,
+    elapsedSeconds: Int
+): SessionFacts {
+    val prs: List<Pair<String, Double?>> = kotlinx.coroutines.withTimeoutOrNull(4000) {
+        kotlinx.coroutines.coroutineScope {
+            exercises.distinctBy { it.exerciseId }.map { exercise ->
+                async {
+                    runCatching {
+                        val history = AppDataCache.loadExerciseHistory(exercise.exerciseId, force = true)
+                        history.history.firstOrNull { point -> point.isPr && point.sets.any { it.workoutId == workoutId } }
+                            ?.let { exercise.name to it.maxWeightKg }
+                    }.getOrNull()
+                }
+            }.awaitAll().filterNotNull()
+        }
+    } ?: emptyList()
+    val bestPr = prs.maxByOrNull { it.second ?: 0.0 }
+    val history = AppDataCache.workoutSummaries ?: runCatching { AppDataCache.loadWorkoutSummaries() }.getOrNull().orEmpty()
+    return WorkoutNamer.factsFor(
+        exercises = exercises,
+        elapsedSeconds = elapsedSeconds,
+        history = history,
+        workoutId = workoutId,
+        plan = TrainingPlanStore.plan,
+        prExercise = bestPr?.first,
+        prWeightKg = bestPr?.second
+    )
 }
