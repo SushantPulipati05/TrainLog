@@ -44,6 +44,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -136,27 +139,62 @@ fun ActiveWorkoutScreen(
         }
     }
 
-    // "From your last Pull day": the exercises of the last workout like this
-    // one (same name, or the same split day), in the order they were logged.
-    // Loaded the first time the Add Exercise sheet opens.
+    // ---- "From your last Legs day" in Add Exercise ----
+    // Which past workout to offer, in this order: the day chip the user
+    // picked; else what they've logged so far (by muscles); else the
+    // workout's own name (started from Up next, a template or a reminder).
+    // Nothing is assumed for a plain "Workout" with no exercises yet - the
+    // sheet shows the split's day chips instead.
+    val plan = TrainingPlanStore.plan
+    val dayChips = remember(plan) { plan?.orderedDays().orEmpty().distinct() }
+    val upNextDay = remember { TrainingPlanStore.savedUpNext(context)?.startLabel?.takeIf { it in dayChips } }
+    var chosenDay by remember { mutableStateOf<String?>(null) }
+    val loggedMuscles = remember(exercises) {
+        exercises.groupBy { it.muscleGroup.trim().uppercase() }.mapValues { (_, list) -> list.sumOf { it.sets.size.coerceAtLeast(1) } }
+    }
+    val lookupKey: String? = when {
+        chosenDay != null -> "day:$chosenDay"
+        exercises.isNotEmpty() -> "muscles:" + loggedMuscles.entries.sortedBy { it.key }.joinToString { "${it.key}=${it.value}" }
+        workout.workoutName != DEFAULT_WORKOUT_NAME -> "name:${workout.workoutName}"
+        else -> null
+    }
     var lastLikeThis by remember { mutableStateOf<Pair<String, List<Int>>?>(null) }
-    LaunchedEffect(showAddExerciseDialog) {
-        if (!showAddExerciseDialog || lastLikeThis != null) return@LaunchedEffect
-        val summaries = AppDataCache.workoutSummaries
+    LaunchedEffect(showAddExerciseDialog, lookupKey) {
+        if (!showAddExerciseDialog) return@LaunchedEffect
+        if (lookupKey == null) { lastLikeThis = null; return@LaunchedEffect }
+        val summaries = (AppDataCache.workoutSummaries
             ?: runCatching { AppDataCache.loadWorkoutSummaries() }.getOrNull()
-            ?: return@LaunchedEffect
-        val previous = findPreviousSimilarWorkout(
-            workout.workoutName,
-            summaries.filter { it.id != workout.id },
-            TrainingPlanStore.plan
-        ) ?: return@LaunchedEffect
-        val detail = runCatching { AppDataCache.loadWorkoutDetail(previous.id) }.getOrNull() ?: return@LaunchedEffect
-        lastLikeThis = "your last ${previous.title}" to detail.sets.map { it.exerciseId }.distinct()
+            ?: return@LaunchedEffect).filter { it.id != workout.id }
+        val found: Pair<String, WorkoutSummary>? = when {
+            chosenDay != null -> findPreviousSimilarWorkout(chosenDay!!, summaries, plan)?.let { plannedWorkoutName(chosenDay!!) to it }
+            exercises.isNotEmpty() -> findPreviousWorkoutForMuscles(loggedMuscles, summaries, plan)?.let { (day, w) -> plannedWorkoutName(day) to w }
+            else -> findPreviousSimilarWorkout(workout.workoutName, summaries, plan)?.let { workout.workoutName to it }
+        }
+        if (found == null) { lastLikeThis = null; return@LaunchedEffect }
+        val detail = runCatching { AppDataCache.loadWorkoutDetail(found.second.id) }.getOrNull() ?: return@LaunchedEffect
+        lastLikeThis = "your last ${found.first}" to detail.sets.map { it.exerciseId }.distinct()
     }
     // Minus anything already added to this workout.
     val fromLastExercises = lastLikeThis?.second.orEmpty()
         .filter { id -> exercises.none { it.exerciseId == id } }
         .mapNotNull { id -> availableExercises.firstOrNull { it.id == id } }
+
+    // Renaming from the title. A name the user typed means they've named it
+    // themselves, so no fun-name card at the end.
+    var showRename by remember { mutableStateOf(false) }
+    var namedByUser by remember { mutableStateOf(false) }
+    fun renameWorkout(name: String) {
+        val clean = name.trim().take(60)
+        if (clean.isEmpty() || clean == workout.workoutName) return
+        ActiveWorkoutState.rename(clean)
+        coroutineScope.launch {
+            try {
+                NetworkClient.workoutApi.updateWorkout(workout.id, UpdateWorkoutRequest(workoutName = clean))
+            } catch (e: Exception) {
+                Log.e("RenameWorkout", "Couldn't rename workout ${workout.id} (will retry at the end)", e)
+            }
+        }
+    }
 
     fun addExerciseToWorkout(selected: ExerciseResponse) {
         val isBodyweight = selected.equipment.equals("Body Only", ignoreCase = true)
@@ -265,8 +303,30 @@ fun ActiveWorkoutScreen(
         onAddAll = { all ->
             all.forEach { addExerciseToWorkout(it) }
             showAddExerciseDialog = false
+        },
+        // Day chips only before anything is logged - after that the
+        // exercises themselves say what day it is.
+        dayChips = if (exercises.isEmpty()) dayChips else emptyList(),
+        selectedDay = chosenDay,
+        upNextDay = upNextDay,
+        onSelectDay = { day ->
+            chosenDay = if (chosenDay == day) null else day
+            // A still-unnamed workout takes the day's name ("Legs day").
+            if (chosenDay != null && !namedByUser) renameWorkout(plannedWorkoutName(day))
         }
     )
+
+    if (showRename) {
+        RenameWorkoutSheet(
+            currentName = workout.workoutName,
+            onDismiss = { showRename = false },
+            onSave = { name ->
+                showRename = false
+                namedByUser = true
+                renameWorkout(name)
+            }
+        )
+    }
 
     CustomExerciseDialog(
         visible = showCustomExerciseDialog,
@@ -330,11 +390,32 @@ fun ActiveWorkoutScreen(
                     Icon(imageVector = Icons.Filled.Close, contentDescription = "Discard workout", tint = AppTextPrimary)
                 }
             }
-            Text(
-                text = workout.workoutName,
-                style = MaterialTheme.typography.titleLarge,
-                color = AppTextPrimary
-            )
+            // Tap the title to rename the workout.
+            Row(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .padding(horizontal = 4.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { showRename = true }
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = workout.workoutName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = AppTextPrimary,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = "Rename workout",
+                    tint = AppTextMuted,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
             TextButton(
                 onClick = onTogglePause,
                 colors = pausePillColors()
@@ -449,13 +530,23 @@ fun ActiveWorkoutScreen(
                             Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
                         }
                         WorkoutNamer.init(context)
-                        if (WorkoutNamer.enabled) {
+                        if (WorkoutNamer.enabled && !namedByUser) {
                             // Freeze the clock while the name card is up.
                             ActiveWorkoutState.isPaused = true
                             val facts = sessionFactsAfterSave(workout.id, exercises, ActiveWorkoutState.elapsedSeconds)
                             nameSuggestion = WorkoutNamer.suggest(facts) to facts
                             isEndingWorkout = false
                         } else {
+                            // Make sure a name typed during the workout reached
+                            // the server (its first try may have failed).
+                            if (namedByUser || chosenDay != null) {
+                                runCatching {
+                                    NetworkClient.workoutApi.updateWorkout(
+                                        workout.id,
+                                        UpdateWorkoutRequest(workoutName = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName)
+                                    )
+                                }
+                            }
                             isEndingWorkout = false
                             // Only now does the screen close - a failed save
                             // keeps everything here to try again.
@@ -890,4 +981,52 @@ private suspend fun sessionFactsAfterSave(
         prExercise = bestPr?.first,
         prWeightKg = bestPr?.second
     )
+}
+
+/** The name a workout started from "Start Empty Workout" gets until the
+ *  user (or the fun-name card at the end) names it. */
+const val DEFAULT_WORKOUT_NAME = "Workout"
+
+/** Rename the running workout - opened by tapping its title. */
+@Composable
+private fun RenameWorkoutSheet(currentName: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
+    var name by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(currentName, androidx.compose.ui.text.TextRange(0, currentName.length))) }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    AppBottomSheet(visible = true, onDismissRequest = onDismiss) {
+        Text(text = "Rename workout", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary)
+        Spacer(modifier = Modifier.height(16.dp))
+        OutlinedTextField(
+            value = name,
+            onValueChange = { if (it.text.length <= 60) name = it },
+            singleLine = true,
+            placeholder = { Text(text = "e.g. Leg Day", color = AppTextMuted) },
+            keyboardOptions = KeyboardOptions(
+                capitalization = androidx.compose.ui.text.input.KeyboardCapitalization.Words,
+                imeAction = androidx.compose.ui.text.input.ImeAction.Done
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { if (name.text.isNotBlank()) onSave(name.text) }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .focusRequester(focus),
+            colors = appTextFieldColors()
+        )
+        Spacer(modifier = Modifier.height(20.dp))
+        Button(
+            onClick = { onSave(name.text) },
+            enabled = name.text.isNotBlank(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(14.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+        ) {
+            Text(text = "Save", fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text(text = "Cancel", color = AppTextSecondary)
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+    }
 }

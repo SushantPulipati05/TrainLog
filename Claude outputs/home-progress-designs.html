@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home and Progress designs</title>
+<style>
+  :root{--bg:#0B0B0D;--surface:#19191C;--sv:#232327;--border:#2A2A2E;--accent:#FF6A3D;--text:#F5F5F7;--sec:#9A9AA0;--muted:#6E6E74;--onAccent:#1A0E08}
+  *{box-sizing:border-box}
+  body{margin:0;background:#050506;color:var(--text);font-family:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px}
+  h1{font-size:20px;margin:0 0 4px}
+  .intro{color:var(--sec);font-size:14px;margin:0 0 24px;max-width:900px;line-height:1.5}
+  .grid{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+  .opt{width:360px;max-width:100%}
+  .opt h2{font-size:15px;margin:0 0 4px}.opt h2 b{color:var(--accent);margin-right:6px}
+  .opt p.d{color:var(--sec);font-size:13px;line-height:1.45;margin:0 0 12px;min-height:56px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:28px;height:780px;position:relative;overflow:hidden}
+  .scroll{height:100%;overflow-y:auto;padding:20px 16px 90px}
+  .scroll::-webkit-scrollbar{display:none}
+  .date{display:flex;justify-content:space-between;font-size:12px;color:var(--accent)}
+  .wk{font-size:10px;color:var(--accent);margin:2px 0 14px}
+  .card{background:var(--surface);border-radius:18px;padding:14px;margin-bottom:12px}
+  .lbl{font-size:10px;color:var(--muted);letter-spacing:.8px}
+  .lblrow{display:flex;justify-content:space-between;align-items:center;margin:18px 0 8px}
+  .lblrow a{font-size:11px;color:var(--accent);text-decoration:none;font-weight:600}
+  .hm{display:grid;grid-template-columns:repeat(14,1fr);gap:3px}
+  .hm i{aspect-ratio:1;border-radius:3px;background:var(--sv)}
+  .target{display:flex;justify-content:space-between;align-items:center}
+  .target b{font-size:15px}
+  .bars{display:flex;gap:4px;align-items:flex-end}
+  .bars i{width:6px;height:24px;border-radius:3px;background:var(--sv)}
+  .bars i.on{background:var(--text)}
+  .lifts{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;margin:0 -16px;padding-left:16px;padding-right:16px}
+  .lifts::-webkit-scrollbar{display:none}
+  .lift{flex:0 0 150px;background:var(--surface);border-radius:16px;padding:12px}
+  .lift .n{font-size:12px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lift .v{font-size:19px;font-weight:700;margin-top:2px}
+  .lift .v small{font-size:11px;color:var(--sec);font-weight:400}
+  .lift .c{font-size:11px;color:var(--accent);margin-top:2px}
+  .lift .c.down{color:var(--muted)}
+  .pr{display:flex;align-items:center;gap:10px;background:linear-gradient(90deg,rgba(255,106,61,.18),rgba(255,106,61,.04));border:1px solid rgba(255,106,61,.4);border-radius:14px;padding:10px 12px;margin-bottom:12px;font-size:13px}
+  .pr b{color:var(--accent)}
+  .qs h3{margin:4px 0 4px;font-size:19px;font-weight:600}
+  .qs p{margin:0 0 12px;font-size:12px;color:var(--sec)}
+  .upn{display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--accent)}
+  .upn span:last-child{color:var(--muted);font-weight:400}
+  .btn{background:#fff;color:#000;border-radius:12px;text-align:center;padding:12px;font-weight:600;font-size:14px}
+  .wo{display:flex;justify-content:space-between;align-items:center}
+  .wo .t{font-size:15px;font-weight:600}
+  .wo .s{font-size:11px;color:var(--muted);margin-top:2px}
+  .nav{position:absolute;left:0;right:0;bottom:0;height:70px;background:rgba(17,17,19,.96);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:center;font-size:10px;color:var(--muted);letter-spacing:.6px}
+  .nav div{text-align:center}
+  .nav div i{display:block;width:20px;height:20px;border-radius:6px;background:var(--sv);margin:0 auto 4px}
+  .nav div.on{color:var(--accent)}
+  .nav div.on i{background:var(--accent)}
+  .title{font-size:26px;font-weight:800;margin:2px 0 14px}
+  .search{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:11px 12px;color:var(--muted);font-size:13px;margin-bottom:10px}
+  .chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:6px}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:0 0 auto;font-size:11px;padding:6px 11px;border-radius:20px;background:var(--sv);color:var(--sec)}
+  .chip.on{background:var(--accent);color:var(--onAccent);font-weight:600}
+  .prs{display:flex;gap:8px;overflow-x:auto;margin:0 -16px;padding:0 16px}
+  .prs::-webkit-scrollbar{display:none}
+  .prc{flex:0 0 132px;background:var(--surface);border-radius:14px;padding:10px 12px;border:1px solid rgba(255,106,61,.35)}
+  .prc .e{font-size:11px;color:var(--sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .prc .w{font-size:17px;font-weight:700;margin:2px 0}
+  .prc .dt{font-size:10px;color:var(--muted)}
+  .bal{display:grid;grid-template-columns:70px 1fr 64px;gap:6px 10px;align-items:center;font-size:12px}
+  .bal .track{height:8px;background:var(--sv);border-radius:4px;position:relative}
+  .bal .fill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--accent)}
+  .bal .usual{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);opacity:.6}
+  .bal .num{color:var(--sec);text-align:right;font-size:11px}
+  .bal .num.low{color:var(--accent);font-weight:600}
+  .bal .fill.low{opacity:.45}
+  .ex{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--border)}
+  .ex:last-child{border:0}
+  .ex .m{flex:1;min-width:0}
+  .ex .m b{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ex .m span{font-size:11px;color:var(--muted)}
+  .ex{cursor:pointer}
+  .ex .r{text-align:right;font-size:14px;font-weight:600}
+  .ex .r small{display:block;font-size:11px;color:var(--accent);font-weight:500;margin-top:1px}
+  .ex .r small.down{color:var(--muted)}
+  .ex svg.chev{flex:0 0 auto}
+  .ico{display:inline-flex;vertical-align:middle}
+  .note{color:var(--sec);font-size:12.5px;line-height:1.5;margin-top:10px}
+</style>
+</head>
+<body>
+<h1>Home "Your lifts" + a Progress tab</h1>
+<p class="intro">Updated: the exercise list is plain rows (no charts) with a chevron, only the app's own colours are used, and the emoji are replaced with simple icons drawn in the app's orange and grey. Made-up data. Scroll inside each phone. Home keeps what it has (date, heatmap, weekly target, Quick Start, this week's workouts) and gains a horizontal <b>Your lifts</b> strip plus a short-lived PR banner. The bottom bar gets a <b>Progress</b> tab for the full list. Every lift card and row opens that exercise's analytics screen.</p>
+
+<div class="grid">
+  <div class="opt"><h2><b>1</b>Home</h2>
+    <p class="d">"Your lifts" sits right under Quick Start: your 6 most-logged exercises, latest top set and the change over 3 months, with a mini line. "See all ›" goes to Progress. The PR banner shows for 3 days after a record.</p>
+    <div class="phone"><div class="scroll" id="home"></div><div class="nav" id="nav1"></div></div></div>
+
+  <div class="opt"><h2><b>2</b>Progress tab</h2>
+    <p class="d">Search (names or muscles, like Add Exercise) and muscle chips at the top. Then recent PRs, this week's muscle balance against your usual (white tick = usual), and every exercise you've logged, most used first.</p>
+    <div class="phone"><div class="scroll" id="prog"></div><div class="nav" id="nav2"></div></div></div>
+</div>
+
+<script>
+const ICON = {
+  search: `<svg class="ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E6E74" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>`,
+  trophy: (c="#FF6A3D", s=16) => `<svg class="ico" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M7 6H4.5v1.5A3.5 3.5 0 0 0 8 11M17 6h2.5v1.5A3.5 3.5 0 0 1 16 11"/><path d="M12 14v3M8.5 20h7M10 17h4"/></svg>`,
+  chev: `<svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6E6E74" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`
+};
+
+const lifts = [
+  { n:"Incline DB Bench", m:"Chest", v:32.5, u:"kg × 8", c:+7.5, s:[22.5,22.5,25,25,25,27.5,27.5,30,27.5,30,32.5,32.5], times:24 },
+  { n:"Barbell Squat", m:"Quads", v:100, u:"kg × 5", c:+15, s:[80,82.5,85,85,87.5,90,90,92.5,95,95,97.5,100], times:22 },
+  { n:"Lat Pulldown", m:"Lats", v:65, u:"kg × 10", c:+10, s:[50,52.5,55,55,57.5,57.5,60,60,62.5,62.5,65,65], times:21 },
+  { n:"Romanian Deadlift", m:"Hamstrings", v:80, u:"kg × 8", c:+5, s:[70,72.5,72.5,75,75,75,77.5,77.5,80,77.5,80,80], times:18 },
+  { n:"Overhead Press", m:"Shoulders", v:40, u:"kg × 6", c:-2.5, s:[37.5,40,40,42.5,42.5,42.5,40,42.5,42.5,40,40,40], times:15 },
+  { n:"Incline DB Curl", m:"Biceps", v:17.5, u:"kg × 10", c:+5, s:[12.5,12.5,12.5,15,15,15,15,17.5,15,17.5,17.5,17.5], times:14 },
+  { n:"Cable Fly", m:"Chest", v:15, u:"kg × 12", c:+2.5, s:[12.5,12.5,12.5,12.5,15,12.5,15,15,15,15,15,15], times:12 },
+  { n:"Leg Press", m:"Quads", v:180, u:"kg × 10", c:+20, s:[160,160,165,170,170,170,175,175,180,175,180,180], times:11 },
+  { n:"Triceps Pushdown", m:"Triceps", v:30, u:"kg × 12", c:+2.5, s:[27.5,27.5,27.5,30,27.5,30,30,30,30,30,30,30], times:10 }
+];
+function spark(vals, w=126, h=34, stroke="#FF6A3D"){
+  const mn=Math.min(...vals), mx=Math.max(...vals), r=(mx-mn)||1;
+  const pts=vals.map((v,i)=>[i*(w-4)/(vals.length-1)+2, h-3-(v-mn)/r*(h-8)]);
+  const d=pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const id="g"+Math.random().toString(36).slice(2);
+  const last=pts[pts.length-1];
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><defs><linearGradient id="${id}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${stroke}" stop-opacity=".3"/><stop offset="1" stop-color="${stroke}" stop-opacity="0"/></linearGradient></defs><path d="${d} L ${last[0]} ${h} L 2 ${h} Z" fill="url(#${id})"/><path d="${d}" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0]}" cy="${last[1]}" r="2.6" fill="${stroke}"/></svg>`;
+}
+const delta = c => `<div class="c ${c<0?"down":""}">${c<0?"−":"+"}${Math.abs(c)} kg in 3 months</div>`;
+function nav(on){ return ["HOME","WORKOUTS","PROGRESS","PROFILE"].map(t=>`<div class="${t===on?"on":""}"><i></i>${t}</div>`).join(""); }
+
+// Home
+const hmCells = Array.from({length:56},(_,i)=>{ const on=[1,2,3,4,5,8,9,10,12,15,16,17,18,19,22,23,24,26,29,30,31,32,33,36,37,38,40,43,44,45].includes(i); const a=on?[.5,.75,1,1,.75][i%5]:0; return `<i style="${on?`background:rgba(255,106,61,${a})`:""}"></i>`; }).join("");
+document.getElementById("home").innerHTML = `
+  <div class="date"><span>MONDAY, 19 OCT</span><span>08:42</span></div>
+  <div class="wk">WEEK 43/52 // DAY 1</div>
+  <div class="card"><div class="lbl" style="margin-bottom:8px">SEP · OCT</div><div class="hm">${hmCells}</div></div>
+  <div class="card target"><div><div class="lbl" style="color:var(--accent)">WEEKLY TARGET</div><b>1 of 6 Completed</b></div><div class="bars">${[1,0,0,0,0,0].map(o=>`<i class="${o?"on":""}"></i>`).join("")}</div></div>
+  <div class="pr">${ICON.trophy()} <div><b>New PR</b> · Barbell Squat 100 kg × 5 <span style="color:var(--muted)">· Sat</span></div></div>
+  <div class="card qs"><div class="upn"><span>UP NEXT · LEGS DAY</span><span>6:30 PM</span></div><h3>Quick Start</h3><p>Empty slate. Direct logging of load, target sets, micro-plates & instantaneous rest intervals.</p><div class="btn">▶ Start Empty Workout</div></div>
+  <div class="lblrow"><span class="lbl">YOUR LIFTS</span><a>See all ›</a></div>
+  <div class="lifts">${lifts.slice(0,6).map(l=>`<div class="lift"><div class="n">${l.n}</div><div class="v">${l.v} <small>kg</small></div>${delta(l.c)}<div style="margin-top:6px">${spark(l.s)}</div></div>`).join("")}</div>
+  <div class="lblrow"><span class="lbl">THIS WEEK</span><a>All workouts ›</a></div>
+  <div class="card wo"><div><div class="t">Quadfather</div><div class="s">MON · 1h 04m · 18 sets</div></div><span style="color:var(--muted)">›</span></div>
+`;
+document.getElementById("nav1").innerHTML = nav("HOME");
+
+// Progress
+const prs = [["Barbell Squat","100 kg × 5","Sat 17/10"],["Incline DB Bench","32.5 kg × 8","Thu 15/10"],["Lat Pulldown","65 kg × 10","Wed 14/10"],["Leg Press","180 kg × 10","Sat 10/10"]];
+const bal = [["Chest",12,14],["Back",14,14],["Shoulders",6,8],["Arms",8,10],["Legs",8,18],["Abs",2,4]];
+document.getElementById("prog").innerHTML = `
+  <div class="title">Progress</div>
+  <div class="search">${ICON.search}&nbsp; Search exercises or muscles…</div>
+  <div class="chips">${["All","Chest","Back","Legs","Shoulders","Arms","Abs"].map((c,i)=>`<span class="chip ${i===0?"on":""}">${c}</span>`).join("")}</div>
+  <div class="lblrow"><span class="lbl">RECENT PRS</span></div>
+  <div class="prs">${prs.map(p=>`<div class="prc"><div class="e">${p[0]}</div><div class="w">${p[1]}</div><div class="dt">${ICON.trophy("#FF6A3D",12)} ${p[2]}</div></div>`).join("")}</div>
+  <div class="lblrow"><span class="lbl">THIS WEEK · SETS PER MUSCLE</span><span class="lbl">vs usual</span></div>
+  <div class="card"><div class="bal">${bal.map(([m,n,u])=>{const max=20;return `<span>${m}</span><div class="track"><div class="fill ${n<u*0.6?"low":""}" style="width:${n/max*100}%"></div><div class="usual" style="left:${u/max*100}%"></div></div><span class="num ${n<u*0.6?"low":""}">${n} / ${u}</span>`}).join("")}</div>
+  <div class="note" style="margin-top:10px;font-size:11.5px">Legs is behind your usual week — Up next is Legs day.</div></div>
+  <div class="lblrow"><span class="lbl">YOUR EXERCISES · ${lifts.length}</span><span class="lbl">MOST USED</span></div>
+  <div class="card" style="padding:4px 14px">${lifts.map(l=>`<div class="ex"><div class="m"><b>${l.n}</b><span>${l.m} · ${l.times} sessions</span></div><div class="r">${l.v} kg<small class="${l.c<0?"down":""}">${l.c<0?"−":"+"}${Math.abs(l.c)} kg</small></div>${ICON.chev}</div>`).join("")}</div>
+`;
+document.getElementById("nav2").innerHTML = nav("PROGRESS");
+</script>
+</body>
+</html>

@@ -107,7 +107,6 @@ fun HomeScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var showNewWorkoutDialog by remember { mutableStateOf(false) }
 
     // Read straight from the shared cache (it's Compose state), so anything
     // that refreshes it - ending a workout, deleting one, another screen's
@@ -182,15 +181,6 @@ fun HomeScreen(
     }
     LaunchedEffect(upNext) { TrainingPlanStore.saveUpNext(context, upNext) }
 
-    NewWorkoutDialog(
-        visible = showNewWorkoutDialog,
-        suggestedName = upNext?.display,
-        onConfirm = { name ->
-            showNewWorkoutDialog = false
-            onStartWorkout(name)
-        },
-        onDismiss = { showNewWorkoutDialog = false }
-    )
 
     Box(modifier = modifier.fillMaxSize()) {
     LazyColumn(
@@ -231,16 +221,10 @@ fun HomeScreen(
             WeeklyTargetWidget(completedDays = completedDaysThisWeek, targetDays = weeklyWorkoutTarget)
             Spacer(modifier = Modifier.height(20.dp))
             QuickStartCard(
-                onStartEmptyWorkout = {
-                    // With fun names on, the workout gets its name when it
-                    // ends - so start straight away under a plain working
-                    // name. With them off, ask for the name up front.
-                    if (WorkoutNamer.enabled) {
-                        onStartWorkout(upNext?.display ?: "Workout")
-                    } else {
-                        showNewWorkoutDialog = true
-                    }
-                },
+                // Starts straight away as "Workout" - nothing assumed. What
+                // the day is comes from the chips / exercises in Add Exercise,
+                // and the title can be renamed any time during the workout.
+                onStartEmptyWorkout = { onStartWorkout(DEFAULT_WORKOUT_NAME) },
                 plan = TrainingPlanStore.plan,
                 upNext = upNext,
                 onOpenTrainingPlan = onOpenTrainingPlan
@@ -361,74 +345,6 @@ fun HomeScreen(
     }
 
     DeletedToast(visible = toastVisible, message = "\"${deletedWorkoutTitle.orEmpty()}\" deleted", aboveTabBar = true)
-    }
-}
-
-@Composable
-private fun NewWorkoutDialog(
-    visible: Boolean,
-    suggestedName: String?,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit
-) {
-    var field by remember { mutableStateOf(TextFieldValue("")) }
-    val name = field.text
-
-    // Each time the sheet opens, pre-fill the up-next workout's name, fully
-    // selected - Start keeps it, typing replaces it.
-    LaunchedEffect(visible) {
-        if (visible) {
-            val prefill = suggestedName.orEmpty()
-            field = TextFieldValue(prefill, selection = TextRange(0, prefill.length))
-        }
-    }
-
-    AppBottomSheet(visible = visible, onDismissRequest = onDismiss) {
-        Text(
-            text = "Name your workout",
-            style = MaterialTheme.typography.titleLarge,
-            color = AppTextPrimary
-        )
-        if (!suggestedName.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Up next, based on your last workouts. Type to change it.",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextMuted
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-        OutlinedTextField(
-            value = field,
-            onValueChange = { field = it },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(text = "e.g. Push Day", color = AppTextMuted) },
-            colors = appTextFieldColors()
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        Button(
-            onClick = { if (name.isNotBlank()) onConfirm(name.trim()) },
-            enabled = name.isNotBlank(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(14.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Color.White,
-                contentColor = Color.Black
-            )
-        ) {
-            Text(text = "Start", fontWeight = FontWeight.SemiBold)
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        TextButton(
-            onClick = onDismiss,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(text = "Cancel", color = AppTextSecondary)
-        }
-        Spacer(modifier = Modifier.height(4.dp))
     }
 }
 

@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Progress tab designs</title>
+<style>
+  :root{--bg:#0B0B0D;--surface:#19191C;--sv:#232327;--border:#2A2A2E;--accent:#FF6A3D;--text:#F5F5F7;--sec:#9A9AA0;--muted:#6E6E74;--onAccent:#1A0E08;--good:#4CAF50;--warn:#E0A23A;--bad:#D64545}
+  *{box-sizing:border-box}
+  body{margin:0;background:#050506;color:var(--text);font-family:Roboto,system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px 16px 48px}
+  h1{font-size:20px;margin:0 0 4px}
+  .intro{color:var(--sec);font-size:14px;margin:0 0 24px;max-width:960px;line-height:1.5}
+  .grid{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+  .opt{width:360px;max-width:100%}
+  .opt h2{font-size:15px;margin:0 0 4px}.opt h2 b{color:var(--accent);margin-right:6px}
+  .opt p.d{color:var(--sec);font-size:13px;line-height:1.45;margin:0 0 6px}
+  .opt ul{color:var(--sec);font-size:12.5px;line-height:1.5;margin:0 0 12px;padding-left:18px;min-height:96px}
+  .phone{background:var(--bg);border:1px solid var(--border);border-radius:28px;height:780px;position:relative;overflow:hidden}
+  .scroll{height:100%;overflow-y:auto;padding:20px 16px 90px}
+  .scroll::-webkit-scrollbar{display:none}
+  .nav{position:absolute;left:0;right:0;bottom:0;height:66px;background:rgba(17,17,19,.96);border-top:1px solid var(--border);display:flex;justify-content:space-around;align-items:center;font-size:10px;color:var(--muted);letter-spacing:.6px}
+  .nav div{text-align:center}.nav div i{display:block;width:20px;height:20px;border-radius:6px;background:var(--sv);margin:0 auto 4px}
+  .nav div.on{color:var(--accent)}.nav div.on i{background:var(--accent)}
+  .title{font-size:26px;font-weight:800;margin:2px 0 4px}
+  .sub{font-size:13px;color:var(--sec);margin:0 0 16px}
+  .card{background:var(--surface);border-radius:18px;padding:16px;margin-bottom:12px}
+  .lbl{font-size:10px;color:var(--muted);letter-spacing:.8px;margin:18px 0 8px}
+  .hero{background:linear-gradient(160deg,rgba(255,106,61,.22),rgba(255,106,61,.03) 60%),var(--surface);border:1px solid rgba(255,106,61,.35)}
+  .hero .big{font-size:22px;font-weight:800;line-height:1.2;margin:6px 0 4px}
+  .hero .small{font-size:13px;color:var(--sec)}
+  .ins{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+  .ins:last-child{border:0;padding-bottom:0}
+  .ins .ic{flex:0 0 32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--sv)}
+  .ins b{display:block;font-size:14px;font-weight:600}
+  .ins span{font-size:12px;color:var(--sec)}
+  .row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+  .row:last-child{border:0}
+  .row .m{flex:1;min-width:0}
+  .row .m b{display:block;font-size:14px;font-weight:600}
+  .row .m span{font-size:12px;color:var(--sec)}
+  .pill{font-size:11px;font-weight:600;padding:4px 9px;border-radius:20px;white-space:nowrap}
+  .up{background:rgba(76,175,80,.14);color:var(--good)}
+  .flat{background:var(--sv);color:var(--sec)}
+  .down{background:rgba(214,69,69,.14);color:#F08080}
+  .chev{color:var(--muted)}
+  .musc{display:flex;flex-wrap:wrap;gap:8px}
+  .mchip{font-size:12px;padding:7px 11px;border-radius:12px;background:var(--sv)}
+  .mchip.ok::before{content:"✓ ";color:var(--good)}
+  .mchip.behind{background:rgba(224,162,58,.14);color:var(--warn)}
+  .mchip.behind::before{content:"! "}
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .tile{background:var(--surface);border-radius:16px;padding:14px;position:relative;min-height:118px}
+  .tile .n{font-size:16px;font-weight:700}
+  .tile .s{font-size:12px;color:var(--sec);margin-top:2px}
+  .tile .st{position:absolute;left:14px;bottom:12px;font-size:11px;font-weight:600}
+  .tile .dot{position:absolute;right:12px;top:12px;width:10px;height:10px;border-radius:50%}
+  .tile.sel{outline:2px solid var(--accent)}
+  .seg{display:flex;background:var(--surface);border-radius:12px;padding:3px;margin-bottom:14px}
+  .seg span{flex:1;text-align:center;font-size:12.5px;padding:8px 0;border-radius:9px;color:var(--sec);cursor:pointer}
+  .seg span.on{background:var(--sv);color:var(--text);font-weight:600}
+  .say{font-size:17px;font-weight:700;line-height:1.3;margin:0 0 4px}
+  .hint{font-size:12px;color:var(--muted);margin-top:8px;line-height:1.4}
+  .wkbars{display:flex;gap:8px;align-items:flex-end;height:120px;margin-top:14px}
+  .wkbars div{flex:1;text-align:center;font-size:10px;color:var(--muted)}
+  .wkbars i{display:block;background:var(--accent);border-radius:6px 6px 2px 2px;margin-bottom:6px}
+  .wkbars i.miss{background:var(--sv)}
+  .target{position:relative}
+  .hbar{display:grid;grid-template-columns:76px 1fr;gap:8px 10px;align-items:center;font-size:12.5px}
+  .hbar .t{height:10px;background:var(--sv);border-radius:5px;position:relative}
+  .hbar .f{position:absolute;inset:0 auto 0 0;border-radius:5px;background:var(--accent)}
+  .hbar .f.low{background:var(--warn)}
+  .note{color:var(--sec);font-size:12.5px;line-height:1.5}
+  .back{font-size:11px;color:var(--accent);letter-spacing:.8px;margin-bottom:10px}
+</style>
+</head>
+<body>
+<h1>Progress tab — three easier-to-read designs</h1>
+<p class="intro">The problem with the first version: it showed every number at once and left you to work out what it meant. These three each lead with <b>a plain-English answer</b> ("Am I getting stronger? Am I missing anything?"), show <b>one idea per section</b>, use words and colours instead of raw numbers where possible (<span style="color:#4CAF50">Improving</span> / Holding / <span style="color:#F08080">Dropping</span>), and keep the detailed charts one tap away on the exercise screen. Same made-up data in all three.</p>
+
+<div class="grid">
+
+  <div class="opt"><h2><b>A</b>"Your month in a sentence"</h2>
+    <p class="d">Reads top to bottom like a short report.</p>
+    <ul><li>Big headline answers the main question first</li><li>3 insights with icons: best gain, PRs, what needs attention</li><li>Lifts list says <i>Improving / Holding / Dropping</i> instead of numbers</li><li>Muscles as simple ✓ / ! chips</li></ul>
+    <div class="phone"><div class="scroll" id="A"></div><div class="nav" id="navA"></div></div></div>
+
+  <div class="opt"><h2><b>B</b>Muscle groups first</h2>
+    <p class="d">Start from the body, not from data.</p>
+    <ul><li>6 big tiles — Chest, Back, Shoulders, Arms, Legs, Core</li><li>Each tile: a coloured dot + one status line ("Getting stronger", "Trained less this week")</li><li>Tap a tile → only that muscle's exercises (shown: Legs)</li><li>Easiest for new users; no charts until you drill in</li></ul>
+    <div class="phone"><div class="scroll" id="B"></div><div class="nav" id="navB"></div></div></div>
+
+  <div class="opt"><h2><b>C</b>Three questions, one at a time</h2>
+    <p class="d">A switch at the top: <b>Strength · Consistency · Balance</b>. Tap to try.</p>
+    <ul><li>Each view answers one question with one sentence + one simple chart</li><li>Nothing else competes for attention</li><li>Good once users know what they want to check</li></ul>
+    <div class="phone"><div class="scroll" id="C"></div><div class="nav" id="navC"></div></div></div>
+
+</div>
+
+<div class="card" style="max-width:960px;margin-top:28px">
+  <div class="note"><b style="color:var(--text)">How the words are decided</b> (same in all three): an exercise is <span style="color:#4CAF50">Improving</span> if your top set over the last 4 sessions beats the 4 before, <i>Holding</i> if it's within a small step (2.5 kg / 1 rep), <span style="color:#F08080">Dropping</span> if it's below. A muscle is "behind" when this week's sets are under 60% of your usual week. Every row and tile opens the detailed exercise analytics screen you already have.</div>
+</div>
+
+<script>
+const nav = on => ["HOME","WORKOUTS","PROGRESS","PROFILE"].map(t=>`<div class="${t===on?"on":""}"><i></i>${t}</div>`).join("");
+["navA","navB","navC"].forEach(id => document.getElementById(id).innerHTML = nav("PROGRESS"));
+const status = s => s==="up" ? `<span class="pill up">▲ Improving</span>` : s==="down" ? `<span class="pill down">▼ Dropping</span>` : `<span class="pill flat">— Holding</span>`;
+
+// ---------- A ----------
+const liftsA = [
+  ["Barbell Squat","Legs · 100 kg now, was 85 kg in August","up"],
+  ["Incline DB Bench","Chest · 32.5 kg now, was 25 kg","up"],
+  ["Lat Pulldown","Back · 65 kg now, was 55 kg","up"],
+  ["Romanian Deadlift","Legs · 80 kg, same as last month","flat"],
+  ["Overhead Press","Shoulders · 40 kg, was 42.5 kg","down"],
+  ["Incline DB Curl","Arms · 17.5 kg now, was 15 kg","up"]
+];
+document.getElementById("A").innerHTML = `
+  <div class="title">Progress</div>
+  <div class="sub">Last 30 days</div>
+  <div class="card hero">
+    <div style="font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.8px">THIS MONTH</div>
+    <div class="big">You're getting stronger 💪</div>
+    <div class="small">7 of your 9 lifts went up, and you trained 18 times.</div>
+  </div>
+  <div class="card">
+    <div class="ins"><div class="ic">🚀</div><div><b>Biggest gain: Barbell Squat</b><span>+15 kg since August</span></div></div>
+    <div class="ins"><div class="ic">🏆</div><div><b>3 new personal records</b><span>Squat, Incline Bench, Lat Pulldown</span></div></div>
+    <div class="ins"><div class="ic" style="background:rgba(224,162,58,.16)">⚠️</div><div><b>Overhead Press slipped a little</b><span>40 kg, down from 42.5 kg. Try it earlier in your push day.</span></div></div>
+  </div>
+  <div class="lbl">YOUR LIFTS</div>
+  <div class="card" style="padding:4px 16px">${liftsA.map(([n,s,st])=>`<div class="row"><div class="m"><b>${n}</b><span>${s}</span></div>${status(st)}<span class="chev">›</span></div>`).join("")}
+    <div style="text-align:center;padding:10px 0 8px;font-size:13px;color:var(--accent);font-weight:600">See all 9 exercises</div></div>
+  <div class="lbl">MUSCLES THIS WEEK</div>
+  <div class="card"><div class="musc">${[["Chest","ok"],["Back","ok"],["Shoulders","ok"],["Arms","ok"],["Legs","behind"],["Core","ok"]].map(([m,c])=>`<span class="mchip ${c}">${m}</span>`).join("")}</div>
+    <div class="hint">Legs has had fewer sets than a usual week. Your next workout is Legs day.</div></div>
+`;
+
+// ---------- B ----------
+const tiles = [["Chest","Getting stronger","3 exercises","var(--good)"],["Back","Getting stronger","3 exercises","var(--good)"],["Shoulders","Holding steady","2 exercises","var(--muted)"],["Arms","Getting stronger","3 exercises","var(--good)"],["Legs","Trained less this week","4 exercises","var(--warn)"],["Core","Not tracked much","1 exercise","var(--sv)"]];
+document.getElementById("B").innerHTML = `
+  <div class="title">Progress</div>
+  <div class="sub">Tap a muscle group to see its exercises.</div>
+  <div class="tiles">${tiles.map(([n,s,c,dot],i)=>`<div class="tile ${n==="Legs"?"sel":""}"><span class="dot" style="background:${dot}"></span><div class="n">${n}</div><div class="s">${c}</div><div class="st" style="color:${dot==="var(--sv)"?"var(--muted)":dot}">${s}</div></div>`).join("")}</div>
+  <div class="lbl" style="margin-top:22px">LEGS · 4 EXERCISES</div>
+  <div class="card" style="padding:4px 16px">
+    <div class="row"><div class="m"><b>Barbell Squat</b><span>Best: 100 kg × 5 · 🏆 Sat</span></div>${status("up")}<span class="chev">›</span></div>
+    <div class="row"><div class="m"><b>Romanian Deadlift</b><span>Best: 80 kg × 8</span></div>${status("flat")}<span class="chev">›</span></div>
+    <div class="row"><div class="m"><b>Leg Press</b><span>Best: 180 kg × 10</span></div>${status("up")}<span class="chev">›</span></div>
+    <div class="row"><div class="m"><b>Calf Raise</b><span>Best: 60 kg × 15</span></div>${status("flat")}<span class="chev">›</span></div>
+  </div>
+  <div class="card" style="background:rgba(224,162,58,.10);border:1px solid rgba(224,162,58,.35)">
+    <div style="font-size:13px"><b style="color:var(--warn)">Legs this week:</b> 8 sets so far — you usually do about 18. Up next is Legs day.</div>
+  </div>
+`;
+
+// ---------- C ----------
+const views = {
+  Strength: `
+    <p class="say">7 of 9 lifts are going up.</p>
+    <div class="note">Compared with a month ago.</div>
+    <div class="card" style="padding:4px 16px;margin-top:12px">
+      ${[["Barbell Squat","100 kg","up"],["Incline DB Bench","32.5 kg","up"],["Lat Pulldown","65 kg","up"],["Incline DB Curl","17.5 kg","up"],["Romanian Deadlift","80 kg","flat"],["Overhead Press","40 kg","down"]].map(([n,v,s])=>`<div class="row"><div class="m"><b>${n}</b><span>Top set ${v}</span></div>${status(s)}<span class="chev">›</span></div>`).join("")}
+    </div>
+    <div class="hint">Tap any lift for its full chart and records.</div>`,
+  Consistency: `
+    <p class="say">You've hit your target 3 weeks in a row. 🔥</p>
+    <div class="note">Workouts per week, target 6.</div>
+    <div class="card"><div class="wkbars">${[[5,"21/9"],[6,"28/9"],[4,"5/10"],[6,"12/10"],[6,"19/10"]].map(([n,l])=>`<div><i style="height:${n/6*90}px;${n<6?"opacity:.55":""}"></i>${n}<br>${l}</div>`).join("")}</div>
+    <div class="hint">Faded bars = weeks under target. This week counts as it goes.</div></div>
+    <div class="card"><div class="ins"><div class="ic">📅</div><div><b>Most consistent day: Monday</b><span>You haven't missed a Monday in 6 weeks.</span></div></div></div>`,
+  Balance: `
+    <p class="say">Legs is behind this week.</p>
+    <div class="note">Sets this week as a share of your usual week.</div>
+    <div class="card"><div class="hbar">${[["Chest",86],["Back",100],["Shoulders",75],["Arms",80],["Legs",44],["Core",50]].map(([m,p])=>`<span>${m}</span><div class="t"><div class="f ${p<60?"low":""}" style="width:${p}%"></div></div>`).join("")}</div>
+    <div class="hint">A full bar = a normal week for you. Amber = well behind.</div></div>
+    <div class="card"><div class="ins"><div class="ic">💡</div><div><b>Up next is Legs day</b><span>That will bring your week back in balance.</span></div></div></div>`
+};
+function renderC(which){
+  document.getElementById("C").innerHTML = `
+    <div class="title">Progress</div>
+    <div class="sub">Pick what you want to check.</div>
+    <div class="seg">${Object.keys(views).map(k=>`<span class="${k===which?"on":""}" data-k="${k}">${k}</span>`).join("")}</div>
+    ${views[which]}`;
+  document.querySelectorAll("#C .seg span").forEach(s => s.onclick = () => renderC(s.dataset.k));
+}
+renderC("Strength");
+</script>
+</body>
+</html>

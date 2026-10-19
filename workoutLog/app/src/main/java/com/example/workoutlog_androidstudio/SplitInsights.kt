@@ -528,3 +528,29 @@ fun workoutKind(muscleSets: Map<String, Int>, plan: TrainingPlan?): WorkoutKind 
 
 /** [workoutKind] for a past workout. */
 fun WorkoutSummary.kind(plan: TrainingPlan?): WorkoutKind = workoutKind(muscleWork(), plan)
+
+/**
+ * The most recent past workout that was the same kind of day as what's being
+ * logged now ([muscleSets] - sets per muscle so far), and that day's name -
+ * for "From your last Legs day" once a few exercises are in. Days are the
+ * plan's split days, or Push / Pull / Legs without a plan. null when the
+ * exercises so far don't clearly add up to one day.
+ */
+fun findPreviousWorkoutForMuscles(
+    muscleSets: Map<String, Int>,
+    workouts: List<WorkoutSummary>,
+    plan: TrainingPlan?
+): Pair<String, WorkoutSummary>? {
+    if (muscleSets.values.sum() <= 0) return null
+    val days = plan?.orderedDays().orEmpty().distinct().ifEmpty { TrainingSplit.PPL.days }
+    val current = WorkoutSummary(
+        id = -1, dateLabel = "", date = LocalDate.now().toString(), title = "", duration = "",
+        totalSets = muscleSets.values.sum(), exerciseCount = muscleSets.size, volumeLabel = "",
+        tags = muscleSets.keys.toList(), muscleSets = muscleSets
+    )
+    val history = chronological(workouts)
+    val dayMuscles = days.associateWith { musclesForDay(it, history) }
+    val day = classify(current, days, dayMuscles) ?: return null
+    val previous = classifyHistory(history, days).lastOrNull { it.second == day }?.first ?: return null
+    return day to previous
+}

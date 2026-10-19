@@ -62,7 +62,13 @@ fun AddExerciseDialog(
     onRequestCustomExercise: (searchQuery: String) -> Unit,
     fromLastTitle: String? = null,
     fromLastExercises: List<ExerciseResponse> = emptyList(),
-    onAddAll: (List<ExerciseResponse>) -> Unit = {}
+    onAddAll: (List<ExerciseResponse>) -> Unit = {},
+    /** The split's days as chips ("What are you training?") - shown before
+     *  anything is logged. Picking one shows that day's last exercises. */
+    dayChips: List<String> = emptyList(),
+    selectedDay: String? = null,
+    upNextDay: String? = null,
+    onSelectDay: (String) -> Unit = {}
 ) {
     var query by remember { mutableStateOf("") }
     // A fresh search each time the sheet opens.
@@ -119,6 +125,26 @@ fun AddExerciseDialog(
             }
             else -> {
                 LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    if (!searching && dayChips.isNotEmpty()) {
+                        item(key = "dayChips") {
+                            Column(modifier = Modifier.padding(bottom = 8.dp)) {
+                                SheetSectionLabel("REPEAT A RECENT DAY")
+                                Spacer(modifier = Modifier.height(8.dp))
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    dayChips.forEach { day ->
+                                        SelectableChip(
+                                            text = if (day == upNextDay) "$day · up next" else day,
+                                            selected = day == selectedDay,
+                                            onClick = { onSelectDay(day) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                     if (searching) {
                         items(results, key = { "r${it.id}" }) { exercise ->
                             ExercisePickRow(exercise = exercise, onClick = { onSelect(exercise) })

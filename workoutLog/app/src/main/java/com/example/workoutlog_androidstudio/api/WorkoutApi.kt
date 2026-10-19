@@ -87,6 +87,9 @@ interface WorkoutApi {
 
     @POST("exercises/merge")
     suspend fun mergeExercises(@Body request: com.example.workoutlog_androidstudio.MergeExercisesRequest): com.example.workoutlog_androidstudio.MergeExercisesResponse
+
+    @GET("progress")
+    suspend fun getProgress(): com.example.workoutlog_androidstudio.ProgressResponse
 }
 
 object NetworkClient {

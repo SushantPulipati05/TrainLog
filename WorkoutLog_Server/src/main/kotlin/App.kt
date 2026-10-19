@@ -96,6 +96,41 @@ data class ExerciseResponse(
     val lastLoggedAt: String? = null
 )
 
+/** One exercise on the Progress tab: how often it's been done and where
+ *  its top set is now vs ~3 months ago. Weights are kg; for a bodyweight
+ *  move with nothing added, [topWeightKg] is null and [topReps] is the best. */
+@Serializable
+data class ProgressExerciseResponse(
+    val exerciseId: Int,
+    val name: String,
+    val muscleGroup: String?,
+    val isBodyweight: Boolean,
+    val sessions: Int,
+    val lastDate: String,
+    val topWeightKg: Double?,
+    val topReps: Int,
+    // Latest session's top weight minus the first session's in the last 90
+    // days (or reps, for bodyweight). null with fewer than 2 sessions there.
+    val change3m: Double?
+)
+
+/** A session that beat every earlier one for its exercise. */
+@Serializable
+data class ProgressPrResponse(
+    val exerciseId: Int,
+    val name: String,
+    val weightKg: Double?,
+    val reps: Int,
+    val date: String
+)
+
+/** GET /progress - everything the Progress tab lists, in one request. */
+@Serializable
+data class ProgressResponse(
+    val exercises: List<ProgressExerciseResponse>,
+    val recentPrs: List<ProgressPrResponse>
+)
+
 /** POST /exercises/merge: every one of this user's sets of
  *  [fromExerciseId] becomes [intoExerciseId], and [fromExerciseId] leaves
  *  their exercise list. */
@@ -975,6 +1010,86 @@ fun Application.module() {
             // Returns every *finished* workout, summarized for the home screen's
             // "Previous Workouts" list: duration, total sets, total volume lifted,
             // and the distinct muscle groups trained, most recent first.
+            // The Progress tab: every exercise this user has logged (most
+            // done first) with its latest top set and 3-month change, plus
+            // their most recent personal records. One pass over their sets.
+            get("/progress") {
+                val me = call.userId()
+                val zone = call.userZone()
+                val response = transaction {
+                    val setsByWorkout = finishedSetsByWorkout(me)
+                    if (setsByWorkout.isEmpty()) return@transaction ProgressResponse(emptyList(), emptyList())
+
+                    val startedById = Workouts.selectAll()
+                        .where { (Workouts.userId eq me) and Workouts.endedAt.isNotNull() }
+                        .associate { it[Workouts.id] to it[Workouts.startedAt].toZone(zone) }
+                    val exerciseIds = setsByWorkout.values.flatten().map { it.exerciseId }.distinct()
+                    val names = Exercises.selectAll()
+                        .where { Exercises.id inList exerciseIds }
+                        .associate { it[Exercises.id] to it[Exercises.name] }
+
+                    data class Session(val date: LocalDateTime, val weight: Double?, val reps: Int)
+                    val today = LocalDate.now(zone)
+                    val exercises = ArrayList<ProgressExerciseResponse>()
+                    val prs = ArrayList<ProgressPrResponse>()
+
+                    setsByWorkout.values.flatten()
+                        .filterNot { it.category.equals("Cardio", ignoreCase = true) }
+                        .groupBy { it.exerciseId }
+                        .forEach { (exerciseId, sets) ->
+                            val name = names[exerciseId] ?: return@forEach
+                            val first = sets.first()
+                            val bodyweight = first.equipment.equals("Body Only", ignoreCase = true)
+                            // Each workout's top set: heaviest, then most reps.
+                            val sessions = sets.groupBy { it.workoutId }.mapNotNull { (workoutId, workoutSets) ->
+                                val date = startedById[workoutId] ?: return@mapNotNull null
+                                val top = workoutSets.maxWithOrNull(compareBy({ it.weightKg ?: 0.0 }, { it.reps })) ?: return@mapNotNull null
+                                Session(date, top.weightKg?.takeIf { it > 0.0 }, top.reps)
+                            }.sortedBy { it.date }
+                            if (sessions.isEmpty()) return@forEach
+
+                            // What "better" means: weight, or reps when there's no weight.
+                            fun score(x: Session): Double = x.weight ?: (x.reps / 1000.0)
+                            var best = Double.NEGATIVE_INFINITY
+                            sessions.forEachIndexed { i, session ->
+                                val value = score(session)
+                                if (i > 0 && value > best) {
+                                    prs.add(ProgressPrResponse(exerciseId, name, session.weight, session.reps, session.date.toLocalDate().toString()))
+                                }
+                                if (value > best) best = value
+                            }
+
+                            val latest = sessions.last()
+                            val window = sessions.filter { !it.date.toLocalDate().isBefore(today.minusDays(90)) }
+                            val change = if (window.size >= 2) {
+                                if (latest.weight != null && window.first().weight != null) latest.weight - window.first().weight!!
+                                else if (latest.weight == null && window.first().weight == null) (latest.reps - window.first().reps).toDouble()
+                                else null
+                            } else null
+
+                            exercises.add(
+                                ProgressExerciseResponse(
+                                    exerciseId = exerciseId,
+                                    name = name,
+                                    muscleGroup = first.muscleGroup,
+                                    isBodyweight = bodyweight && latest.weight == null,
+                                    sessions = sessions.size,
+                                    lastDate = latest.date.toLocalDate().toString(),
+                                    topWeightKg = latest.weight,
+                                    topReps = latest.reps,
+                                    change3m = change
+                                )
+                            )
+                        }
+
+                    ProgressResponse(
+                        exercises = exercises.sortedWith(compareByDescending<ProgressExerciseResponse> { it.sessions }.thenByDescending { it.lastDate }),
+                        recentPrs = prs.sortedByDescending { it.date }.take(8)
+                    )
+                }
+                call.respond(response)
+            }
+
             get("/workouts/summary") {
                 val me = call.userId()
                 val zone = call.userZone()

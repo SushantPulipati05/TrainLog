@@ -185,3 +185,13 @@ fun likelyDuplicates(exercise: ExerciseResponse, exercises: List<ExerciseRespons
         }
         .sortedByDescending { it.timesLogged }
 }
+
+/** Whether an exercise matches a search: every typed word starts a word of
+ *  its name or names its muscle (same rules as [searchExercises]). */
+fun matchesExerciseQuery(query: String, name: String, muscleGroup: String?): Boolean {
+    val wanted = exerciseTokens(query)
+    if (wanted.isEmpty()) return true
+    val tokens = exerciseTokens(name)
+    val muscles = muscleWords(muscleGroup)
+    return wanted.all { w -> tokens.any { it.startsWith(w) } || muscles.any { it.startsWith(w) } }
+}

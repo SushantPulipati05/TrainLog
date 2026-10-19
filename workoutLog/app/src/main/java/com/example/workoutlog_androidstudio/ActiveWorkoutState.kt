@@ -127,6 +127,13 @@ object ActiveWorkoutState {
         persist()
     }
 
+    /** Renames the running workout on this phone (the caller tells the server). */
+    fun rename(name: String) {
+        val current = workout ?: return
+        workout = current.copy(workoutName = name)
+        persist()
+    }
+
     fun end() {
         workout = null
         pausedState = false

@@ -48,6 +48,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FitnessCenter
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PlayArrow
@@ -83,7 +84,7 @@ import kotlinx.coroutines.launch
 
 /** The three bottom-nav destinations. Kept as an enum rather than a Boolean
  *  so tabs can keep being added later without renaming anything. */
-private enum class MainTab { HOME, WORKOUTS, PROFILE }
+private enum class MainTab { HOME, WORKOUTS, PROGRESS, PROFILE }
 
 /** Every screen reached via a chevron rather than the bottom tab bar - kept
  *  on their own back stack (see [MainActivity]'s `screenStack`) instead of
@@ -314,6 +315,17 @@ class MainActivity : ComponentActivity() {
                     ) {
                         WorkoutsScreen(
                             onOpenTemplate = { tapped -> push(Screen.TemplateDetail(tapped)) }
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                translationX = if (selectedTab == MainTab.PROGRESS) 0f else size.width * 2
+                            }
+                    ) {
+                        ProgressScreen(
+                            onOpenExercise = { exerciseId, name -> push(Screen.ExerciseHistory(exerciseId, name)) }
                         )
                     }
                     Box(
@@ -624,6 +636,13 @@ private fun FloatingTabBar(
                 icon = Icons.Filled.FitnessCenter,
                 selected = selectedTab == MainTab.WORKOUTS,
                 onClick = { onSelectTab(MainTab.WORKOUTS) },
+                modifier = Modifier.width(slotWidth)
+            )
+            TabBarItem(
+                label = "Progress",
+                icon = Icons.Filled.Insights,
+                selected = selectedTab == MainTab.PROGRESS,
+                onClick = { onSelectTab(MainTab.PROGRESS) },
                 modifier = Modifier.width(slotWidth)
             )
             TabBarItem(
