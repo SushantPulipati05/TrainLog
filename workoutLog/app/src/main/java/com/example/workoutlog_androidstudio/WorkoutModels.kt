@@ -15,8 +15,14 @@ data class WorkoutSummary(
     val tags: List<String>,
     /** Sets logged per muscle group (e.g. CHEST -> 9), cardio excluded -
      *  how Up next tells what a workout was. Empty from an older server. */
-    val muscleSets: Map<String, Int> = emptyMap()
+    val muscleSets: Map<String, Int> = emptyMap(),
+    /** Sets per exercise (cardio excluded) - which parts of each muscle it
+     *  worked decides whether the workout was complete. Empty from an older server. */
+    val exerciseSets: List<ExerciseSetCount> = emptyList()
 )
+
+/** One exercise's sets inside a finished workout. */
+data class ExerciseSetCount(val name: String, val muscleGroup: String?, val sets: Int)
 
 /** One row in an exercise's set table during an active workout. Serializable
  *  so a workout in progress can be saved on the phone (see ActiveWorkoutState). */

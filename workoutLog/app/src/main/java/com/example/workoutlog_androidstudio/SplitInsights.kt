@@ -408,6 +408,10 @@ private fun WorkoutSummary.setCount(): Int = if (totalSets > 0) totalSets else m
 /**
  * How complete each day's training was, 0..1, for the heatmap's shading.
  *
+ * A workout that matched a split day is judged by completeness (most parts
+ * of each of that day's muscles hit - see WorkoutCompleteness.kt) when the
+ * server sends per-exercise sets. Otherwise (no match, or an older server):
+ *
  * Each workout's sets are compared with the user's usual for that kind of
  * workout (Push / Pull / Legs ..., read from its muscles like Up next): the
  * median sets of that type over the last [USUAL_WEEKS] weeks. With fewer
@@ -438,21 +442,37 @@ fun heatmapLevels(
         .filterValues { it.size >= 3 }
         .mapValues { median(it.value) }
 
+    // A workout that matched a split day and has per-exercise data is judged
+    // by completeness instead: did it hit most parts of each of that day's
+    // muscles (see WorkoutCompleteness.kt).
+    val dayMuscles = days.associateWith { musclesForDay(it, history) }
+    val completeByDate = HashMap<LocalDate, Double>()
+
     val ratioByDate = HashMap<LocalDate, Double>()
     classified.forEach { (w, type) ->
         val date = w.localDate() ?: return@forEach
+        val complete = type?.let { t -> workoutCompleteness(w.exerciseSets, targetsForDay(t, dayMuscles[t].orEmpty())) }
+        if (complete != null) {
+            completeByDate[date] = maxOf(completeByDate[date] ?: 0.0, complete)
+            return@forEach
+        }
         val sets = w.setCount()
         val usual = type?.let { usualByType[it] } ?: usualOverall
         val ratio = if (sets == 0) 0.1 else sets / usual.coerceAtLeast(1.0)
         ratioByDate[date] = (ratioByDate[date] ?: 0.0) + ratio
     }
-    return ratioByDate.mapValues { (_, r) ->
+    val byRatio = ratioByDate.mapValues { (_, r) ->
         when {
             r >= 0.9 -> 1f
             r >= 0.6 -> 0.75f
             r >= 0.3 -> 0.5f
             else -> 0.3f
         }
+    }
+    val byCompleteness = completeByDate.mapValues { (_, c) -> completenessLevel(c) }
+    // Two workouts on one day judged differently: the better shade wins.
+    return (byRatio.keys + byCompleteness.keys).associateWith { d ->
+        maxOf(byRatio[d] ?: 0f, byCompleteness[d] ?: 0f)
     }
 }
 

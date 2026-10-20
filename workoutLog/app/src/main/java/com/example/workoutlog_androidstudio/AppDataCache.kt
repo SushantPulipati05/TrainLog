@@ -77,7 +77,8 @@ object AppDataCache {
         exerciseCount = response.exerciseCount,
         volumeLabel = response.volumeLabel,
         tags = response.tags,
-        muscleSets = response.muscleSets
+        muscleSets = response.muscleSets,
+        exerciseSets = response.exerciseSets.map { ExerciseSetCount(it.name, it.muscleGroup, it.sets) }
     )
 
     suspend fun loadWorkoutSummaries(force: Boolean = false): List<WorkoutSummary> {

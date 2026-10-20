@@ -275,7 +275,19 @@ data class WorkoutSummaryResponse(
     // Sets per muscle group, e.g. {"CHEST": 9, "TRICEPS": 6} - cardio
     // excluded. The app uses it to tell what kind of workout this was
     // (push / pull / legs ...) from what was trained, not from its name.
-    val muscleSets: Map<String, Int> = emptyMap()
+    val muscleSets: Map<String, Int> = emptyMap(),
+    // Sets per exercise, in the order first logged - cardio excluded. The app
+    // reads which part of each muscle an exercise works (incline press ->
+    // upper chest, ...) to tell whether a workout was complete.
+    val exerciseSets: List<ExerciseSetCountResponse> = emptyList()
+)
+
+/** One exercise's set count inside a workout summary. */
+@Serializable
+data class ExerciseSetCountResponse(
+    val name: String,
+    val muscleGroup: String? = null,
+    val sets: Int
 )
 
 /** The athlete profile screen's full payload - stored fields (name, age,
@@ -1084,6 +1096,16 @@ fun Application.module() {
                                 .mapNotNull { it.muscleGroup?.trim()?.uppercase()?.ifEmpty { null } }
                                 .groupingBy { it }
                                 .eachCount()
+                            val exerciseSets = sets
+                                .filterNot { it.category.equals("Cardio", ignoreCase = true) }
+                                .groupBy { it.exerciseId }
+                                .map { (_, list) ->
+                                    ExerciseSetCountResponse(
+                                        name = list.first().exerciseName,
+                                        muscleGroup = list.first().muscleGroup?.trim()?.uppercase(),
+                                        sets = list.size
+                                    )
+                                }
 
                             val minutes = Duration.between(startedAt, endedAt).toMinutes()
                             val durationLabel = if (minutes >= 60) {
@@ -1109,7 +1131,8 @@ fun Application.module() {
                                 exerciseCount = distinctExercises.size,
                                 volumeLabel = "%,.0f KG".format(totalVolume),
                                 tags = tags,
-                                muscleSets = muscleSets
+                                muscleSets = muscleSets,
+                                exerciseSets = exerciseSets
                             )
                         }
                 }
@@ -2466,7 +2489,8 @@ private data class SetWithExercise(
     val weightKg: Double?,
     val muscleGroup: String?,
     val equipment: String?,
-    val category: String? = null
+    val category: String? = null,
+    val exerciseName: String = ""
 )
 
 /** Every set of this user's FINISHED workouts, joined with its exercise, in
@@ -2485,7 +2509,8 @@ private fun finishedSetsByWorkout(me: Int): Map<Int, List<SetWithExercise>> =
                 weightKg = row[SetEntries.weightKg],
                 muscleGroup = row[Exercises.muscleGroup],
                 equipment = row[Exercises.equipment],
-                category = row[Exercises.category]
+                category = row[Exercises.category],
+                exerciseName = row[Exercises.name]
             )
         }
         .groupBy { it.workoutId }
