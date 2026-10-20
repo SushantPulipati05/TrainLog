@@ -1,4 +1,11 @@
 <resources>
     <string name="app_name">Trainlog</string>
-    <string name="heatmap_widget_description">Two-month workout consistency heatmap</string>
+    <string name="heatmap_widget_description">Last month and this month at a glance</string>
+    <string name="up_next_widget_description">What to train next, with a Start button</string>
+    <string name="up_next_bar_widget_description">Up next in one slim bar</string>
+    <string name="streak_widget_description">Weeks on target in a row</string>
+    <string name="widget_heatmap_label">Consistency</string>
+    <string name="widget_up_next_label">Up next</string>
+    <string name="widget_up_next_bar_label">Up next bar</string>
+    <string name="widget_streak_label">Streak</string>
 </resources>

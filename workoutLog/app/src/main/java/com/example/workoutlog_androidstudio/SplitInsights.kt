@@ -579,3 +579,8 @@ fun recentlyTrainedMuscles(workouts: List<WorkoutSummary>, today: LocalDate = Lo
     }
     return result
 }
+
+/** The muscles a split day trains (from its name, or learned from past
+ *  workouts with that name) - lit up on the Up next widget. */
+fun musclesForSplitDay(day: String, workouts: List<WorkoutSummary>): Set<String> =
+    musclesForDay(day, chronological(workouts))

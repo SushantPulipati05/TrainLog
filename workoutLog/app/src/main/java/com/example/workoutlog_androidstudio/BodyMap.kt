@@ -26,6 +26,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.vector.PathParser
@@ -323,4 +324,34 @@ fun MuscleCountChip(muscle: String, sets: Int, modifier: Modifier = Modifier) {
             color = AppAccent
         )
     }
+}
+
+// ---------------------------------------------------------------------------
+// Bitmap version - for home-screen widgets, which can't run Compose drawing
+// ---------------------------------------------------------------------------
+
+private val FRONT_ONLY = setOf(BodyRegion.CHEST, BodyRegion.BICEPS, BodyRegion.ABS, BodyRegion.QUADS)
+private val BACK_ONLY = setOf(
+    BodyRegion.TRAPS, BodyRegion.UPPER_BACK, BodyRegion.LATS, BodyRegion.TRICEPS,
+    BodyRegion.LOWER_BACK, BodyRegion.GLUTES, BodyRegion.HAMSTRINGS
+)
+
+/** Front or back - whichever shows more of [regions] (a pull day shows the back). */
+fun bestViewFor(regions: Set<BodyRegion>): BodyView =
+    if (regions.count { it in BACK_ONLY } > regions.count { it in FRONT_ONLY }) BodyView.BACK else BodyView.FRONT
+
+/** One figure drawn into a bitmap [widthPx] wide (2.2x as tall). */
+fun bodyBitmap(view: BodyView, level: (BodyRegion) -> Float, widthPx: Int): android.graphics.Bitmap {
+    val w = widthPx.coerceAtLeast(8)
+    val bitmap = android.graphics.Bitmap.createBitmap(w, (w * 2.2f).toInt(), android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(bitmap)
+    canvas.scale(w / 100f, w / 100f)
+    val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    val shapes = if (view == BodyView.FRONT) parsedFront else parsedBack
+    shapes.forEach { s ->
+        val lvl = if (s.region in NEUTRAL_REGIONS) 0f else level(s.region)
+        paint.color = bodyFill(lvl).toArgb()
+        canvas.drawPath(s.path.asAndroidPath(), paint)
+    }
+    return bitmap
 }

@@ -535,6 +535,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Leaving the app: redraw the home-screen widgets, so a workout that
+     *  ended or was deleted, or a changed plan, shows there right away. */
+    override fun onStop() {
+        super.onStop()
+        TrainLogWidgets.requestRefresh(this)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

@@ -46,11 +46,13 @@
                 android:value="Shows an ongoing notification for the workout currently being logged" />
         </service>
 
-        <!-- The two-month consistency heatmap, addable to the phone's home
-             screen. Android sends it APPWIDGET_UPDATE broadcasts from outside
-             the app's own process, so this receiver has to be exported. -->
+        <!-- Home-screen widgets (see WorkoutHeatmapWidget.kt): Consistency,
+             Up next, Up next bar and Streak. Android sends them APPWIDGET_UPDATE
+             broadcasts from outside the app's own process, so these receivers
+             have to be exported. -->
         <receiver
             android:name=".WorkoutHeatmapWidgetReceiver"
+            android:label="@string/widget_heatmap_label"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -58,6 +60,39 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/workout_heatmap_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".UpNextWidgetReceiver"
+            android:label="@string/widget_up_next_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/up_next_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".UpNextBarWidgetReceiver"
+            android:label="@string/widget_up_next_bar_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/up_next_bar_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".StreakWidgetReceiver"
+            android:label="@string/widget_streak_label"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/streak_widget_info" />
         </receiver>
         <!-- Gym reminders (Profile -> Training plan): fires the reminder, handles
              "Skip today", and re-schedules after a reboot, clock or time zone
