@@ -301,9 +301,14 @@ private fun NoUpNext(context: Context) {
 @Composable
 private fun UpNextSquare(info: UpNextInfo) {
     val context = LocalContext.current
-    val height = LocalSize.current.height
-    // Figure height follows the widget, so it fills a taller 2x3 too.
-    val figureWidth = ((height.value - 24 - 14 - 34 - 12) / 2.2f).coerceIn(22f, 46f).dp
+    val size = LocalSize.current
+    // The figure takes all the height between the label and Start (and at
+    // most ~40% of the width), so a tall widget isn't left half empty.
+    val reserved = WIDGET_PAD_V.value * 2 + 12f + 6f + (if (info.resting) 0f else 8f + 32f)
+    val byHeight = (size.height.value - reserved) / 2.2f
+    val byWidth = (size.width.value - WIDGET_PAD_H.value * 2) * 0.4f
+    val figureWidth = minOf(byHeight, byWidth).coerceIn(20f, 90f).dp
+    val titleSize = if (figureWidth.value >= 45f) 21f else 18f
     Column(modifier = GlanceModifier.fillMaxSize()) {
         SmallLabel("UP NEXT")
         Spacer(modifier = GlanceModifier.height(6.dp))
@@ -311,7 +316,7 @@ private fun UpNextSquare(info: UpNextInfo) {
             Figure(info.view, info.level, figureWidth)
             Spacer(modifier = GlanceModifier.width(9.dp))
             Column {
-                Text(text = info.title, style = text(AppTextPrimary, 18f, bold = true), maxLines = 2)
+                Text(text = info.title, style = text(AppTextPrimary, titleSize, bold = true), maxLines = 2)
                 Spacer(modifier = GlanceModifier.height(3.dp))
                 Text(text = info.detail, style = text(AppTextSecondary, 10.5f), maxLines = if (info.resting) 4 else 2)
             }
@@ -349,7 +354,7 @@ class UpNextBarWidgetReceiver : GlanceAppWidgetReceiver() {
 @Composable
 private fun UpNextBar(info: UpNextInfo?, context: Context) {
     val height = LocalSize.current.height
-    val figureWidth = ((height.value - 2 * 12f) / 2.2f).coerceIn(14f, 30f).dp
+    val figureWidth = ((height.value - 2 * 8f) / 2.2f).coerceIn(14f, 40f).dp
     Row(modifier = GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         if (info != null) {
             Figure(info.view, info.level, figureWidth)
@@ -405,18 +410,26 @@ class WorkoutHeatmapWidget : GlanceAppWidget() {
                     val size = LocalSize.current
                     val gridW = size.width - WIDGET_PAD_H * 2
                     val gridH = size.height - WIDGET_PAD_V * 2 - 20.dp
+                    // Drawn to fit the space, then trimmed to what it used.
+                    val grid = twoMonthBitmap(ctx, ctx.px(gridW), ctx.px(gridH), levels, missed, today)
+                    val usedH = (grid.height / ctx.resources.displayMetrics.density).dp
                     Column(modifier = GlanceModifier.fillMaxSize()) {
                         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Box(modifier = GlanceModifier.defaultWeight()) { SmallLabel("CONSISTENCY") }
                             Text(text = "$thisMonth", style = text(AppTextPrimary, 11f, bold = true))
                             Text(text = " this month", style = text(AppTextSecondary, 11f))
                         }
-                        Spacer(modifier = GlanceModifier.height(6.dp))
-                        Image(
-                            provider = ImageProvider(twoMonthBitmap(ctx, ctx.px(gridW), ctx.px(gridH), levels, missed, today)),
-                            contentDescription = "Workouts last month and this month",
-                            modifier = GlanceModifier.size(gridW, gridH)
-                        )
+                        // Any height left over goes evenly above and below the grid.
+                        Box(
+                            modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                provider = ImageProvider(grid),
+                                contentDescription = "Workouts last month and this month",
+                                modifier = GlanceModifier.size(gridW, usedH)
+                            )
+                        }
                     }
                 }
             }
@@ -473,10 +486,15 @@ class StreakWidget : GlanceAppWidget() {
                 } else {
                     val size = LocalSize.current
                     val stripW = size.width - WIDGET_PAD_H * 2
-                    // Each week is one column of 7 days; as many weeks as fit (up to 16).
-                    val weekCol = 10.dp
-                    val weeks = ((stripW.value + 2.5f) / weekCol.value).toInt().coerceIn(4, 16)
-                    val stripH = weekCol * 7 - 2.5.dp
+                    // The grid fills everything under the number: cell size
+                    // from the height left, then as many weeks (columns) as
+                    // fit the width (4-16), stretched to fill it exactly.
+                    val gap = 2.5f
+                    val spaceH = (size.height - WIDGET_PAD_V * 2 - 56.dp).value.coerceAtLeast(30f)
+                    val cellByHeight = (spaceH - 6 * gap) / 7f
+                    val weeks = ((stripW.value + gap) / (cellByHeight + gap)).toInt().coerceIn(4, 16)
+                    val cell = minOf(cellByHeight, (stripW.value - (weeks - 1) * gap) / weeks)
+                    val stripH = (cell * 7 + 6 * gap).dp
                     Column(modifier = GlanceModifier.fillMaxSize()) {
                         SmallLabel("ON TARGET")
                         Spacer(modifier = GlanceModifier.height(4.dp))
@@ -562,16 +580,20 @@ private fun twoMonthBitmap(
     val lettersH = 11f * d
     val legendH = 14f * d
     val monthW = (w - monthGap) / 2f
-    val gridH = h - nameH - lettersH - legendH - 4f * d
-    val cell = minOf((monthW - 6 * gap) / 7f, (gridH - 5 * gap) / 6f).coerceAtLeast(2f)
+    val months = listOf(YearMonth.from(today).minusMonths(1), YearMonth.from(today))
+    // Only as many rows as the months need (5 or 6), so no empty row is reserved.
+    val rows = months.maxOf { m -> (m.atDay(1).dayOfWeek.value - 1 + m.lengthOfMonth() + 6) / 7 }
+    val legendGap = 8f * d
+    val gridH = h - nameH - lettersH - legendGap - legendH
+    val cell = minOf((monthW - 6 * gap) / 7f, (gridH - (rows - 1) * gap) / rows).coerceAtLeast(2f)
     val radius = cell * 0.22f
     val letters = listOf("M", "T", "W", "T", "F", "S", "S")
 
-    // On a short widget the cells are height-bound; the months then sit
-    // side by side from the left instead of spreading apart.
+    // Last month from the left edge, this month to the right edge - like
+    // the mockup's two columns - whatever the widget's width.
     val usedMonthW = 7 * cell + 6 * gap
-    listOf(YearMonth.from(today).minusMonths(1), YearMonth.from(today)).forEachIndexed { i, month ->
-        val left = i * (usedMonthW + monthGap)
+    months.forEachIndexed { i, month ->
+        val left = if (i == 0) 0f else w - usedMonthW
         textPaint.color = AppTextSecondary.toArgb()
         textPaint.isFakeBoldText = true
         textPaint.textSize = 9f * d
@@ -595,8 +617,9 @@ private fun twoMonthBitmap(
         }
     }
 
-    // Legend: Less [] [] [] [] [] More   [ ] Missed
-    val ly = h - legendH / 2f
+    // Legend right under the grid: Less [] [] [] [] [] More   [ ] Missed
+    val gridBottom = nameH + lettersH + rows * cell + (rows - 1) * gap
+    val ly = gridBottom + legendGap + legendH / 2f
     val sq = 8f * d
     var x = 0f
     textPaint.color = AppTextMuted.toArgb()
@@ -621,7 +644,9 @@ private fun twoMonthBitmap(
     x += 8f * d
     square(null, outline = true)
     word("Missed")
-    return bitmap
+    // Trim to what was drawn, so the widget doesn't reserve empty space.
+    val usedH = (gridBottom + legendGap + legendH).toInt().coerceIn(1, bitmap.height)
+    return if (usedH < bitmap.height) Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, usedH) else bitmap
 }
 
 /** The last [weeks] weeks as columns (Monday at the top), ending this week. */
