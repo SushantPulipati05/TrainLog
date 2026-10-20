@@ -60,11 +60,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.glance.appwidget.updateAll
-import com.example.workoutlog_androidstudio.api.CompleteWorkoutRequest
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.NewExerciseRequest
-import com.example.workoutlog_androidstudio.api.NewSetRequest
 import com.example.workoutlog_androidstudio.api.UpdateWorkoutRequest
 import com.example.workoutlog_androidstudio.api.WorkoutResponse
 import kotlinx.coroutines.delay
@@ -233,11 +231,16 @@ fun ActiveWorkoutScreen(
                 isSavingName = true
                 coroutineScope.launch {
                     if (chosen != workout.workoutName) {
-                        try {
-                            NetworkClient.workoutApi.updateWorkout(workout.id, UpdateWorkoutRequest(workoutName = chosen))
-                        } catch (e: Exception) {
-                            // The workout is saved either way - it just keeps its old name.
-                            Log.e("EndWorkout", "Couldn't rename workout ${workout.id}", e)
+                        if (PendingWorkoutStore.has(workout.id)) {
+                            // Not uploaded yet: the name goes up with it.
+                            PendingWorkoutStore.rename(workout.id, chosen)
+                        } else {
+                            try {
+                                NetworkClient.workoutApi.updateWorkout(workout.id, UpdateWorkoutRequest(workoutName = chosen))
+                            } catch (e: Exception) {
+                                // The workout is saved either way - it just keeps its old name.
+                                Log.e("EndWorkout", "Couldn't rename workout ${workout.id}", e)
+                            }
                         }
                     }
                     WorkoutNamer.remember(context, chosen)
@@ -510,21 +513,36 @@ fun ActiveWorkoutScreen(
                 isEndingWorkout = true
                 endError = null
                 coroutineScope.launch {
+                    // 1. Saved on the phone first - from here on the workout
+                    //    can't be lost, signal or not.
                     val saved = try {
-                        syncWorkoutToServer(workout.id, exercises, notesText)
+                        PendingWorkoutStore.add(
+                            context,
+                            pendingWorkoutFrom(
+                                workoutId = workout.id,
+                                name = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName,
+                                exercises = exercises,
+                                notes = notesText,
+                                elapsedSeconds = ActiveWorkoutState.elapsedSeconds,
+                                startedAtMillis = ActiveWorkoutState.effectiveStartMillis
+                            )
+                        )
                         true
                     } catch (e: Exception) {
-                        Log.e("EndWorkout", "Failed to sync workout ${workout.id}", e)
-                        // Recovered from (the workout stays on the phone to
-                        // retry), but worth knowing about if it keeps happening.
+                        Log.e("EndWorkout", "Couldn't save workout ${workout.id} on the phone", e)
                         CrashReporting.record(e)
                         false
                     }
                     if (saved) {
-                        try {
-                            WorkoutHeatmapWidget().updateAll(context)
-                        } catch (e: Exception) {
-                            Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
+                        // 2. Upload now if there's signal (a few seconds at most);
+                        //    otherwise it's queued and goes up on its own later.
+                        val uploaded = OfflineSync.syncNow(context, workout.id)
+                        if (uploaded) {
+                            try {
+                                WorkoutHeatmapWidget().updateAll(context)
+                            } catch (e: Exception) {
+                                Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
+                            }
                         }
                         WorkoutNamer.init(context)
                         if (WorkoutNamer.enabled && !namedByUser) {
@@ -535,8 +553,9 @@ fun ActiveWorkoutScreen(
                             isEndingWorkout = false
                         } else {
                             // Make sure a name typed during the workout reached
-                            // the server (its first try may have failed).
-                            if (namedByUser || chosenDay != null) {
+                            // the server (its first try may have failed). A
+                            // queued workout carries its name with it.
+                            if ((namedByUser || chosenDay != null) && !PendingWorkoutStore.has(workout.id)) {
                                 runCatching {
                                     NetworkClient.workoutApi.updateWorkout(
                                         workout.id,
@@ -551,7 +570,7 @@ fun ActiveWorkoutScreen(
                         }
                     } else {
                         isEndingWorkout = false
-                        endError = "Couldn't save your workout. Check your connection and tap End Workout again - your sets are safe on this phone."
+                        endError = "Couldn't save your workout on this phone. Tap End Workout again - your sets are still here."
                     }
                 }
             },
@@ -610,34 +629,6 @@ private fun logWorkoutData(
         appendLine("===== END WORKOUT SUMMARY =====")
     }
     Log.d("WorkoutData", report)
-}
-
-/** Sends the whole finished workout - every set with reps filled in, plus
- *  the notes - in ONE request that the server saves all-or-nothing. Safe to
- *  retry: sending it again replaces the sets rather than adding duplicates,
- *  so a failed attempt on bad gym signal can simply be tried again. */
-private suspend fun syncWorkoutToServer(
-    workoutId: Int,
-    exercises: List<ActiveExercise>,
-    notes: String
-) {
-    val sets = exercises.flatMap { exercise ->
-        exercise.sets.mapNotNull { set ->
-            val reps = set.reps.toIntOrNull() ?: return@mapNotNull null
-            NewSetRequest(
-                exerciseId = exercise.exerciseId,
-                setNumber = set.setNumber,
-                reps = reps,
-                weightKg = set.kg.toDoubleOrNull(),
-                loggedAtSeconds = set.loggedAtSeconds
-            )
-        }
-    }
-
-    NetworkClient.workoutApi.completeWorkout(
-        workoutId = workoutId,
-        request = CompleteWorkoutRequest(notes = notes.ifBlank { null }, sets = sets)
-    )
 }
 
 @Composable

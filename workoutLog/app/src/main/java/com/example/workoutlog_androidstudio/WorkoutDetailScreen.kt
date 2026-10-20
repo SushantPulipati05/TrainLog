@@ -156,7 +156,15 @@ fun WorkoutDetailScreen(
         }
         fromSets.ifEmpty { workout.muscleSets.mapKeys { it.key.trim().uppercase() } }
     }
-    val setsOnMap = remember(muscleCounts) { setsByRegion(muscleCounts) }
+    // Per exercise, so each part of a muscle shows on its own (incline
+    // press -> upper chest, laterals -> side delts); per muscle as a fallback.
+    val exerciseCounts: List<ExerciseSetCount> = remember(groupedSets, workout) {
+        groupedSets.mapNotNull { (exercise, sets) -> exercise?.let { ExerciseSetCount(it.name, it.muscleGroup, sets.size) } }
+            .ifEmpty { workout.exerciseSets }
+    }
+    val setsOnMap = remember(exerciseCounts, muscleCounts) {
+        if (exerciseCounts.isNotEmpty()) creditByRegion(exerciseCounts) else setsByRegion(muscleCounts)
+    }
     val mapShading = remember(setsOnMap) { workoutShading(setsOnMap) }
 
     // ---- Edit mode state ----
@@ -189,6 +197,8 @@ fun WorkoutDetailScreen(
     }
 
     fun startEditing() {
+        // Still waiting to upload - the server doesn't have its sets yet.
+        if (PendingWorkoutStore.has(workout.id)) return
         editedWorkoutName = displayedTitle
         editedNotes = detail?.notes.orEmpty()
         val built = groupedSets.map { (exercise, sets) ->
@@ -554,11 +564,19 @@ fun WorkoutDetailScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     color = AppAccent
                 )
+                if (PendingWorkoutStore.has(workout.id)) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Saved on this phone. It uploads by itself when you're back online - its sets and editing show up here after that.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AppTextSecondary
+                    )
+                }
 
                 // Body map: what this workout trained, shaded by sets - straight
                 // on the screen (no card), with the set counts underneath.
                 val mappedMuscles = muscleCounts
-                    .filter { (m, n) -> n > 0 && regionOfMuscle(m) != null }
+                    .filter { (m, n) -> n > 0 && hasBodyRegion(m) }
                     .entries.sortedByDescending { it.value }
                 if (!isEditing && setsOnMap.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(24.dp))

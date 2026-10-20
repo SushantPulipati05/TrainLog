@@ -118,6 +118,12 @@ class MainActivity : ComponentActivity() {
         // The training plan + gym reminder (Profile -> Training plan). Re-arming
         // here is cheap and makes sure the next reminder is always scheduled.
         TrainingPlanStore.init(this)
+        // Your data as saved on the phone (shown instantly, works offline),
+        // and any finished workout still waiting to upload - sent now if
+        // there's signal, otherwise as soon as there is.
+        AppDataCache.init(this)
+        BodyFigureStore.init(this)
+        if (PendingWorkoutStore.mine.isNotEmpty()) OfflineSync.schedule(this)
         WorkoutNamer.init(this)
         GymReminderScheduler.reschedule(this)
         enableEdgeToEdge()

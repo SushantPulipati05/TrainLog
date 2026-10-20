@@ -101,6 +101,9 @@ private class WidgetData(val workouts: List<WorkoutSummary>, val plan: TrainingP
  *  couldn't load (offline, or signed out). */
 private suspend fun loadWidgetData(context: Context): WidgetData? {
     TrainingPlanStore.init(context)
+    // The saved copy on the phone, so the widgets work offline too.
+    AppDataCache.init(context)
+    BodyFigureStore.init(context)
     val workouts = try {
         withTimeoutOrNull(8_000) { AppDataCache.loadWorkoutSummaries() }
     } catch (e: Exception) {
@@ -230,7 +233,7 @@ private fun upNextInfo(data: WidgetData, today: LocalDate = LocalDate.now()): Up
     if (upNext.recovering) {
         // Rest day: show what's still recovering instead.
         val recent = recentlyTrainedMuscles(data.workouts, today)
-        val regions = recent.keys.mapNotNull { regionOfMuscle(it) }.toSet()
+        val regions = recent.keys.flatMap { regionsOfMuscle(it) }.toSet()
         return UpNextInfo(
             title = "Rest",
             label = label,
@@ -242,7 +245,7 @@ private fun upNextInfo(data: WidgetData, today: LocalDate = LocalDate.now()): Up
         )
     }
     val muscles = musclesForSplitDay(label, data.workouts)
-    val regions = muscles.mapNotNull { regionOfMuscle(it) }.toSet()
+    val regions = muscles.flatMap { regionsOfMuscle(it) }.toSet()
     val lastDone = explainUpNext(data.workouts, data.plan, today)?.days?.firstOrNull { it.day == label }?.lastDone
     val rested = muscles.sortedBy { MUSCLE_ORDER.indexOf(it).let { i -> if (i < 0) 99 else i } }
         .take(2)
@@ -488,11 +491,11 @@ class StreakWidget : GlanceAppWidget() {
                     val stripW = size.width - WIDGET_PAD_H * 2
                     // The grid fills everything under the number: cell size
                     // from the height left, then as many weeks (columns) as
-                    // fit the width (4-16), stretched to fill it exactly.
+                    // fit the width (4-26), stretched to fill it exactly.
                     val gap = 2.5f
                     val spaceH = (size.height - WIDGET_PAD_V * 2 - 56.dp).value.coerceAtLeast(30f)
                     val cellByHeight = (spaceH - 6 * gap) / 7f
-                    val weeks = ((stripW.value + gap) / (cellByHeight + gap)).toInt().coerceIn(4, 16)
+                    val weeks = ((stripW.value + gap) / (cellByHeight + gap)).toInt().coerceIn(4, 26)
                     val cell = minOf(cellByHeight, (stripW.value - (weeks - 1) * gap) / weeks)
                     val stripH = (cell * 7 + 6 * gap).dp
                     Column(modifier = GlanceModifier.fillMaxSize()) {

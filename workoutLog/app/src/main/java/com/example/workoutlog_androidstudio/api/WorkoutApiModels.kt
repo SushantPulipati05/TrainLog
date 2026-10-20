@@ -61,6 +61,8 @@ data class NewSetRequest(
     val loggedAtSeconds: Int? = null
 )
 
+
+
 /** What one logged set looks like coming back from the backend. */
 @Serializable
 data class SetEntryResponse(
@@ -112,7 +114,8 @@ data class UpdateSetRequest(
 @Serializable
 data class CompleteWorkoutRequest(
     val notes: String? = null,
-    val sets: List<NewSetRequest>
+    val sets: List<NewSetRequest>,
+    val endedAtMillis: Long? = null
 )
 
 @Serializable

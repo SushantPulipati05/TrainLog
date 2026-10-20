@@ -410,6 +410,11 @@ fun ProfileScreen(
 
                         Spacer(modifier = Modifier.height(16.dp))
 
+                        // Female or male body map figure (only changes the drawing).
+                        BodyFigureSettingRow()
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
                         AccountSection()
 
                         Spacer(modifier = Modifier.height(14.dp))

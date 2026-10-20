@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp.logging.interceptor)
     implementation(libs.androidx.glance.appwidget)
+    // Uploads workouts saved offline once the phone is back online.
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.crashlytics)

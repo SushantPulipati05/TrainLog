@@ -239,7 +239,11 @@ data class UpdateWorkoutRequest(
 @Serializable
 data class CompleteWorkoutRequest(
     val notes: String? = null,
-    val sets: List<NewSetRequest>
+    val sets: List<NewSetRequest>,
+    // When the user actually tapped End Workout (epoch millis). A workout
+    // saved offline is uploaded later, so "now" on the server would stretch
+    // its duration; null (older apps) = now.
+    val endedAtMillis: Long? = null
 )
 
 /** What the app sends to edit one already-logged set's reps/weight. */
@@ -1602,7 +1606,13 @@ fun Application.module() {
                         }
                     }
 
-                    val endedAt = workoutRow[Workouts.endedAt] ?: now
+                    // The phone's end time when it's believable (after the start,
+                    // not in the future); otherwise now.
+                    val startedAtUtc = workoutRow[Workouts.startedAt]
+                    val claimedEnd = request.endedAtMillis?.let {
+                        LocalDateTime.ofEpochSecond(it / 1000, 0, ZoneOffset.UTC)
+                    }?.takeIf { it.isAfter(startedAtUtc) && !it.isAfter(now.plusMinutes(5)) }
+                    val endedAt = workoutRow[Workouts.endedAt] ?: claimedEnd ?: now
                     val notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }?.take(500)
                     Workouts.update({ (Workouts.id eq workoutId) and (Workouts.userId eq me) }) {
                         it[Workouts.endedAt] = endedAt
