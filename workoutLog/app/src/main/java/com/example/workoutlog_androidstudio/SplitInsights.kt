@@ -554,3 +554,28 @@ fun findPreviousWorkoutForMuscles(
     val previous = classifyHistory(history, days).lastOrNull { it.second == day }?.first ?: return null
     return day to previous
 }
+
+/**
+ * Muscles trained hard in the last [RECOVERY_DAYS] days -> days since
+ * (0 = today, 1 = yesterday). Same "hard" rule as Up next (at least
+ * [TRAINED_SHARE] of a workout's sets), so the Recovery body map agrees
+ * with it. ABDOMINALS is kept here (it has a shape on the map) but, like
+ * Up next, doesn't count towards a workout's total.
+ */
+fun recentlyTrainedMuscles(workouts: List<WorkoutSummary>, today: LocalDate = LocalDate.now()): Map<String, Long> {
+    val result = HashMap<String, Long>()
+    workouts.forEach { w ->
+        val date = w.localDate() ?: return@forEach
+        val days = ChronoUnit.DAYS.between(date, today)
+        if (days < 0 || days >= RECOVERY_DAYS) return@forEach
+        val total = w.muscleWork().values.sum().toDouble()
+        if (total <= 0) return@forEach
+        val all = w.muscleSets.ifEmpty { w.tags.associateWith { 1 } }
+            .mapKeys { it.key.trim().uppercase() }
+            .filterValues { it > 0 }
+        all.forEach { (muscle, sets) ->
+            if (sets / total >= TRAINED_SHARE) result[muscle] = minOf(result[muscle] ?: days, days)
+        }
+    }
+    return result
+}

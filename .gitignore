@@ -73,3 +73,6 @@ desktop.ini
 
 # ---- Logs ----
 *.log
+
+# ---- Design mockups / files from Claude (kept locally, not in the repo) ----
+/Claude outputs/

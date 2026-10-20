@@ -146,6 +146,19 @@ fun WorkoutDetailScreen(
             ?: emptyList()
     }
 
+    // Sets per muscle for the body map - from the logged sets (so a saved
+    // edit shows straight away), or the summary's counts while they load.
+    val muscleCounts: Map<String, Int> = remember(groupedSets, workout) {
+        val fromSets = HashMap<String, Int>()
+        groupedSets.forEach { (exercise, sets) ->
+            val muscle = exercise?.muscleGroup?.trim()?.uppercase()
+            if (!muscle.isNullOrEmpty()) fromSets[muscle] = (fromSets[muscle] ?: 0) + sets.size
+        }
+        fromSets.ifEmpty { workout.muscleSets.mapKeys { it.key.trim().uppercase() } }
+    }
+    val setsOnMap = remember(muscleCounts) { setsByRegion(muscleCounts) }
+    val mapShading = remember(setsOnMap) { workoutShading(setsOnMap) }
+
     // ---- Edit mode state ----
     var isEditing by remember { mutableStateOf(false) }
     var isSaving by remember { mutableStateOf(false) }
@@ -542,7 +555,25 @@ fun WorkoutDetailScreen(
                     color = AppAccent
                 )
 
-                if (workout.tags.isNotEmpty()) {
+                // Body map: what this workout trained, shaded by sets - straight
+                // on the screen (no card), with the set counts underneath.
+                val mappedMuscles = muscleCounts
+                    .filter { (m, n) -> n > 0 && regionOfMuscle(m) != null }
+                    .entries.sortedByDescending { it.value }
+                if (!isEditing && setsOnMap.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    BodyMapPair(level = mapShading)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    BodyMapLegend(start = "Fewer sets", end = "More", levels = listOf(0.3f, 0.65f, 1f))
+                    Spacer(modifier = Modifier.height(14.dp))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        mappedMuscles.forEach { (muscle, sets) -> MuscleCountChip(muscle = muscle, sets = sets) }
+                    }
+                } else if (workout.tags.isNotEmpty()) {
                     Spacer(modifier = Modifier.height(12.dp))
                     // FlowRow wraps extra tags onto the next line instead of
                     // squeezing the last one into a tall, one-letter-wide chip.

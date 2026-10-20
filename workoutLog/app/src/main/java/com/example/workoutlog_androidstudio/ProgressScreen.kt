@@ -191,6 +191,15 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
                 }
             }
     }
+    // Recovery body map: what's still recovering from the last two days,
+    // and why Up next picked what it did.
+    val recent = remember(summaries) { recentlyTrainedMuscles(summaries.orEmpty()) }
+    val recoveryLevel = remember(recent) { recoveryShading(recent) }
+    val upNext = remember(summaries, TrainingPlanStore.plan) {
+        if ((TrainingPlanStore.plan?.orderedDays().orEmpty().distinct().size) >= 2)
+            computeUpNext(summaries.orEmpty(), TrainingPlanStore.plan) else null
+    }
+
     // At most 3, form check-ins first (the server sends them in that order).
     val insights = remember(progress, dismissTick) {
         progress?.insights.orEmpty().filterNot { DismissedInsights.isHidden(context, it) }.take(3)
@@ -266,6 +275,38 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
             return@LazyColumn
         }
 
+        // ---- Recovery: the body map, right on the screen (no card). Tap a
+        // muscle to filter Your exercises to its group. Hidden while searching.
+        if (query.isBlank() && summaries != null) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    SectionLabel("RECOVERY", modifier = Modifier.weight(1f))
+                    Text(
+                        text = "tap a muscle to filter",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AppTextMuted,
+                        modifier = Modifier.padding(top = 24.dp, bottom = 10.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(6.dp))
+                BodyMapPair(
+                    level = recoveryLevel,
+                    outlined = regionsInGroup(group),
+                    onTap = { region ->
+                        val tapped = progressGroupOf(region)
+                        if (tapped != null) group = if (group == tapped) null else tapped
+                    }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                BodyMapLegend(start = "Ready", end = "Recovering", levels = listOf(0f, RECOVERY_YESTERDAY_LEVEL, 1f))
+                Spacer(modifier = Modifier.height(12.dp))
+                RecoveryLine(recent = recent, upNext = upNext)
+            }
+        }
+
         // ---- Recent PRs (hidden while searching / filtering) ----
         val prs = progress?.recentPrs.orEmpty()
         if (prs.isNotEmpty() && query.isBlank() && group == null) {
@@ -297,7 +338,25 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
 
         // ---- Your exercises ----
         item {
-            SectionLabel("YOUR EXERCISES · ${shown.size}")
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel("YOUR EXERCISES · ${shown.size}", modifier = Modifier.weight(1f))
+                // The group picked by a chip or by tapping the body map; × clears it.
+                group?.let { g ->
+                    Row(
+                        modifier = Modifier
+                            .padding(top = 14.dp)
+                            .clip(RoundedCornerShape(50))
+                            .background(AppAccent)
+                            .clickable { group = null }
+                            .padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = g, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = AppOnAccent)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Filled.Close, contentDescription = "Clear filter", tint = AppOnAccent, modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
             SortControl(selected = sort, onSelect = { sort = it })
             Spacer(modifier = Modifier.height(10.dp))
         }
@@ -313,6 +372,35 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
                     onClick = { onOpenExercise(exercise.exerciseId, exercise.name) }
                 )
             }
+        }
+    }
+}
+
+/** The muscle groups the Recovery line names, with the muscles that make
+ *  each one "still recovering". Abs left out - they're in everything. */
+private val RECOVERY_GROUPS: List<Pair<String, Set<String>>> = PROGRESS_GROUPS.filter { it.first != "Abs" }
+
+/** "Ready: Chest, Shoulders, Arms" and, with a split, why Up next picked
+ *  its day - so the figure and Up next tell the same story. */
+@Composable
+private fun RecoveryLine(recent: Map<String, Long>, upNext: UpNext?) {
+    val ready = RECOVERY_GROUPS.filter { (_, muscles) -> muscles.none { it in recent } }.map { it.first }
+    val first = when {
+        ready.size == RECOVERY_GROUPS.size -> "Everything's rested."
+        ready.isEmpty() -> "Everything's still recovering."
+        else -> "Ready: ${ready.joinToString(", ")}"
+    }
+    val second = when {
+        upNext == null -> null
+        upNext.recovering -> "A rest day is the better call."
+        ready.isEmpty() -> null
+        else -> "That's why Up next is ${upNext.display}."
+    }
+    Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = first, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = AppTextPrimary)
+        second?.let {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = it, style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
         }
     }
 }
