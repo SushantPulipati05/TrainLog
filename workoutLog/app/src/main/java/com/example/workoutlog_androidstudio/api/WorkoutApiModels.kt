@@ -122,6 +122,7 @@ data class CompleteWorkoutRequest(
 data class ProfileResponse(
     val name: String,
     val age: Int,
+    val sex: String? = null,
     val weightKg: Double,
     val weightDeltaKg: Double?,
     val targetWeightKg: Double?,
@@ -142,6 +143,7 @@ data class ProfileResponse(
 data class UpdateProfileRequest(
     val name: String? = null,
     val age: Int? = null,
+    val sex: String? = null,
     val weightKg: Double? = null,
     val targetWeightKg: Double? = null,
     val heightCm: Double? = null,

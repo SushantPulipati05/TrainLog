@@ -179,6 +179,15 @@ class MainActivity : ComponentActivity() {
                     return@WorkoutLogTheme
                 }
 
+                // Accounts from before sex was asked in onboarding: ask once
+                // (not mid-workout). It sets the body map figure.
+                var sexPromptLater by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+                val needsSex = AppDataCache.profile?.let { it.onboardingComplete && it.sex == null } == true
+                SexPromptSheet(
+                    visible = needsSex && !sexPromptLater && ActiveWorkoutState.workout == null,
+                    onLater = { sexPromptLater = true }
+                )
+
                 // Every exercise a just-started template workout should open
                 // with - set right before ActiveWorkoutState.start(...),
                 // cleared once consumed (or when a plain empty workout is

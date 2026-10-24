@@ -75,7 +75,7 @@ import java.util.Locale
 import kotlin.math.roundToInt
 
 /** The questions, in order. SUMMARY is the review screen at the end. */
-private enum class OnboardingStep { NAME, AGE, FIGURE, HEIGHT, WEIGHT, TARGET, BODY_FAT, WEEKLY, SUMMARY }
+private enum class OnboardingStep { NAME, AGE, SEX, HEIGHT, WEIGHT, TARGET, BODY_FAT, WEEKLY, SUMMARY }
 
 /** How many question screens the progress bar counts (everything but SUMMARY). */
 private const val QUESTION_COUNT = 8
@@ -112,8 +112,10 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
     var bodyFat by rememberSaveable { mutableStateOf(20f) }
     var hasBodyFat by rememberSaveable { mutableStateOf(false) }
     var weeklyTarget by rememberSaveable { mutableStateOf(4) }
-    // Which body map figure to draw - kept on the phone (Profile -> Body map).
+    // Sex (sets the body map figure); the figure is only picked by someone
+    // who prefers not to say.
     val context = androidx.compose.ui.platform.LocalContext.current
+    var sex by rememberSaveable { mutableStateOf(initial.sex?.uppercase()) }
     var figure by rememberSaveable { mutableStateOf(BodyFigureStore.chosen?.name) }
 
     var isSaving by remember { mutableStateOf(false) }
@@ -162,11 +164,14 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                         heightCm = heightCm.toDouble(),
                         bodyFatPercent = if (hasBodyFat) bodyFat.toDouble() else null,
                         weeklyWorkoutTarget = weeklyTarget,
-                        onboardingComplete = true
+                        onboardingComplete = true,
+                        sex = sex
                     )
                 )
                 AppDataCache.replaceProfile(updated)
-                figure?.let { name -> runCatching { BodyType.valueOf(name) }.getOrNull() }?.let { BodyFigureStore.set(context, it) }
+                if (sex == SEX_UNSPECIFIED) {
+                    figure?.let { name -> runCatching { BodyType.valueOf(name) }.getOrNull() }?.let { BodyFigureStore.set(context, it) }
+                }
                 onFinished()
             } catch (e: Exception) {
                 saveError = "Couldn't save your details. Check your connection and try again."
@@ -200,7 +205,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                 rows = listOf(
                     SummaryRow("NAME", name.trim(), OnboardingStep.NAME),
                     SummaryRow("AGE", "$age years", OnboardingStep.AGE),
-                    SummaryRow("BODY MAP", when (figure) { "FEMALE" -> "Female figure"; "MALE" -> "Male figure"; else -> null }, OnboardingStep.FIGURE),
+                    SummaryRow("SEX", when (sex) { SEX_FEMALE -> "Female"; SEX_MALE -> "Male"; SEX_UNSPECIFIED -> "Prefer not to say"; else -> null }, OnboardingStep.SEX),
                     SummaryRow("HEIGHT", "${heightCm.roundToInt()} cm", OnboardingStep.HEIGHT),
                     SummaryRow("WEIGHT", "${formatKg(weightKg)} kg", OnboardingStep.WEIGHT),
                     SummaryRow("TARGET WEIGHT", if (hasTarget) "${formatKg(targetKg)} kg" else null, OnboardingStep.TARGET),
@@ -220,7 +225,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
 
         OnboardingHeader(
             label = when (step) {
-                OnboardingStep.NAME, OnboardingStep.AGE, OnboardingStep.FIGURE -> "ABOUT YOU"
+                OnboardingStep.NAME, OnboardingStep.AGE, OnboardingStep.SEX -> "ABOUT YOU"
                 OnboardingStep.TARGET, OnboardingStep.WEEKLY -> "YOUR GOALS"
                 else -> "YOUR BODY"
             },
@@ -228,7 +233,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
             title = when (step) {
                 OnboardingStep.NAME -> "What should we call you?"
                 OnboardingStep.AGE -> "How old are you?"
-                OnboardingStep.FIGURE -> "Which body map should we show?"
+                OnboardingStep.SEX -> "What's your sex?"
                 OnboardingStep.HEIGHT -> "How tall are you?"
                 OnboardingStep.WEIGHT -> "What do you weigh right now?"
                 OnboardingStep.TARGET -> "Do you have a target weight?"
@@ -238,7 +243,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
             subtitle = when (step) {
                 OnboardingStep.NAME -> "This is the name on your profile."
                 OnboardingStep.AGE -> "Shown on your profile next to your other stats."
-                OnboardingStep.FIGURE -> "The figure that lights up the muscles you trained. It only changes the drawing, and you can switch it in Profile."
+                OnboardingStep.SEX -> "Men and women train and progress differently. It also sets your body map figure."
                 OnboardingStep.HEIGHT -> "Used with your weight to work out your BMI."
                 OnboardingStep.WEIGHT -> "Bodyweight exercises count it toward your volume."
                 OnboardingStep.TARGET -> "Your profile will show how far you are from it."
@@ -272,7 +277,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                         colors = appTextFieldColors()
                     )
                     OnboardingStep.AGE -> BigValue(value = "$age", unit = "years")
-                    OnboardingStep.FIGURE -> {}
+                    OnboardingStep.SEX -> {}
                     OnboardingStep.HEIGHT -> BigValue(value = "${heightCm.roundToInt()}", unit = "cm")
                     OnboardingStep.WEIGHT -> BigValue(value = formatKg(weightKg), unit = "kg")
                     OnboardingStep.TARGET -> BigValue(value = formatKg(targetKg), unit = "kg")
@@ -303,10 +308,12 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
 
             when (step) {
                 OnboardingStep.NAME -> {}
-                OnboardingStep.FIGURE -> BodyTypeChooser(
-                    selected = figure?.let { name -> runCatching { BodyType.valueOf(name) }.getOrNull() },
-                    onSelect = { figure = it.name },
-                    figureWidth = 72.dp
+                OnboardingStep.SEX -> SexChooser(
+                    sex = sex,
+                    onSex = { sex = it },
+                    figure = figure?.let { name -> runCatching { BodyType.valueOf(name) }.getOrNull() },
+                    onFigure = { figure = it.name },
+                    figureWidth = 64.dp
                 )
                 OnboardingStep.AGE -> AgeStepper(
                     onDecrease = { age = (age - 1).coerceAtLeast(13) },
@@ -354,7 +361,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                 }
                 goNext()
             },
-            enabled = (step != OnboardingStep.NAME || name.isNotBlank()) && (step != OnboardingStep.FIGURE || figure != null),
+            enabled = (step != OnboardingStep.NAME || name.isNotBlank()) && (step != OnboardingStep.SEX || (sex != null && (sex != SEX_UNSPECIFIED || figure != null))),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp),

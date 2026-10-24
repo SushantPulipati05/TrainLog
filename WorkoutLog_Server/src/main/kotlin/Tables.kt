@@ -156,6 +156,10 @@ object AthleteProfile : Table("athlete_profile") {
     // height, weight, ...). A brand-new account's profile starts false with
     // placeholder values; the app shows onboarding until it's true.
     val onboardingComplete = bool("onboarding_complete").default(true)
+    // "MALE", "FEMALE" or "UNSPECIFIED" (prefer not to say); null for
+    // profiles from before it was asked. Picks the body map figure, and is
+    // there for anything that should differ by sex (strength standards ...).
+    val sex = varchar("sex", 12).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

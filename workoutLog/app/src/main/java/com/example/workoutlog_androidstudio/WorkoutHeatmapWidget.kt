@@ -189,7 +189,7 @@ private fun Figure(view: BodyView, level: (BodyRegion) -> Float, width: Dp) {
     Image(
         provider = ImageProvider(bodyBitmap(view, level, context.px(width))),
         contentDescription = null,
-        modifier = GlanceModifier.size(width, width * 2.2f)
+        modifier = GlanceModifier.size(width, width * BODY_ASPECT)
     )
 }
 
@@ -308,7 +308,7 @@ private fun UpNextSquare(info: UpNextInfo) {
     // The figure takes all the height between the label and Start (and at
     // most ~40% of the width), so a tall widget isn't left half empty.
     val reserved = WIDGET_PAD_V.value * 2 + 12f + 6f + (if (info.resting) 0f else 8f + 32f)
-    val byHeight = (size.height.value - reserved) / 2.2f
+    val byHeight = (size.height.value - reserved) / BODY_ASPECT
     val byWidth = (size.width.value - WIDGET_PAD_H.value * 2) * 0.4f
     val figureWidth = minOf(byHeight, byWidth).coerceIn(20f, 90f).dp
     val titleSize = if (figureWidth.value >= 45f) 21f else 18f
@@ -357,7 +357,7 @@ class UpNextBarWidgetReceiver : GlanceAppWidgetReceiver() {
 @Composable
 private fun UpNextBar(info: UpNextInfo?, context: Context) {
     val height = LocalSize.current.height
-    val figureWidth = ((height.value - 2 * 8f) / 2.2f).coerceIn(14f, 40f).dp
+    val figureWidth = ((height.value - 2 * 8f) / BODY_ASPECT).coerceIn(14f, 40f).dp
     Row(modifier = GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         if (info != null) {
             Figure(info.view, info.level, figureWidth)

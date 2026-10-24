@@ -313,7 +313,8 @@ data class ProfileResponse(
     val memberSince: String,      // ISO date
     val weeksActive: Int,
     val weeklyWorkoutTarget: Int,  // distinct days/week the user wants to log a workout
-    val onboardingComplete: Boolean // false = the app should show first-run onboarding
+    val onboardingComplete: Boolean, // false = the app should show first-run onboarding
+    val sex: String? = null         // "MALE" / "FEMALE" / "UNSPECIFIED"; null = not asked yet
 )
 
 /** What the app sends to edit the profile. Any field left null keeps its
@@ -329,7 +330,8 @@ data class UpdateProfileRequest(
     val bodyFatPercent: Double? = null,
     val weeklyWorkoutTarget: Int? = null,
     // Sent as true once, by the last onboarding screen.
-    val onboardingComplete: Boolean? = null
+    val onboardingComplete: Boolean? = null,
+    val sex: String? = null
 )
 
 /** One finished workout's contribution to an exercise's progression history -
@@ -466,6 +468,7 @@ fun Application.module() {
     migrateExercisesCategory()
     migrateWorkoutTemplatesCustomFields()
     migrateAthleteProfileWeeklyTarget()
+    migrateAthleteProfileSex()
     migrateMultiUser()
     migrateAthleteProfileOnboarding()
     migrateSetEntriesLoggedAt()
@@ -1535,6 +1538,7 @@ fun Application.module() {
                         if (request.heightCm != null) { it[heightCm] = request.heightCm }
                         if (request.bodyFatPercent != null) { it[bodyFatPercent] = request.bodyFatPercent }
                         if (request.weeklyWorkoutTarget != null) { it[weeklyWorkoutTarget] = request.weeklyWorkoutTarget }
+                        request.sex?.trim()?.uppercase()?.takeIf { s -> s in setOf("MALE", "FEMALE", "UNSPECIFIED") }?.let { s -> it[sex] = s }
                     }
                     true
                 }
@@ -1985,6 +1989,15 @@ private fun migrateSetEntriesLoggedAt() {
     }
 }
 
+/** Adds athlete_profile.sex for databases that predate it (NULL = not asked yet). */
+private fun migrateAthleteProfileSex() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE athlete_profile ADD COLUMN IF NOT EXISTS sex VARCHAR(12)")
+        }
+    }
+}
+
 private fun migrateAthleteProfileWeeklyTarget() {
     DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
         connection.createStatement().use { statement ->
@@ -2167,7 +2180,8 @@ private fun loadProfileResponse(me: Int, zone: ZoneId): ProfileResponse? = trans
         memberSince = profile[AthleteProfile.memberSince],
         weeksActive = weeksActive,
         weeklyWorkoutTarget = profile[AthleteProfile.weeklyWorkoutTarget],
-        onboardingComplete = profile[AthleteProfile.onboardingComplete]
+        onboardingComplete = profile[AthleteProfile.onboardingComplete],
+        sex = profile[AthleteProfile.sex]
     )
 }
 
