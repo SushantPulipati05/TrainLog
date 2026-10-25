@@ -104,6 +104,8 @@ fun HomeScreen(
     onOpenAllWorkouts: () -> Unit,
     onOpenTrainingPlan: () -> Unit = {},
     onStartPlannedWorkout: (label: String) -> Unit = {},
+    /** A "Getting started" step was tapped (see Guidance.kt). */
+    onGuideStep: (GuideStep) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -216,6 +218,13 @@ fun HomeScreen(
                 color = AppAccent
             )
             Spacer(modifier = Modifier.height(20.dp))
+            // New accounts: what to try first, ticked off as it's done.
+            if (GuideStore.showChecklist) {
+                GettingStartedCard(onOpen = { step ->
+                    if (step == GuideStep.FIRST_WORKOUT) onStartWorkout(DEFAULT_WORKOUT_NAME) else onGuideStep(step)
+                })
+                Spacer(modifier = Modifier.height(20.dp))
+            }
             ConsistencyHeatmap(workouts = previousWorkouts, onOpenCalendar = onOpenCalendar)
             Spacer(modifier = Modifier.height(20.dp))
             WeeklyTargetWidget(completedDays = completedDaysThisWeek, targetDays = weeklyWorkoutTarget)
@@ -286,6 +295,15 @@ fun HomeScreen(
                         text = previousWorkoutsError.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AppTextSecondary
+                    )
+                }
+            }
+            previousWorkouts.isEmpty() -> {
+                item {
+                    TeachingEmptyState(
+                        glyph = GlyphKind.LIST,
+                        title = "No workouts yet",
+                        body = "Every workout you finish shows up here with what it hit. Missed one? Add it from the calendar."
                     )
                 }
             }
@@ -700,6 +718,7 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .guideTarget(GuideTip.HEATMAP)
                 .clickable(onClickLabel = "Open workout calendar", onClick = onOpenCalendar)
         ) {
             // Last month + this month, so the whole grid is real history.

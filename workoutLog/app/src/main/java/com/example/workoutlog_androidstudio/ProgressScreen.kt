@@ -156,7 +156,11 @@ private fun topSetLabel(weightKg: Double?, reps: Int): String =
  * the exercise list.
  */
 @Composable
-fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modifier: Modifier = Modifier) {
+fun ProgressScreen(
+    onOpenExercise: (exerciseId: Int, name: String) -> Unit,
+    modifier: Modifier = Modifier,
+    onStartWorkout: () -> Unit = {}
+) {
     var progress by remember { mutableStateOf<ProgressResponse?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
@@ -271,11 +275,13 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
 
         if (exercises.isEmpty()) {
             item {
-                Spacer(modifier = Modifier.height(40.dp))
-                Text(
-                    text = "Log a workout and your lifts, records and weekly sets will show up here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = AppTextSecondary
+                Spacer(modifier = Modifier.height(24.dp))
+                TeachingEmptyState(
+                    glyph = GlyphKind.CHART,
+                    title = "Your progress lives here",
+                    body = "After your first workout: your records, what's recovering on the body map, and how each lift is moving.",
+                    action = "Start a workout",
+                    onAction = onStartWorkout
                 )
             }
             return@LazyColumn
@@ -302,9 +308,11 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
                     level = recoveryLevel,
                     outlined = region?.let { setOf(it) } ?: regionsInGroup(group),
                     fillWidth = true,
+                    modifier = Modifier.guideTarget(GuideTip.PROGRESS),
                     // 1st tap: just that muscle. 2nd tap on it: its whole
                     // group. A tap inside the selected group: clear.
                     onTap = { tapped ->
+                        GuideStore.markDone(GuideStep.TAP_MUSCLE)
                         when {
                             region == tapped -> { region = null; group = progressGroupOf(tapped) }
                             region == null && group != null && progressGroupOf(tapped) == group -> { group = null }

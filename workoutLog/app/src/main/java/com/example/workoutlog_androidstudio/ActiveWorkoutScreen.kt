@@ -758,27 +758,32 @@ private fun ExerciseCard(
         exercise.sets.forEachIndexed { rowIndex, set ->
             // Empty boxes show last time's numbers for this set in grey.
             val ghost = lastSets.getOrNull(rowIndex)
-            SwipeToDeleteSetRow(
-                set = set,
-                ghostKg = ghost?.weightKg?.takeIf { it > 0.0 }?.let { formatDecimal(it) },
-                ghostReps = ghost?.reps?.toString(),
-                onKgChange = { newKg ->
-                    val updated = exercise.sets.toMutableList()
-                    updated[rowIndex] = set.copy(kg = newKg)
-                    onSetsChange(updated)
-                },
-                onRepsChange = { newReps ->
-                    val updated = exercise.sets.toMutableList()
-                    updated[rowIndex] = set.copy(reps = newReps)
-                    onSetsChange(updated)
-                },
-                onDelete = {
-                    val updated = exercise.sets.toMutableList()
-                    updated.removeAt(rowIndex)
+            // New users: the tip about grey numbers points at the first such row.
+            val tipHere = ghost != null && rowIndex == 0 &&
+                ActiveWorkoutState.exercises.firstOrNull { e -> e.sets.isNotEmpty() }?.exerciseId == exercise.exerciseId
+            Box(modifier = if (tipHere) Modifier.guideTarget(GuideTip.EXERCISE_CARD) else Modifier) {
+                SwipeToDeleteSetRow(
+                    set = set,
+                    ghostKg = ghost?.weightKg?.takeIf { it > 0.0 }?.let { formatDecimal(it) },
+                    ghostReps = ghost?.reps?.toString(),
+                    onKgChange = { newKg ->
+                        val updated = exercise.sets.toMutableList()
+                        updated[rowIndex] = set.copy(kg = newKg)
+                        onSetsChange(updated)
+                    },
+                    onRepsChange = { newReps ->
+                        val updated = exercise.sets.toMutableList()
+                        updated[rowIndex] = set.copy(reps = newReps)
+                        onSetsChange(updated)
+                    },
+                    onDelete = {
+                        val updated = exercise.sets.toMutableList()
+                        updated.removeAt(rowIndex)
 
-                    onSetsChange(updated.mapIndexed { i, s -> s.copy(setNumber = i + 1) })
-                }
-            )
+                        onSetsChange(updated.mapIndexed { i, s -> s.copy(setNumber = i + 1) })
+                    }
+                )
+            }
             Spacer(modifier = Modifier.height(8.dp))
         }
         // Beat your best with a set typed in just now: say so straight away.

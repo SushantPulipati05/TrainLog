@@ -259,6 +259,7 @@ fun WorkoutCalendarScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .guideTarget(GuideTip.CALENDAR)
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, AppBorder, RoundedCornerShape(16.dp))
                             .clickable { onLogPastWorkout(selectedDate) }

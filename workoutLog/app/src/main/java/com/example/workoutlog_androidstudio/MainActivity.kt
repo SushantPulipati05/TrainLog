@@ -123,6 +123,7 @@ class MainActivity : ComponentActivity() {
         // there's signal, otherwise as soon as there is.
         AppDataCache.init(this)
         BodyFigureStore.init(this)
+        GuideStore.init(this)
         if (PendingWorkoutStore.mine.isNotEmpty()) OfflineSync.schedule(this)
         WorkoutNamer.init(this)
         GymReminderScheduler.reschedule(this)
@@ -172,7 +173,11 @@ class MainActivity : ComponentActivity() {
                 if (onboardingDone != true) {
                     val profileForOnboarding = startupProfile
                     if (onboardingDone == false && profileForOnboarding != null) {
-                        OnboardingScreen(initial = profileForOnboarding, onFinished = { onboardingDone = true })
+                        OnboardingScreen(initial = profileForOnboarding, onFinished = {
+                            // A new account: welcome cards, then the checklist and tips.
+                            GuideStore.startForNewUser()
+                            onboardingDone = true
+                        })
                     } else {
                         StartupStatus(failed = startupFailed, onRetry = { startupAttempt++ })
                     }
@@ -310,6 +315,23 @@ class MainActivity : ComponentActivity() {
                     ActiveWorkoutState.isMinimized = true
                 }
 
+                // An empty workout, the same as Home's Start Empty Workout.
+                fun startEmptyWorkout() {
+                    coroutineScope.launch {
+                        if (ActiveWorkoutState.workout != null) {
+                            ActiveWorkoutState.isMinimized = false
+                            return@launch
+                        }
+                        try {
+                            val started = startWorkoutAnywhere(DEFAULT_WORKOUT_NAME)
+                            pendingPrefillExercises = emptyList()
+                            ActiveWorkoutState.start(started)
+                        } catch (e: Exception) {
+                            Log.e("StartWorkout", "Failed to start workout", e)
+                        }
+                    }
+                }
+
                 Box(modifier = Modifier.fillMaxSize().background(AppBackground)) {
                     // All three tabs are always in the composition, just
                     // shifted off to the side when not selected (via
@@ -360,7 +382,18 @@ class MainActivity : ComponentActivity() {
                             onOpenCalendar = { push(Screen.Calendar) },
                             onOpenAllWorkouts = { push(Screen.AllWorkouts) },
                             onOpenTrainingPlan = { push(Screen.TrainingPlan) },
-                            onStartPlannedWorkout = { label -> coroutineScope.launch { startPlannedWorkout(label) } }
+                            onStartPlannedWorkout = { label -> coroutineScope.launch { startPlannedWorkout(label) } },
+                            // "Getting started" steps (logging a workout is handled on Home).
+                            onGuideStep = { step ->
+                                when (step) {
+                                    GuideStep.SEE_BODY_MAP -> AppDataCache.workoutSummaries?.firstOrNull()?.let { push(Screen.WorkoutDetail(it)) }
+                                    GuideStep.SET_SPLIT -> push(Screen.TrainingPlan)
+                                    GuideStep.TAP_MUSCLE -> selectedTab = MainTab.PROGRESS
+                                    GuideStep.OPEN_CALENDAR -> push(Screen.Calendar)
+                                    GuideStep.FIRST_WORKOUT -> startEmptyWorkout()
+                                }
+                                Unit
+                            }
                         )
                     }
                     Box(
@@ -382,7 +415,8 @@ class MainActivity : ComponentActivity() {
                             }
                     ) {
                         ProgressScreen(
-                            onOpenExercise = { exerciseId, name -> push(Screen.ExerciseHistory(exerciseId, name)) }
+                            onOpenExercise = { exerciseId, name -> push(Screen.ExerciseHistory(exerciseId, name)) },
+                            onStartWorkout = { startEmptyWorkout() }
                         )
                     }
                     Box(
@@ -439,6 +473,7 @@ class MainActivity : ComponentActivity() {
                     ) { stack ->
                         when (val top = stack.lastOrNull()) {
                             is Screen.WorkoutDetail -> {
+                                LaunchedEffect(Unit) { GuideStore.markDone(GuideStep.SEE_BODY_MAP) }
                                 WorkoutDetailScreen(
                                     workout = top.workout,
                                     onBack = { pop() },
@@ -480,6 +515,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             Screen.Calendar -> {
+                                LaunchedEffect(Unit) { GuideStore.markDone(GuideStep.OPEN_CALENDAR) }
                                 WorkoutCalendarScreen(
                                     onBack = { pop() },
                                     onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) },
@@ -609,6 +645,22 @@ class MainActivity : ComponentActivity() {
                         tint = AppAccent,
                         aboveTabBar = true
                     )
+
+                    // ---- New users: one-time tips, then (on top) the welcome cards ----
+                    val activeTip: GuideTip? = when {
+                        GuideStore.welcomePending -> null
+                        ActiveWorkoutState.workout != null && !ActiveWorkoutState.isMinimized -> GuideTip.EXERCISE_CARD
+                        ActiveWorkoutState.workout != null -> null
+                        screenStack.lastOrNull() == Screen.Calendar -> GuideTip.CALENDAR
+                        screenStack.isNotEmpty() -> null
+                        selectedTab == MainTab.PROGRESS -> GuideTip.PROGRESS
+                        selectedTab == MainTab.HOME && !AppDataCache.workoutSummaries.isNullOrEmpty() -> GuideTip.HEATMAP
+                        else -> null
+                    }?.takeIf { GuideStore.shouldShowTip(it) }
+                    GuideTipOverlay(activeTip)
+                    if (GuideStore.welcomePending) {
+                        WelcomeCards(onDone = { GuideStore.finishWelcome() })
+                    }
                 }
             }
         }
