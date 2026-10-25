@@ -2,9 +2,14 @@ package org.example
 
 import com.auth0.jwk.JwkProviderBuilder
 import com.auth0.jwt.interfaces.Payload
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.httpMethod
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.application.createRouteScopedPlugin
 import io.ktor.server.auth.Authentication
+import io.ktor.server.auth.AuthenticationChecked
 import io.ktor.server.auth.authenticate
 import io.ktor.server.auth.jwt.JWTPrincipal
 import io.ktor.server.auth.jwt.jwt
@@ -29,6 +34,7 @@ import org.jetbrains.exposed.v1.core.Op
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.greaterEq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.innerJoin
 import org.jetbrains.exposed.v1.core.isNull
@@ -557,6 +563,8 @@ fun Application.module() {
         // Everything below needs a valid Firebase ID token (see the
         // Authentication setup in module()) - /health above stays public.
         authenticate("firebase") {
+            install(RequestGuard)
+
             // Returns every exercise this user can pick from - the built-in
             // library plus any custom ones they made - as a JSON array.
             get("/exercises") {
@@ -621,6 +629,23 @@ fun Application.module() {
                     call.respondText("exercise name can't be blank", status = HttpStatusCode.BadRequest)
                     return@post
                 }
+                val muscleGroup = request.muscleGroup?.trim()?.ifEmpty { null }
+                val equipment = request.equipment?.trim()?.ifEmpty { null }
+                if (trimmedName.length > MAX_NAME_LENGTH ||
+                    (muscleGroup?.length ?: 0) > MAX_SHORT_TEXT_LENGTH ||
+                    (equipment?.length ?: 0) > MAX_SHORT_TEXT_LENGTH ||
+                    (request.category?.length ?: 0) > 30
+                ) {
+                    call.respondText("one of those fields is too long", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val tooMany = transaction {
+                    Exercises.selectAll().where { Exercises.userId eq me }.count() >= MAX_CUSTOM_EXERCISES
+                }
+                if (tooMany) {
+                    call.respondText("you've reached the limit of $MAX_CUSTOM_EXERCISES custom exercises", status = HttpStatusCode.Conflict)
+                    return@post
+                }
 
                 // Defaults to "Strength" when the app doesn't send a category -
                 // the custom-exercise dialog only asks for equipment/bodyweight
@@ -641,8 +666,8 @@ fun Application.module() {
 
                         val newId = Exercises.insert {
                             it[name] = trimmedName
-                            it[muscleGroup] = request.muscleGroup
-                            it[equipment] = request.equipment
+                            it[Exercises.muscleGroup] = muscleGroup
+                            it[Exercises.equipment] = equipment
                             it[category] = resolvedCategory
                             it[Exercises.userId] = me
                             it[primaryMuscles] = primary.joinToString(";").ifEmpty { null }
@@ -652,8 +677,8 @@ fun Application.module() {
                         ExerciseResponse(
                             id = newId,
                             name = trimmedName,
-                            muscleGroup = request.muscleGroup,
-                            equipment = request.equipment,
+                            muscleGroup = muscleGroup,
+                            equipment = equipment,
                             category = resolvedCategory,
                             primaryMuscles = primary,
                             secondaryMuscles = secondary
@@ -899,6 +924,19 @@ fun Application.module() {
                     call.respondText("a template needs at least one exercise", status = HttpStatusCode.BadRequest)
                     return@post
                 }
+                if (trimmedName.length > MAX_NAME_LENGTH || (request.notes?.length ?: 0) > MAX_NOTES_LENGTH ||
+                    request.exerciseIds.size > MAX_TEMPLATE_EXERCISES
+                ) {
+                    call.respondText("that workout is too long", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val tooManyTemplates = transaction {
+                    WorkoutTemplates.selectAll().where { WorkoutTemplates.userId eq me }.count() >= MAX_CUSTOM_TEMPLATES
+                }
+                if (tooManyTemplates) {
+                    call.respondText("you've reached the limit of $MAX_CUSTOM_TEMPLATES saved workouts", status = HttpStatusCode.Conflict)
+                    return@post
+                }
 
                 // Every exercise has to be one this user can actually see - a
                 // built-in or one of their own - not someone else's custom one.
@@ -1035,6 +1073,12 @@ fun Application.module() {
 
                         val trimmedName = (request.name ?: workoutRow[Workouts.workoutName]).trim()
                         if (trimmedName.isEmpty()) return@transaction "empty"
+                        if (trimmedName.length > MAX_NAME_LENGTH || (request.notes?.length ?: 0) > MAX_NOTES_LENGTH) {
+                            return@transaction "too_long"
+                        }
+                        if (WorkoutTemplates.selectAll().where { WorkoutTemplates.userId eq me }.count() >= MAX_CUSTOM_TEMPLATES) {
+                            return@transaction "limit"
+                        }
 
                         val clash = WorkoutTemplates.selectAll()
                             .where { (WorkoutTemplates.name.lowerCase() eq trimmedName.lowercase()) and visibleTemplates(me) }
@@ -1054,7 +1098,7 @@ fun Application.module() {
                             it[WorkoutTemplates.userId] = me
                         } get WorkoutTemplates.id
 
-                        insertTemplateExercises(newTemplateId, exerciseIds)
+                        insertTemplateExercises(newTemplateId, exerciseIds.take(MAX_TEMPLATE_EXERCISES))
                         newTemplateId
                     }
                 } catch (e: Exception) {
@@ -1065,6 +1109,8 @@ fun Application.module() {
                     "not_found" -> call.respondText("no workout with that id", status = HttpStatusCode.NotFound)
                     "empty" -> call.respondText("that workout has no exercises to save", status = HttpStatusCode.BadRequest)
                     "duplicate" -> call.respondText("a workout with that name already exists", status = HttpStatusCode.Conflict)
+                    "too_long" -> call.respondText("that name or note is too long", status = HttpStatusCode.BadRequest)
+                    "limit" -> call.respondText("you've reached the limit of $MAX_CUSTOM_TEMPLATES saved workouts", status = HttpStatusCode.Conflict)
                     is Int -> {
                         val detail = transaction { loadTemplateDetail(result, me, zone) }
                         call.respond(HttpStatusCode.Created, detail!!)
@@ -1253,26 +1299,37 @@ fun Application.module() {
             post("/workouts") {
                 val me = call.userId()
                 val zone = call.userZone()
-                val request = call.receive<NewWorkoutRequest>()
+                val request = try {
+                    call.receive<NewWorkoutRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val name = request.workoutName.trim().take(MAX_NAME_LENGTH).ifEmpty { "Workout" }
                 val now = nowUtc()
 
                 val newWorkout = transaction {
+                    if (workoutsStartedToday(me) >= MAX_WORKOUTS_PER_DAY) return@transaction null
                     val newId = Workouts.insert {
-                        it[workoutName] = request.workoutName
+                        it[workoutName] = name
                         it[startedAt] = now
                         it[Workouts.userId] = me
                     } get Workouts.id
 
                     WorkoutResponse(
                         id = newId,
-                        workoutName = request.workoutName,
+                        workoutName = name,
                         startedAt = now.toZone(zone).toString(),
                         endedAt = null,
                         notes = null
                     )
                 }
 
-                call.respond(newWorkout)
+                if (newWorkout == null) {
+                    call.respondText("too many workouts started today", status = HttpStatusCode.TooManyRequests)
+                } else {
+                    call.respond(newWorkout)
+                }
             }
 
             // Logs one set against an existing workout.
@@ -1286,7 +1343,16 @@ fun Application.module() {
                     return@post
                 }
 
-                val request = call.receive<NewSetRequest>()
+                val request = try {
+                    call.receive<NewSetRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                if (!validSet(request.setNumber, request.reps, request.weightKg, request.loggedAtSeconds)) {
+                    call.respondText("that set's numbers aren't valid", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
 
                 val newSet = transaction {
                     // The workout must be this user's, and the exercise one they
@@ -1294,6 +1360,8 @@ fun Application.module() {
                     // someone else's workout.
                     if (!ownsWorkout(workoutId, me)) return@transaction null
                     if (!exerciseVisible(request.exerciseId, me)) return@transaction null
+                    val setsSoFar = SetEntries.selectAll().where { SetEntries.workoutId eq workoutId }.count()
+                    if (setsSoFar >= MAX_SETS_PER_WORKOUT) return@transaction null
 
                     val newId = SetEntries.insert {
                         it[SetEntries.workoutId] = workoutId
@@ -1348,7 +1416,7 @@ fun Application.module() {
                     Workouts.update({ (Workouts.id eq workoutId) and (Workouts.userId eq me) }) {
                         it[endedAt] = nowUtc()
                         if (request?.notes != null) {
-                            it[notes] = request.notes
+                            it[notes] = request.notes.trim().take(MAX_NOTES_LENGTH).ifEmpty { null }
                         }
                     }
 
@@ -1415,14 +1483,23 @@ fun Application.module() {
                     call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
                     return@patch
                 }
+                val newName = request.workoutName?.let { cleanText(it, MAX_NAME_LENGTH) }
+                if (request.workoutName != null && newName == null) {
+                    call.respondText("workout name must be 1-$MAX_NAME_LENGTH characters", status = HttpStatusCode.BadRequest)
+                    return@patch
+                }
+                if ((request.notes?.trim()?.length ?: 0) > MAX_NOTES_LENGTH) {
+                    call.respondText("notes can be at most $MAX_NOTES_LENGTH characters", status = HttpStatusCode.BadRequest)
+                    return@patch
+                }
 
                 val updatedWorkout = transaction {
                     Workouts.update({ (Workouts.id eq workoutId) and (Workouts.userId eq me) }) {
-                        if (request.workoutName != null) {
-                            it[workoutName] = request.workoutName
+                        if (newName != null) {
+                            it[workoutName] = newName
                         }
                         if (request.notes != null) {
-                            it[notes] = request.notes
+                            it[notes] = request.notes.trim().ifEmpty { null }
                         }
                     }
 
@@ -1458,6 +1535,10 @@ fun Application.module() {
                     call.receive<UpdateSetRequest>()
                 } catch (e: Exception) {
                     call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@put
+                }
+                if (!validSet(1, request.reps, request.weightKg, null)) {
+                    call.respondText("that set's numbers aren't valid", status = HttpStatusCode.BadRequest)
                     return@put
                 }
 
@@ -1565,6 +1646,22 @@ fun Application.module() {
                     call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
                     return@patch
                 }
+                // Every value has to be humanly possible - a height of 0 once
+                // made BMI infinite and broke GET /profile for good.
+                val profileError = when {
+                    request.name != null && cleanText(request.name, MAX_NAME_LENGTH) == null -> "name must be 1-$MAX_NAME_LENGTH characters"
+                    request.age != null && request.age !in 13..120 -> "age must be between 13 and 120"
+                    request.weightKg != null && !(request.weightKg.isFinite() && request.weightKg in 20.0..400.0) -> "weight must be between 20 and 400 kg"
+                    request.targetWeightKg != null && !(request.targetWeightKg.isFinite() && request.targetWeightKg in 20.0..400.0) -> "target weight must be between 20 and 400 kg"
+                    request.heightCm != null && !(request.heightCm.isFinite() && request.heightCm in 50.0..275.0) -> "height must be between 50 and 275 cm"
+                    request.bodyFatPercent != null && !(request.bodyFatPercent.isFinite() && request.bodyFatPercent in 1.0..75.0) -> "body fat must be between 1 and 75%"
+                    request.weeklyWorkoutTarget != null && request.weeklyWorkoutTarget !in 1..14 -> "weekly target must be between 1 and 14"
+                    else -> null
+                }
+                if (profileError != null) {
+                    call.respondText(profileError, status = HttpStatusCode.BadRequest)
+                    return@patch
+                }
 
                 val updated = transaction {
                     val current = AthleteProfile.selectAll().where { AthleteProfile.userId eq me }.singleOrNull()
@@ -1576,7 +1673,7 @@ fun Application.module() {
                     val finishingOnboarding = request.onboardingComplete == true && !current[AthleteProfile.onboardingComplete]
 
                     AthleteProfile.update({ AthleteProfile.userId eq me }) {
-                        if (request.name != null) { it[name] = request.name }
+                        if (request.name != null) { it[name] = request.name.trim() }
                         if (request.age != null) { it[age] = request.age }
                         if (finishingOnboarding) {
                             if (request.weightKg != null) { it[weightKg] = request.weightKg }
@@ -1661,9 +1758,8 @@ fun Application.module() {
                     return@post
                 }
 
-                val validSets = request.sets.size <= 1000 && request.sets.all { set ->
-                    set.reps in 0..10_000 && set.setNumber in 1..1000 &&
-                        (set.weightKg == null || set.weightKg in 0.0..2_000.0)
+                val validSets = request.sets.size <= MAX_SETS_PER_WORKOUT && request.sets.all { set ->
+                    validSet(set.setNumber, set.reps, set.weightKg, set.loggedAtSeconds)
                 }
                 if (!validSets) {
                     call.respondText("one or more sets are invalid", status = HttpStatusCode.BadRequest)
@@ -1758,9 +1854,8 @@ fun Application.module() {
                     call.respondText("clientId is required", status = HttpStatusCode.BadRequest)
                     return@post
                 }
-                val validSets = request.sets.size <= 1000 && request.sets.all { set ->
-                    set.reps in 0..10_000 && set.setNumber in 1..1000 &&
-                        (set.weightKg == null || set.weightKg in 0.0..2_000.0)
+                val validSets = request.sets.size <= MAX_SETS_PER_WORKOUT && request.sets.all { set ->
+                    validSet(set.setNumber, set.reps, set.weightKg, set.loggedAtSeconds)
                 }
                 if (!validSets) {
                     call.respondText("one or more sets are invalid", status = HttpStatusCode.BadRequest)
@@ -1789,6 +1884,12 @@ fun Application.module() {
                         .limit(1)
                         .firstOrNull()
                         ?.get(Workouts.id)
+                    // Imports can carry past dates, so also cap the account's total.
+                    if (existingId == null && (
+                            workoutsStartedToday(me) >= MAX_WORKOUTS_PER_DAY ||
+                                Workouts.selectAll().where { Workouts.userId eq me }.count() >= MAX_WORKOUTS_TOTAL
+                            )
+                    ) return@transaction null
                     val workoutId = if (existingId != null) {
                         Workouts.update({ (Workouts.id eq existingId) and (Workouts.userId eq me) }) {
                             it[workoutName] = name
@@ -1827,7 +1928,11 @@ fun Application.module() {
                         notes = notes
                     )
                 }
-                call.respond(saved)
+                if (saved == null) {
+                    call.respondText("too many workouts added today", status = HttpStatusCode.TooManyRequests)
+                } else {
+                    call.respond(saved)
+                }
             }
 
             // Permanently deletes this user's account and everything they own:
@@ -2436,7 +2541,10 @@ private fun loadProfileResponse(me: Int, zone: ZoneId): ProfileResponse? = trans
     }
 
     val heightM = profile[AthleteProfile.heightCm] / 100.0
-    val bmi = bodyweightKg / (heightM * heightM)
+    // Guarded so a bad stored height (0, or from before values were
+    // checked) can never produce Infinity/NaN, which JSON can't encode -
+    // that would make GET /profile fail every time and lock the app.
+    val bmi = (bodyweightKg / (heightM * heightM)).takeIf { heightM > 0 && it.isFinite() } ?: 0.0
 
     val memberSinceDate = LocalDate.parse(profile[AthleteProfile.memberSince])
     val weeksActive = ChronoUnit.WEEKS.between(memberSinceDate, LocalDate.now(zone)).toInt().coerceAtLeast(0)
@@ -2476,6 +2584,104 @@ private val userIdCache = ConcurrentHashMap<String, Int>()
  *  templates...), and all of them would otherwise try to create the same new
  *  user at once. insertIgnore + unique indexes cover the multi-instance case. */
 private val provisionLock = Any()
+
+// ---------------------------------------------------------------------------
+// Limits - what one account may send and store
+// ---------------------------------------------------------------------------
+
+/** Largest request body accepted (a full 1000-set workout is ~100 KB). */
+private const val MAX_BODY_BYTES = 512L * 1024
+
+/** Requests one account may make per minute, and how many of those may
+ *  change data. The app makes a handful per screen, so normal use never
+ *  gets near these. */
+private const val MAX_REQUESTS_PER_MINUTE = 240
+private const val MAX_WRITES_PER_MINUTE = 90
+
+private const val MAX_WORKOUTS_PER_DAY = 30
+private const val MAX_WORKOUTS_TOTAL = 20_000
+private const val MAX_SETS_PER_WORKOUT = 1000
+private const val MAX_CUSTOM_EXERCISES = 500
+private const val MAX_CUSTOM_TEMPLATES = 200
+private const val MAX_TEMPLATE_EXERCISES = 100
+
+private const val MAX_NAME_LENGTH = 100
+private const val MAX_NOTES_LENGTH = 500
+private const val MAX_SHORT_TEXT_LENGTH = 50
+
+/** One account's request counts for the current one-minute window. */
+private class RateWindow(var startedAtMs: Long, var requests: Int, var writes: Int)
+
+private val rateWindows = ConcurrentHashMap<String, RateWindow>()
+
+/** true if [uid] may make another request (and counts it). */
+private fun allowRequest(uid: String, isWrite: Boolean): Boolean {
+    val nowMs = System.currentTimeMillis()
+    val window = rateWindows.compute(uid) { _, existing ->
+        if (existing == null || nowMs - existing.startedAtMs >= 60_000) RateWindow(nowMs, 0, 0) else existing
+    }!!
+    synchronized(window) {
+        if (window.requests >= MAX_REQUESTS_PER_MINUTE) return false
+        if (isWrite && window.writes >= MAX_WRITES_PER_MINUTE) return false
+        window.requests++
+        if (isWrite) window.writes++
+        return true
+    }
+}
+
+/**
+ * Runs on every signed-in request, before its route:
+ * - turns away an account whose email isn't verified yet (the token's
+ *   email_verified claim) with 403, so a made-up address can't use the app
+ *   or get a Users row. Google sign-ins are always verified. 403, not 401:
+ *   the app signs out on a 401, but this account is valid, just unconfirmed;
+ * - refuses a body over [MAX_BODY_BYTES] (413) before it's read, so one huge
+ *   request can't run the server out of memory. A body with no declared
+ *   length (chunked) is refused too - the app always sends the length;
+ * - limits each account to [MAX_REQUESTS_PER_MINUTE] requests a minute
+ *   (429), so a script can't hammer the server or fill the database.
+ */
+private val RequestGuard = createRouteScopedPlugin("RequestGuard") {
+    on(AuthenticationChecked) { call ->
+        val payload = call.principal<JWTPrincipal>()?.payload ?: return@on
+        if (payload.getClaim("email_verified").asBoolean() != true) {
+            call.respondText("email not verified", status = HttpStatusCode.Forbidden)
+            return@on
+        }
+
+        val method = call.request.httpMethod
+        val isWrite = method != HttpMethod.Get && method != HttpMethod.Head
+        if (isWrite) {
+            val declared = call.request.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+            val chunked = call.request.headers[HttpHeaders.TransferEncoding] != null
+            if (chunked || (declared != null && declared > MAX_BODY_BYTES)) {
+                call.respondText("request too large", status = HttpStatusCode.PayloadTooLarge)
+                return@on
+            }
+        }
+
+        if (!allowRequest(payload.subject, isWrite)) {
+            call.response.headers.append(HttpHeaders.RetryAfter, "60")
+            call.respondText("too many requests, slow down", status = HttpStatusCode.TooManyRequests)
+        }
+    }
+}
+
+/** A set's numbers are believable. Same rules everywhere a set comes in. */
+private fun validSet(setNumber: Int, reps: Int, weightKg: Double?, loggedAtSeconds: Int?): Boolean =
+    setNumber in 1..MAX_SETS_PER_WORKOUT &&
+        reps in 0..10_000 &&
+        (weightKg == null || (weightKg.isFinite() && weightKg in 0.0..2_000.0)) &&
+        (loggedAtSeconds == null || loggedAtSeconds in 0..(7 * 24 * 3600))
+
+/** Trimmed text, or null when it's blank or longer than [max]. */
+private fun cleanText(value: String, max: Int): String? = value.trim().takeIf { it.isNotEmpty() && it.length <= max }
+
+/** Workouts this user started in the last 24 hours. Inside a transaction. */
+private fun workoutsStartedToday(me: Int): Long =
+    Workouts.selectAll()
+        .where { (Workouts.userId eq me) and (Workouts.startedAt greaterEq nowUtc().minusHours(24)) }
+        .count()
 
 /**
  * The local Users.id of whoever sent this (already authenticated) request.

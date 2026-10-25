@@ -109,7 +109,7 @@ fun TargetsScreen(
                 AppDataCache.replaceProfile(updated)
                 savedMessageVisible = true
             } catch (e: Exception) {
-                saveError = "Couldn't save your targets. Check your connection and try again."
+                saveError = serverRefusal(e) ?: "Couldn't save your targets. Check your connection and try again."
             } finally {
                 isSaving = false
             }

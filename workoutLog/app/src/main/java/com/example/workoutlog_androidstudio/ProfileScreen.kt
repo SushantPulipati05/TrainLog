@@ -161,7 +161,7 @@ fun ProfileScreen(
                 AppDataCache.replaceProfile(updated)
                 isEditing = false
             } catch (e: Exception) {
-                saveError = "Couldn't save your changes. Check your connection and try again."
+                saveError = serverRefusal(e) ?: "Couldn't save your changes. Check your connection and try again."
             } finally {
                 isSaving = false
             }
@@ -476,4 +476,18 @@ private fun EditableStatField(value: String, onValueChange: (String) -> Unit, ke
         modifier = Modifier.fillMaxWidth(),
         colors = appTextFieldColors()
     )
+}
+
+/**
+ * The server's reason for refusing a change ("height must be between 50 and
+ * 275 cm"), tidied for showing to a person - or null if the request failed
+ * for another reason (no connection, server down).
+ */
+fun serverRefusal(e: Throwable): String? {
+    val http = e as? retrofit2.HttpException ?: return null
+    if (http.code() !in setOf(400, 409, 413, 429)) return null
+    if (http.code() == 429) return "Too many changes in a short time. Wait a minute and try again."
+    val body = runCatching { http.response()?.errorBody()?.string() }.getOrNull()?.trim()
+    if (body.isNullOrEmpty() || body.length > 200) return null
+    return body.replaceFirstChar { it.uppercase() }.let { if (it.endsWith(".")) it else "$it." }
 }

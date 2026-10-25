@@ -27,7 +27,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Shrinks and obfuscates the release app (smaller, harder to
+            // pick apart). Keep rules for the network models are in
+            // proguard-rules.pro - test a release build after changes.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -40,6 +44,8 @@ android {
     }
     buildFeatures {
         compose = true
+        // BuildConfig.DEBUG: only debug builds log network traffic.
+        buildConfig = true
     }
 }
 

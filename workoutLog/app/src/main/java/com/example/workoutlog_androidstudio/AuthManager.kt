@@ -15,6 +15,7 @@ import com.google.android.gms.tasks.Tasks
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.FirebaseNetworkException
+import com.google.firebase.FirebaseTooManyRequestsException
 import com.google.firebase.auth.AuthCredential
 import com.google.firebase.auth.EmailAuthProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -47,9 +48,20 @@ object AuthManager {
     var isSignedIn by mutableStateOf(firebaseAuth.currentUser != null)
         private set
 
+    /** Signed in with an email whose link hasn't been tapped yet. The app
+     *  shows [VerifyEmailScreen] instead of itself, and the server refuses
+     *  this account's requests, until it's verified. Google accounts come
+     *  already verified. */
+    var needsEmailVerification by mutableStateOf(firebaseAuth.currentUser?.let { !it.isEmailVerified } ?: false)
+        private set
+
+    /** The signed-in account's email, for the verify screen. */
+    val currentEmail: String? get() = firebaseAuth.currentUser?.email
+
     init {
         firebaseAuth.addAuthStateListener {
             isSignedIn = it.currentUser != null
+            needsEmailVerification = it.currentUser?.let { user -> !user.isEmailVerified } ?: false
             // Tags crash reports with the account (an opaque uid) - cleared on sign-out.
             CrashReporting.setUser(it.currentUser?.uid)
         }
@@ -76,6 +88,27 @@ object AuthManager {
             result.user?.sendEmailVerification()?.await()
         } catch (e: Exception) {
         }
+    }
+
+    /** Sends the verification link again. */
+    suspend fun resendVerificationEmail() {
+        val user = firebaseAuth.currentUser ?: error("Not signed in")
+        user.sendEmailVerification().await()
+    }
+
+    /**
+     * Asks Firebase whether the link has been tapped. If it has, also gets a
+     * fresh ID token - the old one still says "not verified", and that's what
+     * the server checks. Returns true once verified.
+     */
+    suspend fun checkEmailVerified(): Boolean {
+        val user = firebaseAuth.currentUser ?: return false
+        user.reload().await()
+        val refreshed = firebaseAuth.currentUser ?: return false
+        if (!refreshed.isEmailVerified) return false
+        refreshed.getIdToken(true).await()
+        needsEmailVerification = false
+        return true
     }
 
     suspend fun sendPasswordReset(email: String) {
@@ -192,6 +225,7 @@ private fun friendlyAuthMessage(e: Throwable): String = when (e) {
     is FirebaseAuthInvalidUserException -> "Wrong email or password."
     is FirebaseAuthRecentLoginRequiredException -> "For security, please confirm it's you and try again."
     is FirebaseNetworkException -> "No connection. Check your internet and try again."
+    is FirebaseTooManyRequestsException -> "Too many tries. Wait a few minutes and try again."
     is GetCredentialCancellationException -> "Sign-in was cancelled."
     is NoCredentialException -> "No Google account found on this phone. Add one in Settings, or use email instead."
     else -> "Something went wrong. Please try again."

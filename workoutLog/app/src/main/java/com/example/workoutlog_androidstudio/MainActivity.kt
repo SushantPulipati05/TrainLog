@@ -135,13 +135,13 @@ class MainActivity : ComponentActivity() {
                 // Signing out - or a login that's expired or been revoked -
                 // wipes everything tied to the previous account: cached data,
                 // any workout in progress, and its ongoing notification.
-                LaunchedEffect(AuthManager.isSignedIn) {
+                LaunchedEffect(AuthManager.isSignedIn, AuthManager.needsEmailVerification) {
                     if (!AuthManager.isSignedIn) {
                         AppDataCache.clear()
                         TrainingPlanStore.clear(this@MainActivity)
                         ActiveWorkoutState.end()
                         ActiveWorkoutNotificationService.stop(this@MainActivity)
-                    } else {
+                    } else if (!AuthManager.needsEmailVerification) {
                         // Signed in (or the app opened while signed in): bring
                         // back the training plan saved to this account, or
                         // upload a change made while offline.
@@ -153,6 +153,13 @@ class MainActivity : ComponentActivity() {
                 // their remembered state) when they sign out.
                 if (!AuthManager.isSignedIn) {
                     LoginScreen()
+                    return@WorkoutLogTheme
+                }
+                // An email account has to confirm its address (the link
+                // Firebase emailed) before anything loads - the server
+                // refuses unverified accounts anyway.
+                if (AuthManager.needsEmailVerification) {
+                    VerifyEmailScreen()
                     return@WorkoutLogTheme
                 }
 

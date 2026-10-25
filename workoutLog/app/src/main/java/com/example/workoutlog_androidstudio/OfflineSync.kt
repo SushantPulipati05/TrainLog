@@ -204,11 +204,12 @@ object PendingWorkoutStore {
     var all by mutableStateOf<List<PendingWorkout>>(emptyList())
         private set
 
-    /** The signed-in account's queued workouts. */
+    /** The signed-in account's queued workouts. Only ever exact matches:
+     *  one account's workouts never upload under another account. */
     val mine: List<PendingWorkout>
         get() {
-            val uid = currentUid()
-            return all.filter { it.ownerUid == null || it.ownerUid == uid }
+            val uid = currentUid() ?: return emptyList()
+            return all.filter { it.ownerUid == uid }
         }
 
     fun init(context: Context) {
@@ -216,7 +217,18 @@ object PendingWorkoutStore {
             if (file != null) return
             val f = File(context.applicationContext.filesDir, FILE_NAME)
             file = f
-            all = runCatching { offlineJson.decodeFromString(serializer, f.readText()) }.getOrDefault(emptyList())
+            val loaded = runCatching { offlineJson.decodeFromString(serializer, f.readText()) }.getOrDefault(emptyList())
+            // Workouts queued by an older version didn't record whose they
+            // were. They belong to whoever is signed in now (they were made
+            // in this session's account), so stamp them once; if nobody is
+            // signed in they're left alone and never upload to anyone.
+            val uid = currentUid()
+            all = if (uid != null && loaded.any { it.ownerUid == null }) {
+                loaded.map { if (it.ownerUid == null) it.copy(ownerUid = uid) else it }
+                    .also { stamped -> writeAtomically(f, offlineJson.encodeToString(serializer, stamped)) }
+            } else {
+                loaded
+            }
         }
     }
 
