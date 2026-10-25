@@ -93,6 +93,12 @@ interface WorkoutApi {
 
     @POST("workouts/import")
     suspend fun importWorkout(@Body request: ImportWorkoutRequest): WorkoutResponse
+
+    @GET("training-plan")
+    suspend fun getTrainingPlan(): TrainingPlanResponse
+
+    @PUT("training-plan")
+    suspend fun saveTrainingPlan(@Body request: SaveTrainingPlanRequest): TrainingPlanResponse
 }
 
 object NetworkClient {

@@ -253,7 +253,8 @@ fun HomeScreen(
             }
             // One-time nudge after the first workout: set up a plan to get
             // gym reminders. Gone once a plan exists or it's dismissed.
-            if (previousWorkouts.isNotEmpty() && TrainingPlanStore.plan == null && !TrainingPlanStore.promptDismissed) {
+            if (previousWorkouts.isNotEmpty() && TrainingPlanStore.plan == null && !TrainingPlanStore.promptDismissed &&
+                TrainingPlanStore.accountChecked) {
                 Spacer(modifier = Modifier.height(12.dp))
                 GymReminderPromptCard(
                     onSetUp = onOpenTrainingPlan,

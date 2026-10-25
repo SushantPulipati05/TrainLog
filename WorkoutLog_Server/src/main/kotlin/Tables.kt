@@ -15,6 +15,14 @@ object Users : Table("users") {
     val email = varchar("email", 320).nullable()
     val displayName = varchar("display_name", 200).nullable()
     val createdAt = datetime("created_at")
+    // The app's training plan (split, training days, gym time, reminder
+    // settings), saved as the app's own JSON so the server never has to
+    // change when the plan gains a field. null = no plan set up yet.
+    // Kept per account so it comes back after signing out, a reinstall or
+    // a new phone. See GET/PUT /training-plan and migrateUsersTrainingPlan().
+    val trainingPlan = text("training_plan").nullable()
+    // Whether the "set up a training plan" prompt on Home was dismissed.
+    val planPromptDismissed = bool("plan_prompt_dismissed").default(false)
 
     override val primaryKey = PrimaryKey(id)
 }

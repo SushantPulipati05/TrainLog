@@ -20,7 +20,16 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import com.example.workoutlog_androidstudio.api.NetworkClient
+import com.example.workoutlog_androidstudio.api.SaveTrainingPlanRequest
 import com.example.workoutlog_androidstudio.api.WorkoutTemplateSummaryResponse
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.DayOfWeek
@@ -49,8 +58,10 @@ enum class TrainingSplit(val label: String, val days: List<String>, val cycleLab
  * [computeUpNext] in SplitInsights.kt), so a skipped day never throws
  * the rotation off.
  *
- * Saved on this phone only - the reminders it drives are scheduled by the
- * phone itself, so there's nothing for the server to do.
+ * Saved on the phone (so it works offline and the reminders can read it)
+ * and to the account on the server (so it comes back after signing out,
+ * a reinstall or a new phone) - see [TrainingPlanStore.syncWithServer].
+ * The reminders themselves are always scheduled by the phone.
  */
 @Serializable
 data class TrainingPlan(
@@ -154,7 +165,13 @@ fun normalizeWorkoutName(name: String): String =
         .filter { it.isNotBlank() && it !in setOf("day", "workout", "session", "and") }
         .joinToString(" ")
 
-/** The saved plan plus a couple of small flags, kept in SharedPreferences. */
+/**
+ * The saved plan plus a couple of small flags, kept in SharedPreferences.
+ * The plan and the "prompt dismissed" flag are also saved to the account:
+ * every change is uploaded, and signing in pulls the account's copy down.
+ * A change made offline is marked unsynced and uploaded on the next sync,
+ * so it isn't overwritten by the older copy on the server.
+ */
 object TrainingPlanStore {
     private const val PREFS_NAME = "training_plan"
     private const val KEY_PLAN = "plan"
@@ -164,9 +181,20 @@ object TrainingPlanStore {
     private const val KEY_UP_NEXT_START = "up_next_start"
     private const val KEY_UP_NEXT_RECOVERING = "up_next_recovering"
     private const val KEY_DISMISSED_ORDER = "dismissed_order"
+    /** Local plan/prompt changes the server hasn't got yet. */
+    private const val KEY_UNSYNCED = "unsynced"
+    /** The account's copy has been fetched at least once since signing in. */
+    private const val KEY_ACCOUNT_CHECKED = "account_checked"
+    private const val TAG = "TrainingPlanSync"
 
     private val json = Json { ignoreUnknownKeys = true }
     private var prefs: SharedPreferences? = null
+    private var appContext: Context? = null
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val syncLock = Mutex()
+    /** Bumped on sign-out, so a sync still running for the old account
+     *  can't write its result over the new one. */
+    @Volatile private var generation = 0
 
     /** null until the user has set a plan up. Compose state, so screens update. */
     var plan by mutableStateOf<TrainingPlan?>(null)
@@ -186,8 +214,15 @@ object TrainingPlanStore {
     var dismissedOrder by mutableStateOf<String?>(null)
         private set
 
+    /** Whether this account's saved plan has been checked since signing in.
+     *  Home waits for it before offering to set a plan up, so the prompt
+     *  doesn't flash up for someone whose plan is still loading. */
+    var accountChecked by mutableStateOf(false)
+        private set
+
     fun init(context: Context) {
         if (prefs != null) return
+        appContext = context.applicationContext
         val p = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs = p
         plan = p.getString(KEY_PLAN, null)?.let { raw ->
@@ -202,6 +237,7 @@ object TrainingPlanStore {
         }
         promptDismissed = p.getBoolean(KEY_PROMPT_DISMISSED, false)
         dismissedOrder = p.getString(KEY_DISMISSED_ORDER, null)
+        accountChecked = p.getBoolean(KEY_ACCOUNT_CHECKED, false) || plan != null
     }
 
     fun save(context: Context, newPlan: TrainingPlan) {
@@ -217,8 +253,12 @@ object TrainingPlanStore {
             stamped = stamped.copy(trainingDaysSince = weekStartOf(today).plusWeeks(1).toString())
         }
         plan = stamped
-        prefs?.edit()?.putString(KEY_PLAN, json.encodeToString(TrainingPlan.serializer(), stamped))?.apply()
+        prefs?.edit()
+            ?.putString(KEY_PLAN, json.encodeToString(TrainingPlan.serializer(), stamped))
+            ?.putBoolean(KEY_UNSYNCED, true)
+            ?.apply()
         GymReminderScheduler.reschedule(context)
+        requestSync()
     }
 
     /** Home works out "Up next" from the workout list; it's saved here so
@@ -257,7 +297,8 @@ object TrainingPlanStore {
     fun dismissPrompt(context: Context) {
         init(context)
         promptDismissed = true
-        prefs?.edit()?.putBoolean(KEY_PROMPT_DISMISSED, true)?.apply()
+        prefs?.edit()?.putBoolean(KEY_PROMPT_DISMISSED, true)?.putBoolean(KEY_UNSYNCED, true)?.apply()
+        requestSync()
     }
 
     /** Called when a workout ends, so today's reminder is skipped. */
@@ -272,14 +313,89 @@ object TrainingPlanStore {
         return prefs?.getString(KEY_LAST_TRAINED, null) == LocalDate.now().toString()
     }
 
-    /** Signing out: forget this account's plan and stop its reminders. */
+    /** Signing out: remove this account's plan from the phone and stop its
+     *  reminders. The account's copy stays on the server and comes back
+     *  when they sign in again. */
     fun clear(context: Context) {
         init(context)
+        generation++
         plan = null
         promptDismissed = false
         dismissedOrder = null
+        accountChecked = false
         prefs?.edit()?.clear()?.apply()
         GymReminderScheduler.cancel(context)
+    }
+
+    /** Starts a [syncWithServer] in the background. */
+    fun requestSync() {
+        val context = appContext ?: return
+        scope.launch { syncWithServer(context) }
+    }
+
+    /**
+     * Brings the phone and the account's saved plan in line:
+     * - a change made on this phone that hasn't been uploaded yet is sent up
+     *   (the phone's copy is newer);
+     * - otherwise the account's copy wins and replaces the phone's - that's
+     *   what restores the plan after signing back in;
+     * - an account with no plan yet but one on this phone (set up before
+     *   plans were saved to the account) gets the phone's copy uploaded.
+     * Fails quietly when offline; anything unsynced is retried next time.
+     */
+    suspend fun syncWithServer(context: Context) {
+        init(context)
+        syncLock.withLock {
+            val startedIn = generation
+            val p = prefs ?: return
+            val api = NetworkClient.workoutApi
+            try {
+                if (!p.getBoolean(KEY_UNSYNCED, false)) {
+                    val remote = api.getTrainingPlan()
+                    if (generation != startedIn) return
+                    val remotePlan = remote.plan?.let { raw ->
+                        runCatching { json.decodeFromString(TrainingPlan.serializer(), raw) }.getOrNull()
+                    }
+                    if (remotePlan != null || plan == null) {
+                        withContext(Dispatchers.Main) {
+                            if (generation != startedIn) return@withContext
+                            plan = remotePlan
+                            promptDismissed = remote.promptDismissed
+                            accountChecked = true
+                            p.edit()
+                                .putString(KEY_PLAN, remote.plan?.takeIf { remotePlan != null })
+                                .putBoolean(KEY_PROMPT_DISMISSED, remote.promptDismissed)
+                                .putBoolean(KEY_ACCOUNT_CHECKED, true)
+                                .apply()
+                            GymReminderScheduler.reschedule(context)
+                        }
+                        return
+                    }
+                    // The account has no plan but this phone does: upload it below.
+                }
+                val localPlan = plan
+                val dismissed = promptDismissed
+                api.saveTrainingPlan(
+                    SaveTrainingPlanRequest(
+                        plan = localPlan?.let { json.encodeToString(TrainingPlan.serializer(), it) },
+                        promptDismissed = dismissed
+                    )
+                )
+                withContext(Dispatchers.Main) {
+                    if (generation != startedIn) return@withContext
+                    accountChecked = true
+                    // Only mark synced if nothing changed while uploading.
+                    val unchanged = plan == localPlan && promptDismissed == dismissed
+                    val editor = p.edit().putBoolean(KEY_ACCOUNT_CHECKED, true)
+                    if (unchanged) editor.putBoolean(KEY_UNSYNCED, false)
+                    editor.apply()
+                }
+                if (generation == startedIn && p.getBoolean(KEY_UNSYNCED, false)) requestSync()
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Log.w(TAG, "Training plan sync failed, will retry later", e)
+            }
+        }
     }
 }
 

@@ -345,6 +345,17 @@ data class ProfileResponse(
     val sex: String? = null         // "MALE" / "FEMALE" / "UNSPECIFIED"; null = not asked yet
 )
 
+/**
+ * The account's training plan. [plan] is the app's TrainingPlan as JSON,
+ * stored as-is (null = none set up). On PUT, a null [plan] clears it and a
+ * null [promptDismissed] keeps the current value.
+ */
+@Serializable
+data class TrainingPlanResponse(val plan: String? = null, val promptDismissed: Boolean = false)
+
+@Serializable
+data class SaveTrainingPlanRequest(val plan: String? = null, val promptDismissed: Boolean? = null)
+
 /** What the app sends to edit the profile. Any field left null keeps its
  *  current value - workoutsLogged/totalVolumeKg/bmi/weeksActive aren't here
  *  at all, since those are always computed, never stored. */
@@ -502,6 +513,7 @@ fun Application.module() {
     migrateSetEntriesLoggedAt()
     migrateExerciseMuscles()
     migrateWorkoutsClientId()
+    migrateUsersTrainingPlan()
 
     seedExercisesIfNeeded()
     seedWorkoutTemplatesIfNeeded()
@@ -1591,6 +1603,42 @@ fun Application.module() {
                 call.respond(loadProfileResponse(me, zone)!!)
             }
 
+            // The training plan saved to this account (see Users.trainingPlan).
+            get("/training-plan") {
+                val me = call.userId()
+                val row = transaction { Users.selectAll().where { Users.id eq me }.singleOrNull() }
+                call.respond(
+                    TrainingPlanResponse(
+                        plan = row?.get(Users.trainingPlan),
+                        promptDismissed = row?.get(Users.planPromptDismissed) ?: false
+                    )
+                )
+            }
+
+            // Replaces the saved plan. The app sends the whole plan each time
+            // it changes, so the last save wins.
+            put("/training-plan") {
+                val me = call.userId()
+                val request = try {
+                    call.receive<SaveTrainingPlanRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@put
+                }
+                if ((request.plan?.length ?: 0) > 20_000) {
+                    call.respondText("plan too large", status = HttpStatusCode.BadRequest)
+                    return@put
+                }
+                val row = transaction {
+                    Users.update({ Users.id eq me }) {
+                        it[trainingPlan] = request.plan
+                        if (request.promptDismissed != null) it[planPromptDismissed] = request.promptDismissed
+                    }
+                    Users.selectAll().where { Users.id eq me }.single()
+                }
+                call.respond(TrainingPlanResponse(row[Users.trainingPlan], row[Users.planPromptDismissed]))
+            }
+
             // Saves a finished workout in one go: replaces whatever sets the
             // workout has with the ones sent, stores the notes and marks it
             // ended - all in one transaction, so it either fully saves or
@@ -2197,6 +2245,16 @@ private fun migrateExerciseMuscles() {
         connection.createStatement().use { statement ->
             statement.execute("ALTER TABLE exercises ADD COLUMN IF NOT EXISTS primary_muscles TEXT")
             statement.execute("ALTER TABLE exercises ADD COLUMN IF NOT EXISTS secondary_muscles TEXT")
+        }
+    }
+}
+
+/** Adds users.training_plan / plan_prompt_dismissed (see Users.trainingPlan) to an existing database. */
+private fun migrateUsersTrainingPlan() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS training_plan TEXT")
+            statement.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_prompt_dismissed BOOLEAN NOT NULL DEFAULT FALSE")
         }
     }
 }

@@ -6,6 +6,18 @@ import kotlinx.serialization.Serializable
 data class NewWorkoutRequest(val workoutName: String)
 
 @Serializable
+data class TrainingPlanResponse(
+    val plan: String? = null,
+    val promptDismissed: Boolean = false
+)
+
+@Serializable
+data class SaveTrainingPlanRequest(
+    val plan: String? = null,
+    val promptDismissed: Boolean? = null
+)
+
+@Serializable
 data class WorkoutResponse(
     val id: Int,
     val workoutName: String,

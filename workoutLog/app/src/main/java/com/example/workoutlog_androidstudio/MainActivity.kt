@@ -141,6 +141,11 @@ class MainActivity : ComponentActivity() {
                         TrainingPlanStore.clear(this@MainActivity)
                         ActiveWorkoutState.end()
                         ActiveWorkoutNotificationService.stop(this@MainActivity)
+                    } else {
+                        // Signed in (or the app opened while signed in): bring
+                        // back the training plan saved to this account, or
+                        // upload a change made while offline.
+                        TrainingPlanStore.syncWithServer(this@MainActivity)
                     }
                 }
                 // Nothing else in the app is reachable until someone is
