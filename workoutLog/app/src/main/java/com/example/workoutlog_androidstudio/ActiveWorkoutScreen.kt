@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.glance.appwidget.updateAll
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
@@ -683,6 +684,16 @@ private fun ExerciseCard(
     elapsedSeconds: Int,
     onSetsChange: (List<ExerciseSet>) -> Unit
 ) {
+    // ---- Your best ever and last time's sets (from its history; the copy
+    // saved on the phone works offline). Nothing the first time.
+    var history by remember(exercise.exerciseId) { mutableStateOf(AppDataCache.exerciseHistories[exercise.exerciseId]) }
+    LaunchedEffect(exercise.exerciseId) {
+        runCatching { AppDataCache.loadExerciseHistory(exercise.exerciseId) }.getOrNull()?.let { history = it }
+    }
+    val best = remember(history) { topSetOf(history?.history.orEmpty().flatMap { it.sets }) }
+    val lastSets = remember(history) { history?.history?.lastOrNull()?.sets.orEmpty().sortedBy { it.setNumber } }
+    val lastTime = remember(lastSets) { topSetOf(lastSets) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -707,22 +718,23 @@ private fun ExerciseCard(
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextMuted
                 )
-            }
-        }
-
-        // ---- Your best ever and last time's top set (from its history;
-        // the copy saved on the phone works offline). Nothing the first time.
-        var history by remember(exercise.exerciseId) { mutableStateOf(AppDataCache.exerciseHistories[exercise.exerciseId]) }
-        LaunchedEffect(exercise.exerciseId) {
-            runCatching { AppDataCache.loadExerciseHistory(exercise.exerciseId) }.getOrNull()?.let { history = it }
-        }
-        val best = remember(history) { topSetOf(history?.history.orEmpty().flatMap { it.sets }) }
-        val lastTime = remember(history) { history?.history?.lastOrNull()?.let { topSetOf(it.sets) } }
-        if (best != null || lastTime != null) {
-            Spacer(modifier = Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                best?.let { StatPill(label = "Best", value = it.label(), highlight = true) }
-                lastTime?.let { StatPill(label = "Last time", value = it.label(), highlight = false) }
+                // "Best 70 kg × 6 · last time 65 kg × 8" - straight under the
+                // muscle, same spacing as the muscle under the name.
+                if (best != null || lastTime != null) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = androidx.compose.ui.text.buildAnnotatedString {
+                            best?.let {
+                                append("Best ")
+                                withStyle(androidx.compose.ui.text.SpanStyle(color = AppAccent, fontWeight = FontWeight.SemiBold)) { append(it.label()) }
+                            }
+                            if (best != null && lastTime != null) append(" · ")
+                            lastTime?.let { append("last time ${it.label()}") }
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = AppTextSecondary
+                    )
+                }
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -744,8 +756,12 @@ private fun ExerciseCard(
         }
         Spacer(modifier = Modifier.height(10.dp))
         exercise.sets.forEachIndexed { rowIndex, set ->
+            // Empty boxes show last time's numbers for this set in grey.
+            val ghost = lastSets.getOrNull(rowIndex)
             SwipeToDeleteSetRow(
                 set = set,
+                ghostKg = ghost?.weightKg?.takeIf { it > 0.0 }?.let { formatDecimal(it) },
+                ghostReps = ghost?.reps?.toString(),
                 onKgChange = { newKg ->
                     val updated = exercise.sets.toMutableList()
                     updated[rowIndex] = set.copy(kg = newKg)
@@ -827,11 +843,13 @@ private fun SwipeToDeleteSetRow(
     set: ExerciseSet,
     onKgChange: (String) -> Unit,
     onRepsChange: (String) -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    ghostKg: String? = null,
+    ghostReps: String? = null
 ) {
     SwipeToDeleteBox(onRequestDelete = onDelete, contentDescription = "Delete set", cornerRadius = 10.dp) {
         Box(modifier = Modifier.fillMaxWidth().background(AppSurface)) {
-            SetRow(set = set, onKgChange = onKgChange, onRepsChange = onRepsChange)
+            SetRow(set = set, onKgChange = onKgChange, onRepsChange = onRepsChange, ghostKg = ghostKg, ghostReps = ghostReps)
         }
     }
 }
@@ -840,7 +858,9 @@ private fun SwipeToDeleteSetRow(
 private fun SetRow(
     set: ExerciseSet,
     onKgChange: (String) -> Unit,
-    onRepsChange: (String) -> Unit
+    onRepsChange: (String) -> Unit,
+    ghostKg: String? = null,
+    ghostReps: String? = null
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -878,6 +898,7 @@ private fun SetRow(
             onValueChange = onKgChange,
             backgroundColor = AppSurfaceVariant,
             textColor = AppTextPrimary,
+            placeholder = ghostKg,
             modifier = Modifier.weight(1f)
         )
         SetInputField(
@@ -885,6 +906,7 @@ private fun SetRow(
             onValueChange = onRepsChange,
             backgroundColor = AppSurfaceVariant,
             textColor = AppTextPrimary,
+            placeholder = ghostReps,
             modifier = Modifier.weight(1f)
         )
     }
@@ -896,7 +918,9 @@ private fun SetInputField(
     onValueChange: (String) -> Unit,
     backgroundColor: Color,
     textColor: Color,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Shown in grey while empty - last time's number for this set. */
+    placeholder: String? = null
 ) {
     BasicTextField(
         value = value,
@@ -909,6 +933,14 @@ private fun SetInputField(
             .padding(vertical = 10.dp),
         decorationBox = { innerTextField ->
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+                if (value.isEmpty() && placeholder != null) {
+                    Text(
+                        text = placeholder,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = GHOST_TEXT,
+                        textAlign = TextAlign.Center
+                    )
+                }
                 innerTextField()
             }
         }
@@ -1063,22 +1095,5 @@ private fun topSetOf(sets: List<TopSet>): TopSet? =
 private fun topSetOf(sets: List<com.example.workoutlog_androidstudio.api.SetEntryResponse>): TopSet? =
     topSetOf(sets.map { TopSet(it.weightKg?.takeIf { w -> w > 0.0 }, it.reps) })
 
-/** "Best 70 kg × 6" - a small rounded label on an exercise card. */
-@Composable
-private fun StatPill(label: String, value: String, highlight: Boolean) {
-    Row(
-        modifier = Modifier
-            .background(AppSurfaceVariant, RoundedCornerShape(10.dp))
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, style = MaterialTheme.typography.labelMedium, color = AppTextSecondary)
-        Spacer(modifier = Modifier.width(5.dp))
-        Text(
-            text = value,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = if (highlight) AppAccent else AppTextPrimary
-        )
-    }
-}
+/** Last time's numbers shown in empty set boxes - a dim grey. */
+private val GHOST_TEXT = Color(0xFF55555B)
