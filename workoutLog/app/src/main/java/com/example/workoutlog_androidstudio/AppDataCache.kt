@@ -209,7 +209,9 @@ object AppDataCache {
         }
 
     suspend fun loadWorkoutDetail(id: Int, force: Boolean = false): WorkoutDetailResponse =
-        load("workout:$id", force, workoutDetails[id], { NetworkClient.workoutApi.getWorkoutDetail(id) }) {
+        // Not uploaded yet: its sets are on the phone, not the server.
+        PendingWorkoutStore.mine.firstOrNull { it.workoutId == id }?.toDetail()
+            ?: load("workout:$id", force, workoutDetails[id], { NetworkClient.workoutApi.getWorkoutDetail(id) }) {
             workoutDetails = trimmed(workoutDetails - id + (id to it))
             DiskCache.write("workout_details", detailsSerializer, workoutDetails)
         }

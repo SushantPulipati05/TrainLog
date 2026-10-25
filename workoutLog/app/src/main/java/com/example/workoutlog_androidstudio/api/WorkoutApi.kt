@@ -90,6 +90,9 @@ interface WorkoutApi {
 
     @GET("progress")
     suspend fun getProgress(): com.example.workoutlog_androidstudio.ProgressResponse
+
+    @POST("workouts/import")
+    suspend fun importWorkout(@Body request: ImportWorkoutRequest): WorkoutResponse
 }
 
 object NetworkClient {

@@ -334,7 +334,8 @@ fun HomeScreen(
                 toastVisible = true
                 coroutineScope.launch {
                     try {
-                        NetworkClient.workoutApi.deleteWorkout(workout.id)
+                        // One that never uploaded only lived on the phone.
+                        if (!isLocalWorkoutId(workout.id)) NetworkClient.workoutApi.deleteWorkout(workout.id)
                     } catch (e: Exception) {
                         AppDataCache.addWorkout(workout)
                         toastVisible = false

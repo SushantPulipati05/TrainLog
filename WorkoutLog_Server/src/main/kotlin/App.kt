@@ -259,6 +259,19 @@ data class CompleteWorkoutRequest(
     val startedAtMillis: Long? = null
 )
 
+/** A whole workout that was started and finished on the phone with no
+ *  connection, uploaded in one go. See POST /workouts/import. */
+@Serializable
+data class ImportWorkoutRequest(
+    // The phone's id for it - the same upload twice updates one workout.
+    val clientId: String,
+    val workoutName: String,
+    val startedAtMillis: Long,
+    val endedAtMillis: Long,
+    val notes: String? = null,
+    val sets: List<NewSetRequest>
+)
+
 /** What the app sends to edit one already-logged set's reps/weight. */
 @Serializable
 data class UpdateSetRequest(
@@ -488,6 +501,7 @@ fun Application.module() {
     migrateAthleteProfileOnboarding()
     migrateSetEntriesLoggedAt()
     migrateExerciseMuscles()
+    migrateWorkoutsClientId()
 
     seedExercisesIfNeeded()
     seedWorkoutTemplatesIfNeeded()
@@ -1676,6 +1690,98 @@ fun Application.module() {
                 }
             }
 
+            // A workout started and finished on the phone while the server
+            // couldn't be reached: creates it with its real times and all its
+            // sets in one go. Safe to repeat - a [clientId] already uploaded
+            // updates that workout (its sets are replaced) instead of adding
+            // a second copy.
+            post("/workouts/import") {
+                val me = call.userId()
+                val zone = call.userZone()
+                val request = try {
+                    call.receive<ImportWorkoutRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val clientId = request.clientId.trim().take(64)
+                val name = request.workoutName.trim().take(100).ifEmpty { "Workout" }
+                if (clientId.isEmpty()) {
+                    call.respondText("clientId is required", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val validSets = request.sets.size <= 1000 && request.sets.all { set ->
+                    set.reps in 0..10_000 && set.setNumber in 1..1000 &&
+                        (set.weightKg == null || set.weightKg in 0.0..2_000.0)
+                }
+                if (!validSets) {
+                    call.respondText("one or more sets are invalid", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val allVisible = transaction {
+                    request.sets.map { it.exerciseId }.distinct().all { exerciseVisible(it, me) }
+                }
+                if (!allVisible) {
+                    call.respondText("one or more of those exercises doesn't exist", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+
+                val now = nowUtc()
+                // The phone's times when believable: not in the future, within
+                // the last year, and the end after the start.
+                val start = LocalDateTime.ofEpochSecond(request.startedAtMillis / 1000, 0, ZoneOffset.UTC)
+                    .takeIf { !it.isAfter(now.plusMinutes(5)) && it.isAfter(now.minusDays(366)) } ?: now
+                val end = LocalDateTime.ofEpochSecond(request.endedAtMillis / 1000, 0, ZoneOffset.UTC)
+                    .takeIf { it.isAfter(start) && !it.isAfter(now.plusMinutes(5)) } ?: start.plusHours(1).let { if (it.isAfter(now)) now else it }
+                val notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }?.take(500)
+
+                val saved = transaction {
+                    val existingId = Workouts.selectAll()
+                        .where { (Workouts.userId eq me) and (Workouts.clientId eq clientId) }
+                        .limit(1)
+                        .firstOrNull()
+                        ?.get(Workouts.id)
+                    val workoutId = if (existingId != null) {
+                        Workouts.update({ (Workouts.id eq existingId) and (Workouts.userId eq me) }) {
+                            it[workoutName] = name
+                            it[startedAt] = start
+                            it[endedAt] = end
+                            it[Workouts.notes] = notes
+                        }
+                        SetEntries.deleteWhere { SetEntries.workoutId eq existingId }
+                        existingId
+                    } else {
+                        Workouts.insert {
+                            it[workoutName] = name
+                            it[startedAt] = start
+                            it[endedAt] = end
+                            it[Workouts.notes] = notes
+                            it[Workouts.userId] = me
+                            it[Workouts.clientId] = clientId
+                        } get Workouts.id
+                    }
+                    request.sets.forEach { set ->
+                        SetEntries.insert {
+                            it[SetEntries.workoutId] = workoutId
+                            it[exerciseId] = set.exerciseId
+                            it[setNumber] = set.setNumber
+                            it[reps] = set.reps
+                            it[weightKg] = set.weightKg
+                            it[loggedAtSeconds] = set.loggedAtSeconds
+                            it[createdAt] = now
+                        }
+                    }
+                    WorkoutResponse(
+                        id = workoutId,
+                        workoutName = name,
+                        startedAt = start.toZone(zone).toString(),
+                        endedAt = end.toZone(zone).toString(),
+                        notes = notes
+                    )
+                }
+                call.respond(saved)
+            }
+
             // Permanently deletes this user's account and everything they own:
             // every workout (and its sets), their custom templates and
             // exercises, their profile, and the user row itself. Google Play
@@ -2091,6 +2197,15 @@ private fun migrateExerciseMuscles() {
         connection.createStatement().use { statement ->
             statement.execute("ALTER TABLE exercises ADD COLUMN IF NOT EXISTS primary_muscles TEXT")
             statement.execute("ALTER TABLE exercises ADD COLUMN IF NOT EXISTS secondary_muscles TEXT")
+        }
+    }
+}
+
+/** Adds workouts.client_id (see Workouts.clientId) to an existing database. */
+private fun migrateWorkoutsClientId() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE workouts ADD COLUMN IF NOT EXISTS client_id VARCHAR(64)")
         }
     }
 }

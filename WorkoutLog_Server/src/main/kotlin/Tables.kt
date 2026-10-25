@@ -77,6 +77,10 @@ object Workouts : Table("workouts") {
     // existed can be added to a database that already has them; every new
     // row always sets it, and every query filters on it.
     val userId = integer("user_id").references(Users.id).nullable()
+    // For a workout started on the phone with no connection: the phone's own
+    // id for it, so uploading it twice (a retry after a lost reply) updates
+    // the same workout instead of making a copy. Null for normal workouts.
+    val clientId = varchar("client_id", 64).nullable()
 
     override val primaryKey = PrimaryKey(id)
 }

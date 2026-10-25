@@ -240,9 +240,7 @@ class MainActivity : ComponentActivity() {
                         val templates = runCatching { AppDataCache.loadTemplates() }.getOrDefault(emptyList())
                         val templateId = TrainingPlanStore.plan?.templateIdFor(label, templates)
                         val template = templateId?.let { id -> runCatching { AppDataCache.loadTemplateDetail(id) }.getOrNull() }
-                        val started = NetworkClient.workoutApi.startWorkout(
-                            NewWorkoutRequest(workoutName = template?.name ?: plannedWorkoutName(label))
-                        )
+                        val started = startWorkoutAnywhere(template?.name ?: plannedWorkoutName(label))
                         pendingPrefillExercises = template?.exercises ?: emptyList()
                         screenStack = emptyList()
                         ActiveWorkoutState.start(started)
@@ -281,7 +279,7 @@ class MainActivity : ComponentActivity() {
                                 ?.let { id -> runCatching { AppDataCache.loadTemplateDetail(id) }.getOrNull() }
                         }
                         val name = template?.name ?: day?.let { plannedWorkoutName(it) } ?: DEFAULT_WORKOUT_NAME
-                        val started = NetworkClient.workoutApi.startWorkout(NewWorkoutRequest(workoutName = name))
+                        val started = startWorkoutAnywhere(name)
                         pendingPrefillExercises = template?.exercises ?: emptyList()
                         screenStack = emptyList()
                         ActiveWorkoutState.startPast(started, startMillis, minutes)
@@ -349,9 +347,7 @@ class MainActivity : ComponentActivity() {
                                     // start while ActiveWorkoutState already holds one.
                                     if (ActiveWorkoutState.workout != null) return@launch
                                     try {
-                                        val started = NetworkClient.workoutApi.startWorkout(
-                                            NewWorkoutRequest(workoutName = workoutName)
-                                        )
+                                        val started = startWorkoutAnywhere(workoutName)
                                         Log.d("StartWorkout", "Created workout: $started")
                                         pendingPrefillExercises = emptyList()
                                         ActiveWorkoutState.start(started)
@@ -468,9 +464,7 @@ class MainActivity : ComponentActivity() {
                                             // above, behind StartWorkoutButton's own disabled state.
                                             if (ActiveWorkoutState.workout != null) return@launch
                                             try {
-                                                val started = NetworkClient.workoutApi.startWorkout(
-                                                    NewWorkoutRequest(workoutName = templateDetail.name)
-                                                )
+                                                val started = startWorkoutAnywhere(templateDetail.name)
                                                 Log.d("StartWorkout", "Created workout from template: $started")
                                                 pendingPrefillExercises = templateDetail.exercises
                                                 // Starting a workout leaves this whole chevron
@@ -552,7 +546,8 @@ class MainActivity : ComponentActivity() {
                                     endActiveWorkout()
                                     coroutineScope.launch {
                                         try {
-                                            NetworkClient.workoutApi.deleteWorkout(discardedId)
+                                            // A phone-made workout never reached the server.
+                                            if (!isLocalWorkoutId(discardedId)) NetworkClient.workoutApi.deleteWorkout(discardedId)
                                         } catch (e: Exception) {
                                             Log.e("DiscardWorkout", "Couldn't delete discarded workout $discardedId", e)
                                         }

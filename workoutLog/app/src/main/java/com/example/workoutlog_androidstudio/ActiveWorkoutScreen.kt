@@ -183,6 +183,8 @@ fun ActiveWorkoutScreen(
         val clean = name.trim().take(60)
         if (clean.isEmpty() || clean == workout.workoutName) return
         ActiveWorkoutState.rename(clean)
+        // A phone-made workout takes its name with it when it uploads.
+        if (isLocalWorkoutId(workout.id)) return
         coroutineScope.launch {
             try {
                 NetworkClient.workoutApi.updateWorkout(workout.id, UpdateWorkoutRequest(workoutName = clean))
@@ -237,7 +239,7 @@ fun ActiveWorkoutScreen(
                             PendingWorkoutStore.rename(workout.id, chosen)
                         } else {
                             try {
-                                NetworkClient.workoutApi.updateWorkout(workout.id, UpdateWorkoutRequest(workoutName = chosen))
+                                NetworkClient.workoutApi.updateWorkout(OfflineSync.serverIdFor(workout.id), UpdateWorkoutRequest(workoutName = chosen))
                             } catch (e: Exception) {
                                 // The workout is saved either way - it just keeps its old name.
                                 Log.e("EndWorkout", "Couldn't rename workout ${workout.id}", e)
@@ -577,7 +579,7 @@ fun ActiveWorkoutScreen(
                     if (WorkoutNamer.enabled && !namedByUser && !ActiveWorkoutState.isPast) {
                         // Freeze the clock while the name card is up.
                         ActiveWorkoutState.isPaused = true
-                        val facts = sessionFactsAfterSave(workout.id, exercises, ActiveWorkoutState.elapsedSeconds)
+                        val facts = sessionFactsAfterSave(OfflineSync.serverIdFor(workout.id), exercises, ActiveWorkoutState.elapsedSeconds)
                         nameSuggestion = WorkoutNamer.suggest(facts) to facts
                         isEndingWorkout = false
                     } else {
@@ -587,7 +589,7 @@ fun ActiveWorkoutScreen(
                         if ((namedByUser || chosenDay != null) && !PendingWorkoutStore.has(workout.id)) {
                             runCatching {
                                 NetworkClient.workoutApi.updateWorkout(
-                                    workout.id,
+                                    OfflineSync.serverIdFor(workout.id),
                                     UpdateWorkoutRequest(workoutName = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName)
                                 )
                             }

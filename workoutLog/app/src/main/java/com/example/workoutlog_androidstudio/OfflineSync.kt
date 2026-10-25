@@ -14,6 +14,11 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.example.workoutlog_androidstudio.api.CompleteWorkoutRequest
+import com.example.workoutlog_androidstudio.api.ImportWorkoutRequest
+import com.example.workoutlog_androidstudio.api.NewWorkoutRequest
+import com.example.workoutlog_androidstudio.api.SetEntryResponse
+import com.example.workoutlog_androidstudio.api.WorkoutDetailResponse
+import com.example.workoutlog_androidstudio.api.WorkoutResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.NewSetRequest
 import com.example.workoutlog_androidstudio.api.UpdateWorkoutRequest
@@ -251,6 +256,12 @@ object OfflineSync {
     private const val WORK_NAME = "trainlog-outbox-sync"
     private val mutex = Mutex()
 
+    /** Phone-made workout id -> the id the server gave it on upload. */
+    private val uploadedAs = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+
+    /** The server's id for a workout (a phone-made one once it's uploaded). */
+    fun serverIdFor(workoutId: Int): Int = uploadedAs[workoutId] ?: workoutId
+
     /**
      * Uploads every queued workout of the signed-in account. Safe to run any
      * number of times: the server replaces a workout's sets rather than adding
@@ -262,6 +273,34 @@ object OfflineSync {
         var uploadedAny = false
         for (pending in PendingWorkoutStore.mine) {
             try {
+                if (isLocalWorkoutId(pending.workoutId)) {
+                    // Started with no connection: the server has never heard of
+                    // it, so it's created now - name, times, sets, all at once.
+                    val created = NetworkClient.workoutApi.importWorkout(
+                        ImportWorkoutRequest(
+                            clientId = "phone-${-pending.workoutId}",
+                            workoutName = pending.name,
+                            startedAtMillis = pending.startedAtMillis
+                                ?: (pending.endedAtMillis - pending.elapsedSeconds * 1000L),
+                            endedAtMillis = pending.endedAtMillis,
+                            notes = pending.notes,
+                            sets = pending.sets.map {
+                                NewSetRequest(
+                                    exerciseId = it.exerciseId,
+                                    setNumber = it.setNumber,
+                                    reps = it.reps,
+                                    weightKg = it.weightKg,
+                                    loggedAtSeconds = it.loggedAtSeconds
+                                )
+                            }
+                        )
+                    )
+                    uploadedAs[pending.workoutId] = created.id
+                    uploadedAny = true
+                    runCatching { AppDataCache.loadWorkoutSummaries(force = true) }
+                    PendingWorkoutStore.remove(pending.workoutId)
+                    continue
+                }
                 NetworkClient.workoutApi.completeWorkout(
                     workoutId = pending.workoutId,
                     request = CompleteWorkoutRequest(
@@ -378,4 +417,62 @@ object DiskCache {
     fun clearAll() {
         root?.let { dir -> ioScope.launch { runCatching { dir.deleteRecursively() } } }
     }
+}
+
+
+// ---------------------------------------------------------------------------
+// Starting a workout with no connection
+// ---------------------------------------------------------------------------
+
+/** Workouts made on the phone (server down / no signal) have negative ids
+ *  until they upload; the server's own ids are always positive. */
+fun isLocalWorkoutId(id: Int): Boolean = id < 0
+
+/**
+ * Starts a workout on the server if it answers within a few seconds;
+ * otherwise makes it on the phone (a negative id) so logging never waits on
+ * the server. A phone-made workout is created on the server when it's
+ * uploaded (see [OfflineSync.syncAll]).
+ */
+suspend fun startWorkoutAnywhere(name: String, timeoutMillis: Long = 5_000): WorkoutResponse {
+    val fromServer = withTimeoutOrNull(timeoutMillis) {
+        runCatching { NetworkClient.workoutApi.startWorkout(NewWorkoutRequest(workoutName = name)) }
+            .onFailure { if (it is CancellationException) throw it }
+            .getOrNull()
+    }
+    if (fromServer != null) return fromServer
+    Log.w("StartWorkout", "Server unreachable - starting \"$name\" on the phone")
+    return WorkoutResponse(
+        id = -(1 + kotlin.random.Random.nextInt(Int.MAX_VALUE - 1)),
+        workoutName = name,
+        startedAt = java.time.LocalDateTime.now().toString(),
+        endedAt = null,
+        notes = null
+    )
+}
+
+/** A queued workout as a full workout (all its sets), for its detail screen
+ *  and the calendar before it has uploaded. */
+fun PendingWorkout.toDetail(): WorkoutDetailResponse {
+    val zone = ZoneId.systemDefault()
+    val start = startedAtMillis ?: (endedAtMillis - elapsedSeconds * 1000L)
+    fun iso(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone).toLocalDateTime().toString()
+    return WorkoutDetailResponse(
+        id = workoutId,
+        workoutName = name,
+        startedAt = iso(start),
+        endedAt = iso(endedAtMillis),
+        notes = notes,
+        sets = sets.mapIndexed { i, set ->
+            SetEntryResponse(
+                id = -(i + 1),
+                workoutId = workoutId,
+                exerciseId = set.exerciseId,
+                setNumber = set.setNumber,
+                reps = set.reps,
+                weightKg = set.weightKg,
+                loggedAtSeconds = set.loggedAtSeconds
+            )
+        }
+    )
 }

@@ -238,3 +238,13 @@ data class ExerciseHistoryResponse(
     val isBodyweight: Boolean,
     val history: List<ExerciseHistoryPointResponse>
 )
+/** A whole workout started and finished with no connection, uploaded in one go. */
+@Serializable
+data class ImportWorkoutRequest(
+    val clientId: String,
+    val workoutName: String,
+    val startedAtMillis: Long,
+    val endedAtMillis: Long,
+    val notes: String? = null,
+    val sets: List<NewSetRequest>
+)
