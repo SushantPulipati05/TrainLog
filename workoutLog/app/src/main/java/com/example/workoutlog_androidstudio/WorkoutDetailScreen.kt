@@ -373,21 +373,19 @@ fun WorkoutDetailScreen(
             editableExercises = editableExercises + existing.toNewEditableExercise()
             showCustomExerciseDialog = false
         },
-        onSubmit = { name, muscleGroup, isBodyweight ->
+        onSubmit = { name, muscleGroup, isBodyweight, primary, secondary ->
             isCreatingCustomExercise = true
             customExerciseError = null
             coroutineScope.launch {
                 try {
                     val created = NetworkClient.workoutApi.createExercise(
-                        suggestedMuscles(name, muscleGroup).let { (primary, secondary) ->
-                            NewExerciseRequest(
-                                name = name,
-                                muscleGroup = muscleGroup,
-                                equipment = if (isBodyweight) "Body Only" else "Equipment",
-                                primaryMuscles = primary,
-                                secondaryMuscles = secondary
-                            )
-                        }
+                        NewExerciseRequest(
+                            name = name,
+                            muscleGroup = muscleGroup,
+                            equipment = if (isBodyweight) "Body Only" else "Equipment",
+                            primaryMuscles = primary,
+                            secondaryMuscles = secondary
+                        )
                     )
                     exercises = exercises + created
                     AppDataCache.addExercise(created)

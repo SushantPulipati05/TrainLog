@@ -1044,3 +1044,54 @@ fun SexPromptSheet(visible: Boolean, onLater: () -> Unit) {
         }
     }
 }
+
+
+// ---------------------------------------------------------------------------
+// Exact muscles as words, and picking them for a custom exercise
+// ---------------------------------------------------------------------------
+
+/** "Side delts, Front delts" from an exercise's main muscles; its old
+ *  group ("Shoulders") when it has none (old custom exercises). */
+fun exerciseMuscleLabel(primaryMuscles: List<String>, muscleGroup: String?): String {
+    val names = primaryMuscles.mapNotNull { regionOf(it) }.distinct().map { regionLabel(it) }
+    return if (names.isNotEmpty()) names.joinToString(", ") else muscleGroup?.let { prettyMuscle(it) }.orEmpty()
+}
+
+/** The muscles a custom exercise can be given, under their groups, in the
+ *  order the picker shows them. */
+val MUSCLE_PICKER_GROUPS: List<Pair<String, List<BodyRegion>>> = listOf(
+    "Chest" to listOf(BodyRegion.UPPER_CHEST, BodyRegion.MID_CHEST, BodyRegion.LOWER_CHEST),
+    "Shoulders" to listOf(BodyRegion.FRONT_DELT, BodyRegion.SIDE_DELT, BodyRegion.REAR_DELT),
+    "Biceps" to listOf(BodyRegion.BICEPS_LONG, BodyRegion.BICEPS_SHORT, BodyRegion.BRACHIALIS),
+    "Triceps" to listOf(BodyRegion.TRICEPS_LONG, BodyRegion.TRICEPS_LATERAL, BodyRegion.TRICEPS_MEDIAL),
+    "Forearms" to listOf(BodyRegion.FOREARM_FLEXORS, BodyRegion.FOREARM_EXTENSORS),
+    "Back" to listOf(BodyRegion.UPPER_TRAPS, BodyRegion.MID_TRAPS, BodyRegion.UPPER_BACK, BodyRegion.LATS, BodyRegion.LOWER_BACK),
+    "Core" to listOf(BodyRegion.ABS, BodyRegion.OBLIQUES),
+    "Legs" to listOf(
+        BodyRegion.QUAD_OUTER, BodyRegion.QUAD_FRONT, BodyRegion.QUAD_INNER, BodyRegion.ADDUCTORS,
+        BodyRegion.GLUTES, BodyRegion.GLUTE_MED, BodyRegion.HAM_OUTER, BodyRegion.HAM_INNER,
+        BodyRegion.CALF_OUTER, BodyRegion.CALF_INNER, BodyRegion.SOLEUS, BodyRegion.SHIN
+    )
+)
+
+/** The exercise list's muscle group ("Shoulders", "Middle Back"...) for a
+ *  shape - what a custom exercise is filed under, from its main muscle. */
+fun muscleGroupOf(region: BodyRegion): String = when (region) {
+    in CHEST_PARTS -> "Chest"
+    in DELT_PARTS -> "Shoulders"
+    in BICEPS_PARTS -> "Biceps"
+    in TRICEPS_PARTS -> "Triceps"
+    in FOREARM_PARTS -> "Forearms"
+    BodyRegion.ABS, BodyRegion.OBLIQUES -> "Abdominals"
+    BodyRegion.UPPER_TRAPS -> "Traps"
+    BodyRegion.MID_TRAPS, BodyRegion.UPPER_BACK -> "Middle Back"
+    BodyRegion.LATS -> "Lats"
+    BodyRegion.LOWER_BACK -> "Lower Back"
+    in QUAD_PARTS -> "Quadriceps"
+    BodyRegion.ADDUCTORS -> "Adductors"
+    BodyRegion.GLUTE_MED -> "Abductors"
+    BodyRegion.GLUTES -> "Glutes"
+    in HAM_PARTS -> "Hamstrings"
+    BodyRegion.NECK, BodyRegion.HEAD -> "Neck"
+    else -> "Calves"
+}

@@ -344,7 +344,7 @@ fun ActiveWorkoutScreen(
             addExerciseToWorkout(existing)
             showCustomExerciseDialog = false
         },
-        onSubmit = { name, muscleGroup, isBodyweight ->
+        onSubmit = { name, muscleGroup, isBodyweight, primary, secondary ->
             isCreatingCustomExercise = true
             customExerciseError = null
             coroutineScope.launch {
@@ -353,7 +353,9 @@ fun ActiveWorkoutScreen(
                         NewExerciseRequest(
                             name = name,
                             muscleGroup = muscleGroup,
-                            equipment = if (isBodyweight) "Body Only" else "Equipment"
+                            equipment = if (isBodyweight) "Body Only" else "Equipment",
+                            primaryMuscles = primary,
+                            secondaryMuscles = secondary
                         )
                     )
                     availableExercises = availableExercises + created
@@ -698,11 +700,29 @@ private fun ExerciseCard(
                     style = MaterialTheme.typography.titleMedium,
                     color = AppTextPrimary
                 )
+                // Its exact muscles ("SIDE DELTS"), from the exercise list.
+                val known = AppDataCache.exercises?.firstOrNull { it.id == exercise.exerciseId }
                 Text(
-                    text = "${exercise.muscleGroup} • REST ${exercise.restLabel}",
+                    text = exerciseMuscleLabel(known?.primaryMuscles.orEmpty(), exercise.muscleGroup).uppercase(),
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextMuted
                 )
+            }
+        }
+
+        // ---- Your best ever and last time's top set (from its history;
+        // the copy saved on the phone works offline). Nothing the first time.
+        var history by remember(exercise.exerciseId) { mutableStateOf(AppDataCache.exerciseHistories[exercise.exerciseId]) }
+        LaunchedEffect(exercise.exerciseId) {
+            runCatching { AppDataCache.loadExerciseHistory(exercise.exerciseId) }.getOrNull()?.let { history = it }
+        }
+        val best = remember(history) { topSetOf(history?.history.orEmpty().flatMap { it.sets }) }
+        val lastTime = remember(history) { history?.history?.lastOrNull()?.let { topSetOf(it.sets) } }
+        if (best != null || lastTime != null) {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                best?.let { StatPill(label = "Best", value = it.label(), highlight = true) }
+                lastTime?.let { StatPill(label = "Last time", value = it.label(), highlight = false) }
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -744,6 +764,20 @@ private fun ExerciseCard(
                 }
             )
             Spacer(modifier = Modifier.height(8.dp))
+        }
+        // Beat your best with a set typed in just now: say so straight away.
+        val todayTop = topSetOf(exercise.sets.mapNotNull { s ->
+            val reps = s.reps.toIntOrNull() ?: return@mapNotNull null
+            TopSet(s.kg.toDoubleOrNull()?.takeIf { it > 0.0 }, reps)
+        })
+        if (best != null && todayTop != null && todayTop.beats(best)) {
+            Text(
+                text = "New best: ${todayTop.short()} beats ${best.short()}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = AppAccent
+            )
+            Spacer(modifier = Modifier.height(4.dp))
         }
         TextButton(
             onClick = {
@@ -1000,5 +1034,51 @@ private fun RenameWorkoutSheet(currentName: String, onDismiss: () -> Unit, onSav
             Text(text = "Cancel", color = AppTextSecondary)
         }
         Spacer(modifier = Modifier.height(4.dp))
+    }
+}
+
+
+/** One set's weight (null = bodyweight, nothing added) and reps. */
+private data class TopSet(val weightKg: Double?, val reps: Int) {
+    /** "70 kg × 6", or "12 reps" for bodyweight. */
+    fun label(): String = if (weightKg != null) "${formatDecimal(weightKg)} kg × $reps" else "$reps reps"
+    /** "70 kg" / "12 reps" - for the "new best" line. */
+    fun short(): String = if (weightKg != null) "${formatDecimal(weightKg)} kg" else "$reps reps"
+    /** Heavier wins; at the same weight (or both bodyweight), more reps wins. */
+    fun beats(other: TopSet): Boolean = when {
+        weightKg != null && other.weightKg != null -> weightKg > other.weightKg || (weightKg == other.weightKg && reps > other.reps)
+        weightKg != null -> true
+        other.weightKg != null -> false
+        else -> reps > other.reps
+    }
+}
+
+/** The top set: the heaviest (most reps at that weight); with no weight
+ *  anywhere, the most reps. */
+private fun topSetOf(sets: List<TopSet>): TopSet? =
+    sets.filter { it.weightKg != null }.maxWithOrNull(compareBy<TopSet>({ it.weightKg }, { it.reps }))
+        ?: sets.maxByOrNull { it.reps }
+
+@JvmName("topSetOfEntries")
+private fun topSetOf(sets: List<com.example.workoutlog_androidstudio.api.SetEntryResponse>): TopSet? =
+    topSetOf(sets.map { TopSet(it.weightKg?.takeIf { w -> w > 0.0 }, it.reps) })
+
+/** "Best 70 kg × 6" - a small rounded label on an exercise card. */
+@Composable
+private fun StatPill(label: String, value: String, highlight: Boolean) {
+    Row(
+        modifier = Modifier
+            .background(AppSurfaceVariant, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = AppTextSecondary)
+        Spacer(modifier = Modifier.width(5.dp))
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = if (highlight) AppAccent else AppTextPrimary
+        )
     }
 }

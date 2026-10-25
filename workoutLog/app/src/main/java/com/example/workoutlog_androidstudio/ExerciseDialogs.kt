@@ -1,5 +1,7 @@
 package com.example.workoutlog_androidstudio
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -231,8 +233,9 @@ private fun ExercisePickRow(exercise: ExerciseResponse, onClick: () -> Unit) {
                 color = AppTextPrimary,
                 style = MaterialTheme.typography.bodyMedium
             )
-            val muscle = exercise.muscleGroup
-            if (muscle != null) {
+            // Its exact muscles ("Side delts"), not just the group.
+            val muscle = exerciseMuscleLabel(exercise.primaryMuscles, exercise.muscleGroup)
+            if (muscle.isNotEmpty()) {
                 Text(
                     text = muscle,
                     color = AppTextMuted,
@@ -296,14 +299,26 @@ fun CustomExerciseDialog(
     isSubmitting: Boolean,
     errorMessage: String?,
     onDismiss: () -> Unit,
-    onSubmit: (name: String, muscleGroup: String?, isBodyweight: Boolean) -> Unit,
+    /** [primary]/[secondary] are the muscles picked (BodyRegion names);
+     *  [muscleGroup] is the group worked out from the first main one. */
+    onSubmit: (name: String, muscleGroup: String?, isBodyweight: Boolean, primary: List<String>, secondary: List<String>) -> Unit,
     /** Everything already in the list - checked for near-duplicates of the typed name. */
     existingExercises: List<ExerciseResponse> = emptyList(),
     /** "Did you mean ...?" -> use that existing exercise instead. */
     onSelectExisting: (ExerciseResponse) -> Unit = {}
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
-    var selectedMuscleGroup by remember(initialName) { mutableStateOf<String?>(null) }
+    // Muscles picked: main (filled) and helping (outlined). Until the user
+    // taps one, they're suggested from the name as it's typed.
+    var picked by remember(initialName) { mutableStateOf<Map<BodyRegion, Boolean>>(emptyMap()) }
+    var pickedByHand by remember(initialName) { mutableStateOf(false) }
+    val suggested = remember(name) {
+        val (main, helping) = suggestedMuscles(name, null)
+        main.mapNotNull { regionOf(it) }.associateWith { true } + helping.mapNotNull { regionOf(it) }.associateWith { false }
+    }
+    val shown: Map<BodyRegion, Boolean> = if (pickedByHand) picked else suggested
+    val primary = shown.filterValues { it }.keys.toList()
+    val secondary = shown.filterValues { !it }.keys.toList()
     var isBodyweight by remember(initialName) { mutableStateOf(false) }
 
     AppBottomSheet(visible = visible, onDismissRequest = onDismiss) {
@@ -340,7 +355,7 @@ fun CustomExerciseDialog(
                         Text(text = exercise.name, color = AppTextPrimary, style = MaterialTheme.typography.bodyMedium)
                         Text(
                             text = listOfNotNull(
-                                exercise.muscleGroup,
+                                exerciseMuscleLabel(exercise.primaryMuscles, exercise.muscleGroup).ifEmpty { null },
                                 exercise.timesLogged.takeIf { it > 0 }?.let { "you've logged it $it×" }
                             ).joinToString(" · "),
                             color = AppTextMuted,
@@ -352,27 +367,57 @@ fun CustomExerciseDialog(
             }
         }
         Spacer(modifier = Modifier.height(20.dp))
-        Text(text = "Muscle Group", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
-        Spacer(modifier = Modifier.height(8.dp))
-        if (muscleGroups.isEmpty()) {
-            Text(
-                text = "No muscle groups to pick from yet.",
-                style = MaterialTheme.typography.bodySmall,
-                color = AppTextMuted
-            )
-        } else {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                muscleGroups.forEach { group ->
-                    SelectableChip(
-                        text = group,
-                        selected = selectedMuscleGroup == group,
-                        onClick = { selectedMuscleGroup = group }
-                    )
+        Text(text = "MUSCLES IT WORKS", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+        Spacer(modifier = Modifier.height(2.dp))
+        Text(
+            text = "Tap once for a main muscle, twice for a helping one, again to clear.",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextMuted
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        // All 33 muscles under their groups (scrolls inside the sheet).
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(max = 280.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            MUSCLE_PICKER_GROUPS.forEach { (group, regions) ->
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(text = group, style = MaterialTheme.typography.labelMedium, color = AppTextSecondary)
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    regions.forEach { region ->
+                        MuscleChip(
+                            text = regionLabel(region),
+                            state = shown[region],
+                            onClick = {
+                                // Off -> main -> helping -> off.
+                                val next = when (shown[region]) {
+                                    null -> true
+                                    true -> false
+                                    false -> null
+                                }
+                                picked = if (next == null) shown - region else shown + (region to next)
+                                pickedByHand = true
+                            }
+                        )
+                    }
                 }
             }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(10.dp).background(AppAccent, RoundedCornerShape(3.dp)))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = "Main", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+            Spacer(modifier = Modifier.width(12.dp))
+            Box(modifier = Modifier.size(10.dp).border(1.5.dp, AppAccent, RoundedCornerShape(3.dp)))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = "Helping", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(text = "Type", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
@@ -387,8 +432,16 @@ fun CustomExerciseDialog(
         }
         Spacer(modifier = Modifier.height(20.dp))
         Button(
-            onClick = { onSubmit(name.trim(), selectedMuscleGroup, isBodyweight) },
-            enabled = name.isNotBlank() && selectedMuscleGroup != null && !isSubmitting,
+            onClick = {
+                onSubmit(
+                    name.trim(),
+                    primary.firstOrNull()?.let { muscleGroupOf(it) },
+                    isBodyweight,
+                    primary.map { it.name },
+                    secondary.map { it.name }
+                )
+            },
+            enabled = name.isNotBlank() && primary.isNotEmpty() && !isSubmitting,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
@@ -431,5 +484,27 @@ fun AddExerciseButton(onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(8.dp))
             Text(text = "Add Exercise", color = AppTextSecondary, style = MaterialTheme.typography.bodyMedium)
         }
+    }
+}
+
+
+/** One muscle in the custom-exercise picker: null = not picked, true =
+ *  main muscle (filled orange), false = helping muscle (orange outline). */
+@Composable
+private fun MuscleChip(text: String, state: Boolean?, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (state == true) AppAccent else if (state == false) Color.Transparent else AppSurfaceVariant)
+            .border(1.5.dp, if (state == false) AppAccent else Color.Transparent, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (state == true) FontWeight.SemiBold else FontWeight.Normal,
+            color = when (state) { true -> AppOnAccent; false -> AppAccent; null -> AppTextPrimary }
+        )
     }
 }
