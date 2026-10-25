@@ -54,6 +54,7 @@ import java.util.Locale
 fun WorkoutCalendarScreen(
     onBack: () -> Unit,
     onOpenWorkout: (WorkoutSummary) -> Unit,
+    onLogPastWorkout: (LocalDate) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
 
@@ -248,6 +249,29 @@ fun WorkoutCalendarScreen(
                         onViewFullBreakdown = { onOpenWorkout(session) }
                     )
                     Spacer(modifier = Modifier.height(14.dp))
+                }
+            }
+
+            // A day that's already gone: log a workout for it.
+            if (!isLoading && selectedDate.isBefore(today)) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, AppBorder, RoundedCornerShape(16.dp))
+                            .clickable { onLogPastWorkout(selectedDate) }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (sessionsForSelectedDay.isEmpty()) "Log a workout for this day" else "Add another workout for this day",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppTextPrimary
+                        )
+                    }
                 }
             }
         }

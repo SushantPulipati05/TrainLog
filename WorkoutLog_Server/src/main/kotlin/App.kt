@@ -93,7 +93,11 @@ data class ExerciseResponse(
     // latest one started (ISO date-time) - so the app can list "your"
     // exercises first. 0 / null when never logged.
     val timesLogged: Int = 0,
-    val lastLoggedAt: String? = null
+    val lastLoggedAt: String? = null,
+    // Body-map muscles it trains (BodyRegion names) - see Exercises.primaryMuscles.
+    // Empty when unknown (old custom exercises).
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 /** One exercise on the Progress tab: how often it's been done, its latest
@@ -114,7 +118,9 @@ data class ProgressExerciseResponse(
     // is the same, and estimated-1RM change (Epley).
     val change3m: Double?,
     val change3mReps: Int? = null,
-    val e1rmChange3m: Double? = null
+    val e1rmChange3m: Double? = null,
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 /** A session that set a record for its exercise. kind: "WEIGHT" = heavier
@@ -181,7 +187,10 @@ data class NewExerciseRequest(
     // "Mobility/Flexibility". Defaults to "Strength" server-side (below) if
     // the app doesn't send one, since the custom-exercise dialog doesn't
     // ask for this yet.
-    val category: String? = null
+    val category: String? = null,
+    // Optional body-map muscles (BodyRegion names). Unknown names are dropped.
+    val primaryMuscles: List<String>? = null,
+    val secondaryMuscles: List<String>? = null
 )
 
 /** What one workout looks like as JSON, sent back to the app. */
@@ -243,7 +252,11 @@ data class CompleteWorkoutRequest(
     // When the user actually tapped End Workout (epoch millis). A workout
     // saved offline is uploaded later, so "now" on the server would stretch
     // its duration; null (older apps) = now.
-    val endedAtMillis: Long? = null
+    val endedAtMillis: Long? = null,
+    // Only for a workout logged afterwards ("Log a past workout"): when it
+    // really started. The workout is moved to that time - so it lands on
+    // the right day in history, the heatmap, streaks and PRs.
+    val startedAtMillis: Long? = null
 )
 
 /** What the app sends to edit one already-logged set's reps/weight. */
@@ -291,7 +304,9 @@ data class WorkoutSummaryResponse(
 data class ExerciseSetCountResponse(
     val name: String,
     val muscleGroup: String? = null,
-    val sets: Int
+    val sets: Int,
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 /** The athlete profile screen's full payload - stored fields (name, age,
@@ -472,6 +487,7 @@ fun Application.module() {
     migrateMultiUser()
     migrateAthleteProfileOnboarding()
     migrateSetEntriesLoggedAt()
+    migrateExerciseMuscles()
 
     seedExercisesIfNeeded()
     seedWorkoutTemplatesIfNeeded()
@@ -553,7 +569,9 @@ fun Application.module() {
                                 equipment = row[Exercises.equipment],
                                 category = row[Exercises.category],
                                 timesLogged = workoutsByExercise[id]?.size ?: 0,
-                                lastLoggedAt = lastStart[id]?.toZone(zone)?.toString()
+                                lastLoggedAt = lastStart[id]?.toZone(zone)?.toString(),
+                                primaryMuscles = muscleList(row[Exercises.primaryMuscles]),
+                                secondaryMuscles = muscleList(row[Exercises.secondaryMuscles])
                             )
                         }
                 }
@@ -582,6 +600,8 @@ fun Application.module() {
                 // the custom-exercise dialog only asks for equipment/bodyweight
                 // right now, not cardio-vs-strength.
                 val resolvedCategory = request.category ?: "Strength"
+                val primary = cleanMuscles(request.primaryMuscles)
+                val secondary = cleanMuscles(request.secondaryMuscles).filterNot { it in primary }
 
                 val created = try {
                     transaction {
@@ -599,6 +619,8 @@ fun Application.module() {
                             it[equipment] = request.equipment
                             it[category] = resolvedCategory
                             it[Exercises.userId] = me
+                            it[primaryMuscles] = primary.joinToString(";").ifEmpty { null }
+                            it[secondaryMuscles] = secondary.joinToString(";").ifEmpty { null }
                         } get Exercises.id
 
                         ExerciseResponse(
@@ -606,7 +628,9 @@ fun Application.module() {
                             name = trimmedName,
                             muscleGroup = request.muscleGroup,
                             equipment = request.equipment,
-                            category = resolvedCategory
+                            category = resolvedCategory,
+                            primaryMuscles = primary,
+                            secondaryMuscles = secondary
                         )
                     }
                 } catch (e: Exception) {
@@ -1110,7 +1134,9 @@ fun Application.module() {
                                     ExerciseSetCountResponse(
                                         name = list.first().exerciseName,
                                         muscleGroup = list.first().muscleGroup?.trim()?.uppercase(),
-                                        sets = list.size
+                                        sets = list.size,
+                                        primaryMuscles = muscleList(list.first().primaryMuscles),
+                                        secondaryMuscles = muscleList(list.first().secondaryMuscles)
                                     )
                                 }
 
@@ -1610,15 +1636,26 @@ fun Application.module() {
                         }
                     }
 
+                    // A past workout's real start, when believable: not in the
+                    // future and within the last year.
+                    val claimedStart = request.startedAtMillis?.let {
+                        LocalDateTime.ofEpochSecond(it / 1000, 0, ZoneOffset.UTC)
+                    }?.takeIf { !it.isAfter(now.plusMinutes(5)) && it.isAfter(now.minusDays(366)) }
                     // The phone's end time when it's believable (after the start,
                     // not in the future); otherwise now.
-                    val startedAtUtc = workoutRow[Workouts.startedAt]
+                    val startedAtUtc = claimedStart ?: workoutRow[Workouts.startedAt]
                     val claimedEnd = request.endedAtMillis?.let {
                         LocalDateTime.ofEpochSecond(it / 1000, 0, ZoneOffset.UTC)
                     }?.takeIf { it.isAfter(startedAtUtc) && !it.isAfter(now.plusMinutes(5)) }
-                    val endedAt = workoutRow[Workouts.endedAt] ?: claimedEnd ?: now
+                    val endedAt = if (claimedStart != null) {
+                        // Logged afterwards: it ended on its own day, never "now".
+                        claimedEnd ?: startedAtUtc.plusHours(1)
+                    } else {
+                        workoutRow[Workouts.endedAt] ?: claimedEnd ?: now
+                    }
                     val notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }?.take(500)
                     Workouts.update({ (Workouts.id eq workoutId) and (Workouts.userId eq me) }) {
+                        if (claimedStart != null) it[Workouts.startedAt] = claimedStart
                         it[Workouts.endedAt] = endedAt
                         it[Workouts.notes] = notes
                     }
@@ -1626,7 +1663,7 @@ fun Application.module() {
                     WorkoutResponse(
                         id = workoutId,
                         workoutName = workoutRow[Workouts.workoutName],
-                        startedAt = workoutRow[Workouts.startedAt].toZone(zone).toString(),
+                        startedAt = startedAtUtc.toZone(zone).toString(),
                         endedAt = endedAt.toZone(zone).toString(),
                         notes = notes
                     )
@@ -1742,16 +1779,24 @@ private fun waitForDatabase(maxAttempts: Int = 15, delayMillis: Long = 2000) {
 }
 
 /** One row of exercises_seed.csv. */
-private data class SeedExercise(val name: String, val muscleGroup: String?, val equipment: String?, val category: String)
+private data class SeedExercise(
+    val name: String,
+    val muscleGroup: String?,
+    val equipment: String?,
+    val category: String,
+    val primaryMuscles: String?,
+    val secondaryMuscles: String?
+)
 
 /** Parses exercises_seed.csv (bundled in src/main/resources) - empty if the
- *  file isn't there. */
+ *  file isn't there. No field contains a comma, so a plain split is enough. */
 private fun readSeedExercises(): List<SeedExercise> {
     val inputStream = Thread.currentThread().contextClassLoader.getResourceAsStream("exercises_seed.csv")
         ?: return emptyList()
 
     val lines = BufferedReader(InputStreamReader(inputStream)).use { it.readLines() }
-    // first line is the header: name,muscle_group,equipment,category
+    // first line is the header:
+    // name,muscle_group,equipment,category,primary_muscles,secondary_muscles
     return lines.drop(1).mapNotNull { line ->
         if (line.isBlank()) return@mapNotNull null
 
@@ -1766,41 +1811,90 @@ private fun readSeedExercises(): List<SeedExercise> {
             // Older copies of this CSV (before the Cardio/Strength field was
             // added) won't have a 4th column at all - default those to
             // Strength rather than leaving every seeded row uncategorized.
-            category = parts.getOrNull(3)?.trim().orEmpty().ifEmpty { "Strength" }
+            category = parts.getOrNull(3)?.trim().orEmpty().ifEmpty { "Strength" },
+            primaryMuscles = cleanMuscles(parts.getOrNull(4)?.split(";")).joinToString(";").ifEmpty { null },
+            secondaryMuscles = cleanMuscles(parts.getOrNull(5)?.split(";")).joinToString(";").ifEmpty { null }
         )
     }
 }
 
 /**
  * Loads exercises_seed.csv into the Exercises table as the built-in library
- * (no owner). Safe to call on every startup - it only inserts names that
- * aren't already a built-in, so re-deploying never creates duplicates. (This
- * used to lean on a global unique index on name; that's gone now that two
- * users may each have a custom exercise with the same name, so the check
- * happens here instead, backed by a partial unique index.)
+ * (no owner). Safe to call on every startup:
+ *  - a name that isn't a built-in yet is inserted (so new rows in the CSV
+ *    appear after the next deploy);
+ *  - a built-in that's already there is brought in line with the CSV
+ *    (muscle group, equipment, category and the body-map muscles), so
+ *    fixing the CSV fixes everyone's library. Only rows that actually
+ *    differ are written.
+ * Ids never change, so logged sets keep pointing at the same exercise.
+ * Custom exercises (userId set) are never touched.
  */
 private fun seedExercisesIfNeeded() {
-    val seeds = readSeedExercises()
+    // A name listed twice keeps its first row (otherwise the two would
+    // overwrite each other on every startup).
+    val seeds = readSeedExercises().distinctBy { it.name }
     if (seeds.isEmpty()) return
 
     transaction {
         val existing = Exercises.selectAll()
             .where { Exercises.userId.isNull() }
-            .map { it[Exercises.name] }
-            .toHashSet()
+            .associateBy { it[Exercises.name] }
+        val inserted = HashSet<String>()
 
         for (seed in seeds) {
-            if (!existing.add(seed.name)) continue
-
-            Exercises.insert {
-                it[name] = seed.name
+            val row = existing[seed.name]
+            if (row == null) {
+                if (!inserted.add(seed.name)) continue
+                Exercises.insert {
+                    it[name] = seed.name
+                    it[muscleGroup] = seed.muscleGroup
+                    it[equipment] = seed.equipment
+                    it[category] = seed.category
+                    it[primaryMuscles] = seed.primaryMuscles
+                    it[secondaryMuscles] = seed.secondaryMuscles
+                }
+                continue
+            }
+            val same = row[Exercises.muscleGroup] == seed.muscleGroup &&
+                row[Exercises.equipment] == seed.equipment &&
+                row[Exercises.category] == seed.category &&
+                row[Exercises.primaryMuscles] == seed.primaryMuscles &&
+                row[Exercises.secondaryMuscles] == seed.secondaryMuscles
+            if (same) continue
+            val id = row[Exercises.id]
+            Exercises.update({ Exercises.id eq id }) {
                 it[muscleGroup] = seed.muscleGroup
                 it[equipment] = seed.equipment
                 it[category] = seed.category
+                it[primaryMuscles] = seed.primaryMuscles
+                it[secondaryMuscles] = seed.secondaryMuscles
             }
         }
     }
 }
+
+/** Every body-map muscle the app draws (its BodyRegion names, minus HEAD).
+ *  NECK has no shape of its own but neck exercises still record it. */
+private val BODY_REGIONS = setOf(
+    "NECK",
+    "UPPER_CHEST", "MID_CHEST", "LOWER_CHEST",
+    "FRONT_DELT", "SIDE_DELT", "REAR_DELT",
+    "BICEPS_LONG", "BICEPS_SHORT", "BRACHIALIS",
+    "FOREARM_FLEXORS", "FOREARM_EXTENSORS",
+    "TRICEPS_LONG", "TRICEPS_LATERAL", "TRICEPS_MEDIAL",
+    "ABS", "OBLIQUES",
+    "UPPER_TRAPS", "MID_TRAPS", "UPPER_BACK", "LATS", "LOWER_BACK",
+    "QUAD_OUTER", "QUAD_FRONT", "QUAD_INNER", "ADDUCTORS", "SHIN",
+    "GLUTE_MED", "GLUTES", "HAM_OUTER", "HAM_INNER", "CALF_OUTER", "CALF_INNER", "SOLEUS"
+)
+
+/** Upper-cased, de-duplicated, known muscle names only (in the given order). */
+private fun cleanMuscles(names: List<String>?): List<String> =
+    names.orEmpty().map { it.trim().uppercase() }.filter { it in BODY_REGIONS }.distinct()
+
+/** A stored "A;B;C" muscle list as a list. */
+private fun muscleList(stored: String?): List<String> = cleanMuscles(stored?.split(";"))
 
 /** category/estimatedMinutes/level, all resolved purely from a template's
  *  exercises - see [resolveTemplateFields]. */
@@ -1990,6 +2084,17 @@ private fun migrateSetEntriesLoggedAt() {
 }
 
 /** Adds athlete_profile.sex for databases that predate it (NULL = not asked yet). */
+/** Adds the body-map muscle columns to exercises (see Exercises.primaryMuscles).
+ *  seedExercisesIfNeeded() fills them for the built-ins right after. */
+private fun migrateExerciseMuscles() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE exercises ADD COLUMN IF NOT EXISTS primary_muscles TEXT")
+            statement.execute("ALTER TABLE exercises ADD COLUMN IF NOT EXISTS secondary_muscles TEXT")
+        }
+    }
+}
+
 private fun migrateAthleteProfileSex() {
     DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
         connection.createStatement().use { statement ->
@@ -2514,7 +2619,9 @@ private data class SetWithExercise(
     val muscleGroup: String?,
     val equipment: String?,
     val category: String? = null,
-    val exerciseName: String = ""
+    val exerciseName: String = "",
+    val primaryMuscles: String? = null,
+    val secondaryMuscles: String? = null
 )
 
 /** Every set of this user's FINISHED workouts, joined with its exercise, in
@@ -2534,7 +2641,9 @@ private fun finishedSetsByWorkout(me: Int): Map<Int, List<SetWithExercise>> =
                 muscleGroup = row[Exercises.muscleGroup],
                 equipment = row[Exercises.equipment],
                 category = row[Exercises.category],
-                exerciseName = row[Exercises.name]
+                exerciseName = row[Exercises.name],
+                primaryMuscles = row[Exercises.primaryMuscles],
+                secondaryMuscles = row[Exercises.secondaryMuscles]
             )
         }
         .groupBy { it.workoutId }
@@ -2673,7 +2782,9 @@ private fun progressFor(me: Int, zone: ZoneId): ProgressResponse {
                     topReps = latest.top.reps,
                     change3m = change,
                     change3mReps = changeReps,
-                    e1rmChange3m = e1rmChange
+                    e1rmChange3m = e1rmChange,
+                    primaryMuscles = muscleList(sets.first().primaryMuscles),
+                    secondaryMuscles = muscleList(sets.first().secondaryMuscles)
                 )
             )
 

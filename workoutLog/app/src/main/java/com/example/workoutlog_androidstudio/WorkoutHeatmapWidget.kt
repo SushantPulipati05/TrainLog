@@ -241,7 +241,7 @@ private fun upNextInfo(data: WidgetData, today: LocalDate = LocalDate.now()): Up
             rested = null,
             resting = true,
             view = bestViewFor(regions),
-            level = recoveryShading(recent)
+            level = recoveryShadingFor(data.workouts, today)
         )
     }
     val muscles = musclesForSplitDay(label, data.workouts)

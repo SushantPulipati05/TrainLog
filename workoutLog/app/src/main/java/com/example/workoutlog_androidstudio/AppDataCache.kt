@@ -131,7 +131,9 @@ object AppDataCache {
         volumeLabel = response.volumeLabel,
         tags = response.tags,
         muscleSets = response.muscleSets,
-        exerciseSets = response.exerciseSets.map { ExerciseSetCount(it.name, it.muscleGroup, it.sets) }
+        exerciseSets = response.exerciseSets.map {
+            ExerciseSetCount(it.name, it.muscleGroup, it.sets, it.primaryMuscles, it.secondaryMuscles)
+        }
     )
 
     /** Server list + this account's workouts still waiting to upload. */

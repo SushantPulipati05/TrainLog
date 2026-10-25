@@ -659,60 +659,96 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
     val levelByDate = remember(workouts, plan) { heatmapLevels(workouts, plan, today) }
     val missed = remember(workouts, plan) { missedDays(workouts, plan, today) }
 
-    // The whole heatmap is one tap target that opens the calendar - the
-    // cells themselves aren't separately tappable.
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClickLabel = "Open workout calendar", onClick = onOpenCalendar)
-    ) {
-        // Last month + this month, so the whole grid is real history.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        // A header says what this is and where the full calendar is; the
+        // heatmap itself also still opens it.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            MonthGrid(
-                monthAnchor = lastMonthAnchor,
-                levelByDate = levelByDate,
-                missed = missed,
-                today = today,
-                modifier = Modifier.weight(1f)
-            )
-            MonthGrid(
-                monthAnchor = today,
-                levelByDate = levelByDate,
-                missed = missed,
-                today = today,
-                modifier = Modifier.weight(1f)
-            )
-        }
-        Spacer(modifier = Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier.align(Alignment.End),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Less", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
-            Spacer(modifier = Modifier.width(6.dp))
-            listOf(0.3f, 0.5f, 0.75f, 1f).forEach { level ->
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 2.dp)
-                        .size(10.dp)
-                        .background(AppAccent.copy(alpha = level), RoundedCornerShape(3.dp))
+            Text(
+                text = "LAST 2 MONTHS",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                color = AppTextMuted,
+                modifier = Modifier.weight(1f)
+            )
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClickLabel = "Open workout calendar", onClick = onOpenCalendar)
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CalendarGlyph(color = AppAccent, modifier = Modifier.size(15.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Calendar",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppAccent
+                )
+                Spacer(modifier = Modifier.width(2.dp))
+                ChevronGlyph(color = AppAccent, modifier = Modifier.size(12.dp))
+            }
+        }
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // The whole heatmap is one tap target that opens the calendar - the
+        // cells themselves aren't separately tappable.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Open workout calendar", onClick = onOpenCalendar)
+        ) {
+            // Last month + this month, so the whole grid is real history.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                MonthGrid(
+                    monthAnchor = lastMonthAnchor,
+                    levelByDate = levelByDate,
+                    missed = missed,
+                    today = today,
+                    modifier = Modifier.weight(1f)
+                )
+                MonthGrid(
+                    monthAnchor = today,
+                    levelByDate = levelByDate,
+                    missed = missed,
+                    today = today,
+                    modifier = Modifier.weight(1f)
                 )
             }
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "More", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
-            if (plan != null) {
-                Spacer(modifier = Modifier.width(12.dp))
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .border(1.dp, MISSED_OUTLINE, RoundedCornerShape(3.dp))
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(text = "Missed", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.align(Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "Less", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                Spacer(modifier = Modifier.width(6.dp))
+                listOf(0.3f, 0.5f, 0.75f, 1f).forEach { level ->
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 2.dp)
+                            .size(10.dp)
+                            .background(AppAccent.copy(alpha = level), RoundedCornerShape(3.dp))
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "More", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                if (plan != null) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .border(1.dp, MISSED_OUTLINE, RoundedCornerShape(3.dp))
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "Missed", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                }
             }
         }
     }
@@ -799,4 +835,52 @@ private fun HeatmapCell(
             .background(color, shape)
             .then(if (isMissed && level == 0f) Modifier.border(1.dp, MISSED_OUTLINE, shape) else Modifier)
     )
+}
+
+
+/** The app's own calendar icon: a rounded page, two rings and one day filled in. */
+@Composable
+private fun CalendarGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val u = size.width / 24f
+        val stroke = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(3.5f * u, 5f * u),
+            size = androidx.compose.ui.geometry.Size(17f * u, 15.5f * u),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(3f * u),
+            style = stroke
+        )
+        drawLine(color, Offset(3.5f * u, 10f * u), Offset(20.5f * u, 10f * u), strokeWidth = 2f * u)
+        drawLine(color, Offset(8f * u, 3f * u), Offset(8f * u, 7f * u), strokeWidth = 2f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawLine(color, Offset(16f * u, 3f * u), Offset(16f * u, 7f * u), strokeWidth = 2f * u, cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(7f * u, 13f * u),
+            size = androidx.compose.ui.geometry.Size(3f * u, 3f * u),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(0.6f * u)
+        )
+    }
+}
+
+/** A small "›". */
+@Composable
+private fun ChevronGlyph(color: Color, modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val u = size.width / 24f
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(9f * u, 6f * u)
+            lineTo(15f * u, 12f * u)
+            lineTo(9f * u, 18f * u)
+        }
+        drawPath(
+            path = path,
+            color = color,
+            style = androidx.compose.ui.graphics.drawscope.Stroke(
+                width = 2.6f * u,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round,
+                join = androidx.compose.ui.graphics.StrokeJoin.Round
+            )
+        )
+    }
 }

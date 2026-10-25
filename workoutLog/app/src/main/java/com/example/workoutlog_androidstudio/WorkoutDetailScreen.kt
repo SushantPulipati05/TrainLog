@@ -159,7 +159,7 @@ fun WorkoutDetailScreen(
     // Per exercise, so each part of a muscle shows on its own (incline
     // press -> upper chest, laterals -> side delts); per muscle as a fallback.
     val exerciseCounts: List<ExerciseSetCount> = remember(groupedSets, workout) {
-        groupedSets.mapNotNull { (exercise, sets) -> exercise?.let { ExerciseSetCount(it.name, it.muscleGroup, sets.size) } }
+        groupedSets.mapNotNull { (exercise, sets) -> exercise?.let { ExerciseSetCount(it.name, it.muscleGroup, sets.size, it.primaryMuscles, it.secondaryMuscles) } }
             .ifEmpty { workout.exerciseSets }
     }
     val setsOnMap = remember(exerciseCounts, muscleCounts) {
@@ -379,11 +379,15 @@ fun WorkoutDetailScreen(
             coroutineScope.launch {
                 try {
                     val created = NetworkClient.workoutApi.createExercise(
-                        NewExerciseRequest(
-                            name = name,
-                            muscleGroup = muscleGroup,
-                            equipment = if (isBodyweight) "Body Only" else "Equipment"
-                        )
+                        suggestedMuscles(name, muscleGroup).let { (primary, secondary) ->
+                            NewExerciseRequest(
+                                name = name,
+                                muscleGroup = muscleGroup,
+                                equipment = if (isBodyweight) "Body Only" else "Equipment",
+                                primaryMuscles = primary,
+                                secondaryMuscles = secondary
+                            )
+                        }
                     )
                     exercises = exercises + created
                     AppDataCache.addExercise(created)

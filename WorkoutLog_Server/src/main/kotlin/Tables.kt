@@ -39,6 +39,14 @@ object Exercises : Table("exercises") {
     // migrateExercisesCategory() in App.kt). 30 chars wide enough to fit
     // "Strength/Calisthenics".
     val category = varchar("category", 30).nullable()
+    // The body-map muscles (the app's BodyRegion names, ";"-separated) this
+    // exercise trains: primary = what it's chosen for, secondary = muscles
+    // that clearly assist. e.g. incline bench press -> primary UPPER_CHEST,
+    // secondary MID_CHEST;FRONT_DELT;TRICEPS_LATERAL;TRICEPS_MEDIAL.
+    // Built-ins come from exercises_seed.csv; null on old custom exercises
+    // (the app then guesses from the name). See migrateExerciseMuscles().
+    val primaryMuscles = text("primary_muscles").nullable()
+    val secondaryMuscles = text("secondary_muscles").nullable()
     // null = built-in (shared by everyone); otherwise the Users.id who made it.
     val userId = integer("user_id").references(Users.id).nullable()
 

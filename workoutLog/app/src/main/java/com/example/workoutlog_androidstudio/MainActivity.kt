@@ -201,8 +201,9 @@ class MainActivity : ComponentActivity() {
                 // in lockstep with there being an active workout at all - so it survives
                 // minimizing exactly like ActiveWorkoutScreen itself does, and only ever
                 // goes away once the workout truly ends.
-                LaunchedEffect(ActiveWorkoutState.workout != null) {
-                    if (ActiveWorkoutState.workout != null) {
+                LaunchedEffect(ActiveWorkoutState.workout != null, ActiveWorkoutState.isPast) {
+                    // A past workout has no running clock - no ongoing notification.
+                    if (ActiveWorkoutState.workout != null && !ActiveWorkoutState.isPast) {
                         ActiveWorkoutNotificationService.start(this@MainActivity)
                     } else {
                         ActiveWorkoutNotificationService.stop(this@MainActivity)
@@ -249,6 +250,51 @@ class MainActivity : ComponentActivity() {
                         Log.e("StartWorkout", "Failed to start planned workout", e)
                     }
                 }
+                // ---- Log a past workout (see PastWorkout.kt) ----
+                var showPastSheet by remember { mutableStateOf(false) }
+                var pastSheetDate by remember { mutableStateOf<java.time.LocalDate?>(null) }
+                // "Saved to Wed 22 Oct" after a past workout is saved.
+                var pastSavedMessage by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(pastSavedMessage) {
+                    if (pastSavedMessage != null) {
+                        kotlinx.coroutines.delay(2800)
+                        pastSavedMessage = null
+                    }
+                }
+                fun openPastSheet(date: java.time.LocalDate?) {
+                    if (ActiveWorkoutState.workout != null) {
+                        // One workout at a time - bring the open one back.
+                        ActiveWorkoutState.isMinimized = false
+                        return
+                    }
+                    pastSheetDate = date
+                    showPastSheet = true
+                }
+                // Starts a past workout: from the split day's template (its
+                // exercises filled in) or empty, then opens it with no timer.
+                suspend fun startPastWorkout(startMillis: Long, minutes: Int, day: String?) {
+                    if (ActiveWorkoutState.workout != null) return
+                    try {
+                        val template = day?.let { label ->
+                            val templates = runCatching { AppDataCache.loadTemplates() }.getOrDefault(emptyList())
+                            TrainingPlanStore.plan?.templateIdFor(label, templates)
+                                ?.let { id -> runCatching { AppDataCache.loadTemplateDetail(id) }.getOrNull() }
+                        }
+                        val name = template?.name ?: day?.let { plannedWorkoutName(it) } ?: DEFAULT_WORKOUT_NAME
+                        val started = NetworkClient.workoutApi.startWorkout(NewWorkoutRequest(workoutName = name))
+                        pendingPrefillExercises = template?.exercises ?: emptyList()
+                        screenStack = emptyList()
+                        ActiveWorkoutState.startPast(started, startMillis, minutes)
+                    } catch (e: Exception) {
+                        Log.e("PastWorkout", "Couldn't start a past workout", e)
+                        android.widget.Toast.makeText(
+                            this@MainActivity,
+                            "Couldn't reach the server. Try again when you're online.",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
+
                 LaunchedEffect(TrainingPlanStore.pendingStartPlanLabel) {
                     val label = TrainingPlanStore.pendingStartPlanLabel ?: return@LaunchedEffect
                     TrainingPlanStore.pendingStartPlanLabel = null
@@ -442,7 +488,8 @@ class MainActivity : ComponentActivity() {
                             Screen.Calendar -> {
                                 WorkoutCalendarScreen(
                                     onBack = { pop() },
-                                    onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) }
+                                    onOpenWorkout = { tapped -> push(Screen.WorkoutDetail(tapped)) },
+                                    onLogPastWorkout = { date -> openPastSheet(date) }
                                 )
                             }
                             Screen.Targets -> {
@@ -516,9 +563,14 @@ class MainActivity : ComponentActivity() {
                                     // notes to the backend by the time this fires - this
                                     // just closes the screen.
                                     Log.d("EndWorkout", "Ended workout ${workout.id}: $notes")
+                                    val pastLabel = ActiveWorkoutState.pastDateLabel
                                     endActiveWorkout()
-                                    // Trained today - no gym reminder needed today.
-                                    TrainingPlanStore.markTrainedToday(this@MainActivity)
+                                    if (pastLabel == null) {
+                                        // Trained today - no gym reminder needed today.
+                                        TrainingPlanStore.markTrainedToday(this@MainActivity)
+                                    } else {
+                                        pastSavedMessage = "Saved to $pastLabel"
+                                    }
                                     // Pull the finished workout into Home's list
                                     // (and the totals it changes) right away.
                                     coroutineScope.launch { AppDataCache.refreshAfterWorkoutEnded() }
@@ -542,9 +594,26 @@ class MainActivity : ComponentActivity() {
                             elapsedSeconds = ActiveWorkoutState.elapsedSeconds,
                             isPaused = ActiveWorkoutState.isPaused,
                             onTogglePause = { ActiveWorkoutState.isPaused = !ActiveWorkoutState.isPaused },
-                            onRestore = { ActiveWorkoutState.isMinimized = false }
+                            onRestore = { ActiveWorkoutState.isMinimized = false },
+                            pastLabel = ActiveWorkoutState.pastDateLabel
                         )
                     }
+
+                    LogPastWorkoutSheet(
+                        visible = showPastSheet,
+                        initialDate = pastSheetDate,
+                        onDismiss = { showPastSheet = false },
+                        onStart = { startMillis, minutes, day ->
+                            showPastSheet = false
+                            coroutineScope.launch { startPastWorkout(startMillis, minutes, day) }
+                        }
+                    )
+                    DeletedToast(
+                        visible = pastSavedMessage != null,
+                        message = pastSavedMessage.orEmpty(),
+                        tint = AppAccent,
+                        aboveTabBar = true
+                    )
                 }
             }
         }
@@ -716,7 +785,9 @@ private fun FloatingActiveWorkoutBar(
     elapsedSeconds: Int,
     isPaused: Boolean,
     onTogglePause: () -> Unit,
-    onRestore: () -> Unit
+    onRestore: () -> Unit,
+    /** "Wed 22 Oct" for a past workout - shown instead of the clock. */
+    pastLabel: String? = null
 ) {
     var dragOffset by remember { mutableStateOf(Offset.Zero) }
 
@@ -762,21 +833,25 @@ private fun FloatingActiveWorkoutBar(
                     maxLines = 1
                 )
                 Text(
-                    text = formatElapsed(elapsedSeconds),
+                    text = pastLabel?.let { "For $it" } ?: formatElapsed(elapsedSeconds),
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextMuted
                 )
             }
-            Spacer(modifier = Modifier.width(14.dp))
-            IconButton(
-                onClick = onTogglePause,
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    contentDescription = if (isPaused) "Resume" else "Pause",
-                    tint = AppAccent
-                )
+            if (pastLabel == null) {
+                Spacer(modifier = Modifier.width(14.dp))
+                IconButton(
+                    onClick = onTogglePause,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                        contentDescription = if (isPaused) "Resume" else "Pause",
+                        tint = AppAccent
+                    )
+                }
+            } else {
+                Spacer(modifier = Modifier.width(8.dp))
             }
         }
     }

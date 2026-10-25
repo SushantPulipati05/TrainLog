@@ -66,7 +66,10 @@ data class ProgressExerciseResponse(
     val topReps: Int = 0,
     val change3m: Double? = null,
     val change3mReps: Int? = null,
-    val e1rmChange3m: Double? = null
+    val e1rmChange3m: Double? = null,
+    // Body-map muscles (BodyRegion names) - empty for old custom exercises.
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 @Serializable
@@ -158,6 +161,8 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var query by remember { mutableStateOf("") }
     var group by remember { mutableStateOf<String?>(null) }
+    // One muscle tapped on the body map ("Upper chest") - narrower than a group.
+    var region by remember { mutableStateOf<BodyRegion?>(null) }
     var sort by remember { mutableStateOf(ExerciseSort.MOST_USED) }
     val context = androidx.compose.ui.platform.LocalContext.current
     var dismissTick by remember { mutableStateOf(0) }
@@ -176,10 +181,11 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
     LaunchedEffect(Unit) { if (summaries == null) runCatching { AppDataCache.loadWorkoutSummaries() } }
 
     val exercises = progress?.exercises.orEmpty()
-    val shown = remember(exercises, query, group, sort) {
+    val shown = remember(exercises, query, group, region, sort) {
         exercises
             .filter { e ->
                 (group == null || groupOf(e.muscleGroup) == group) &&
+                    (region == null || exerciseTrains(region!!, e.primaryMuscles, e.name, e.muscleGroup)) &&
                     matchesExerciseQuery(query, e.name, e.muscleGroup)
             }
             .let { list ->
@@ -194,7 +200,7 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
     // Recovery body map: what's still recovering from the last two days,
     // and why Up next picked what it did.
     val recent = remember(summaries) { recentlyTrainedMuscles(summaries.orEmpty()) }
-    val recoveryLevel = remember(recent) { recoveryShading(recent) }
+    val recoveryLevel = remember(summaries) { recoveryShadingFor(summaries.orEmpty()) }
     val upNext = remember(summaries, TrainingPlanStore.plan) {
         if ((TrainingPlanStore.plan?.orderedDays().orEmpty().distinct().size) >= 2)
             computeUpNext(summaries.orEmpty(), TrainingPlanStore.plan) else null
@@ -244,9 +250,9 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
                 modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                SelectableChip(text = "All", selected = group == null, onClick = { group = null })
+                SelectableChip(text = "All", selected = group == null && region == null, onClick = { group = null; region = null })
                 PROGRESS_GROUPS.forEach { (name, _) ->
-                    SelectableChip(text = name, selected = group == name, onClick = { group = if (group == name) null else name })
+                    SelectableChip(text = name, selected = group == name, onClick = { region = null; group = if (group == name) null else name })
                 }
             }
         }
@@ -294,10 +300,16 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
                 Spacer(modifier = Modifier.height(6.dp))
                 BodyMapPair(
                     level = recoveryLevel,
-                    outlined = regionsInGroup(group),
-                    onTap = { region ->
-                        val tapped = progressGroupOf(region)
-                        if (tapped != null) group = if (group == tapped) null else tapped
+                    outlined = region?.let { setOf(it) } ?: regionsInGroup(group),
+                    fillWidth = true,
+                    // 1st tap: just that muscle. 2nd tap on it: its whole
+                    // group. A tap inside the selected group: clear.
+                    onTap = { tapped ->
+                        when {
+                            region == tapped -> { region = null; group = progressGroupOf(tapped) }
+                            region == null && group != null && progressGroupOf(tapped) == group -> { group = null }
+                            else -> { region = tapped; group = null }
+                        }
                     }
                 )
                 Spacer(modifier = Modifier.height(10.dp))
@@ -309,7 +321,7 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
 
         // ---- Recent PRs (hidden while searching / filtering) ----
         val prs = progress?.recentPrs.orEmpty()
-        if (prs.isNotEmpty() && query.isBlank() && group == null) {
+        if (prs.isNotEmpty() && query.isBlank() && group == null && region == null) {
             item {
                 SectionLabel("RECENT PRS")
                 Row(
@@ -322,7 +334,7 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
         }
 
         // ---- Insights: separate cards, each can be crossed off ----
-        if (insights.isNotEmpty() && query.isBlank() && group == null) {
+        if (insights.isNotEmpty() && query.isBlank() && group == null && region == null) {
             item { SectionLabel("INSIGHTS") }
             items(insights, key = { "${it.kind}:${it.exerciseId}" }) { insight ->
                 InsightCard(
@@ -340,14 +352,15 @@ fun ProgressScreen(onOpenExercise: (exerciseId: Int, name: String) -> Unit, modi
         item {
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 SectionLabel("YOUR EXERCISES · ${shown.size}", modifier = Modifier.weight(1f))
-                // The group picked by a chip or by tapping the body map; × clears it.
-                group?.let { g ->
+                // The muscle or group picked by a chip or by tapping the body
+                // map ("Upper chest", "Chest"); × clears it.
+                (region?.let { regionLabel(it) } ?: group)?.let { g ->
                     Row(
                         modifier = Modifier
                             .padding(top = 14.dp)
                             .clip(RoundedCornerShape(50))
                             .background(AppAccent)
-                            .clickable { group = null }
+                            .clickable { group = null; region = null }
                             .padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {

@@ -51,11 +51,32 @@ object ActiveWorkoutState {
     private var nowMillis by mutableLongStateOf(System.currentTimeMillis())
     private var exercisesState by mutableStateOf<List<ActiveExercise>>(emptyList())
     private var notesState by mutableStateOf("")
+    /** Set for a past workout (see PastWorkout.kt): when it started and how
+     *  long it was. No timer runs; it's saved on that date. */
+    private var pastStartState by mutableStateOf<Long?>(null)
+    private var pastMinutesState by mutableStateOf(0)
+
+    /** True while logging a workout for an earlier day. */
+    val isPast: Boolean get() = pastStartState != null
+    val pastStartMillis: Long? get() = pastStartState
+    val pastMinutes: Int get() = pastMinutesState
+
+    /** "Wed 22 Oct" for a past workout, else null. */
+    val pastDateLabel: String?
+        get() = pastStartState?.let { formatPastDate(java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalDate()) }
+
+    /** "6:30 – 7:30 pm" style line for a past workout, else null. */
+    val pastTimeLine: String?
+        get() = pastStartState?.let { start ->
+            val zone = java.time.ZoneId.systemDefault()
+            val from = java.time.Instant.ofEpochMilli(start).atZone(zone).toLocalTime()
+            "${pastTimeLabel(from)} · ${pastLengthLabel(pastMinutesState)}"
+        }
 
     var isPaused: Boolean
         get() = pausedState
         set(value) {
-            if (value == pausedState) return
+            if (value == pausedState || isPast) return
             val now = System.currentTimeMillis()
             if (value) {
                 // Pausing: bank the time run so far.
@@ -74,13 +95,14 @@ object ActiveWorkoutState {
     val elapsedSeconds: Int
         get() {
             nowMillis // read so Compose re-reads this every tick
+            if (isPast) return pastMinutesState * 60
             return secondsAt(System.currentTimeMillis())
         }
 
     /** Wall-clock time the workout would have started if it had never been
      *  paused - for the notification's self-running timer. */
     val effectiveStartMillis: Long
-        get() = System.currentTimeMillis() - elapsedSeconds * 1000L
+        get() = pastStartState ?: (System.currentTimeMillis() - elapsedSeconds * 1000L)
 
     private fun secondsAt(now: Long): Int {
         val since = runningSinceMillis ?: return accumulatedSeconds
@@ -123,6 +145,23 @@ object ActiveWorkoutState {
         runningSinceMillis = System.currentTimeMillis()
         exercisesState = emptyList()
         notesState = ""
+        pastStartState = null
+        pastMinutesState = 0
+        isMinimized = false
+        persist()
+    }
+
+    /** Opens [workout] as a past workout that started at [startMillis] and
+     *  lasted [minutes] - no timer, saved on that day. */
+    fun startPast(workout: WorkoutResponse, startMillis: Long, minutes: Int) {
+        this.workout = workout
+        pausedState = true
+        accumulatedSeconds = minutes * 60
+        runningSinceMillis = null
+        exercisesState = emptyList()
+        notesState = ""
+        pastStartState = startMillis
+        pastMinutesState = minutes
         isMinimized = false
         persist()
     }
@@ -141,6 +180,8 @@ object ActiveWorkoutState {
         runningSinceMillis = null
         exercisesState = emptyList()
         notesState = ""
+        pastStartState = null
+        pastMinutesState = 0
         isMinimized = false
         persist()
     }
@@ -167,6 +208,12 @@ object ActiveWorkoutState {
             nowMillis = now
             exercisesState = saved.exercises
             notesState = saved.notes
+            pastStartState = saved.pastStartMillis
+            pastMinutesState = saved.pastMinutes
+            if (saved.pastStartMillis != null) {
+                pausedState = true
+                runningSinceMillis = null
+            }
             isMinimized = false
         } catch (e: Exception) {
             // Unreadable (e.g. saved by an older version) - start clean
@@ -191,7 +238,9 @@ object ActiveWorkoutState {
             savedAtMillis = System.currentTimeMillis(),
             accumulatedSeconds = accumulatedSeconds,
             runningSinceMillis = runningSinceMillis,
-            version = 2
+            version = 2,
+            pastStartMillis = pastStartState,
+            pastMinutes = pastMinutesState
         )
         store.edit().putString(KEY_STATE, json.encodeToString(SavedActiveWorkout.serializer(), saved)).apply()
     }
@@ -209,5 +258,8 @@ private data class SavedActiveWorkout(
     val savedAtMillis: Long,
     val accumulatedSeconds: Int = 0,
     val runningSinceMillis: Long? = null,
-    val version: Int = 1
+    val version: Int = 1,
+    /** Set for a past workout (see ActiveWorkoutState.startPast). */
+    val pastStartMillis: Long? = null,
+    val pastMinutes: Int = 0
 )

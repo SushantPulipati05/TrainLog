@@ -109,6 +109,7 @@ fun ActiveWorkoutScreen(
     // (nothing is lost) so the person can simply try again.
     var endError by remember { mutableStateOf<String?>(null) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
+    var showSavePast by remember { mutableStateOf(false) }
 
     var showCustomExerciseDialog by remember { mutableStateOf(false) }
     var customExercisePrefillName by remember { mutableStateOf("") }
@@ -416,21 +417,24 @@ fun ActiveWorkoutScreen(
                     modifier = Modifier.size(16.dp)
                 )
             }
-            TextButton(
-                onClick = onTogglePause,
-                colors = pausePillColors()
-            ) {
-                Icon(
-                    imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                    contentDescription = null,
-                    tint = AppAccent
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = if (isPaused) "RESUME" else "PAUSE",
-                    color = AppAccent,
-                    style = MaterialTheme.typography.labelSmall
-                )
+            // A past workout has no clock to pause.
+            if (!ActiveWorkoutState.isPast) {
+                TextButton(
+                    onClick = onTogglePause,
+                    colors = pausePillColors()
+                ) {
+                    Icon(
+                        imageVector = if (isPaused) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                        contentDescription = null,
+                        tint = AppAccent
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isPaused) "RESUME" else "PAUSE",
+                        color = AppAccent,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
         }
 
@@ -448,17 +452,37 @@ fun ActiveWorkoutScreen(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (isPaused) "WORKOUT PAUSED" else "WORKOUT IN PROGRESS",
+                    text = when {
+                        ActiveWorkoutState.isPast -> "LOGGING A PAST WORKOUT"
+                        isPaused -> "WORKOUT PAUSED"
+                        else -> "WORKOUT IN PROGRESS"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = AppAccent
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = formatElapsed(elapsedSeconds),
-                style = MaterialTheme.typography.displayMedium,
-                color = AppTextPrimary
-            )
+            if (ActiveWorkoutState.isPast) {
+                // The day it's for instead of a clock.
+                Text(
+                    text = ActiveWorkoutState.pastDateLabel.orEmpty(),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = AppTextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${ActiveWorkoutState.pastTimeLine.orEmpty()} · no timer, just enter what you did",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = AppTextMuted,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                Text(
+                    text = formatElapsed(elapsedSeconds),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = AppTextPrimary
+                )
+            }
         }
 
         LazyColumn(
@@ -506,74 +530,92 @@ fun ActiveWorkoutScreen(
             )
         }
 
-        Button(
-            onClick = {
-                if (isEndingWorkout) return@Button
-                logWorkoutData(workout, exercises, notesText)
-                isEndingWorkout = true
-                endError = null
-                coroutineScope.launch {
-                    // 1. Saved on the phone first - from here on the workout
-                    //    can't be lost, signal or not.
-                    val saved = try {
-                        PendingWorkoutStore.add(
-                            context,
-                            pendingWorkoutFrom(
-                                workoutId = workout.id,
-                                name = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName,
-                                exercises = exercises,
-                                notes = notesText,
-                                elapsedSeconds = ActiveWorkoutState.elapsedSeconds,
-                                startedAtMillis = ActiveWorkoutState.effectiveStartMillis
-                            )
+        // Saves the workout: on the phone first, then uploaded (see OfflineSync).
+        fun saveWorkout() {
+            if (isEndingWorkout) return
+            logWorkoutData(workout, exercises, notesText)
+            isEndingWorkout = true
+            endError = null
+            coroutineScope.launch {
+                // 1. Saved on the phone first - from here on the workout
+                //    can't be lost, signal or not.
+                val saved = try {
+                    PendingWorkoutStore.add(
+                        context,
+                        pendingWorkoutFrom(
+                            workoutId = workout.id,
+                            name = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName,
+                            exercises = exercises,
+                            notes = notesText,
+                            elapsedSeconds = ActiveWorkoutState.elapsedSeconds,
+                            startedAtMillis = ActiveWorkoutState.effectiveStartMillis,
+                            // A past workout ends when its length says, on its own day.
+                            endedAtMillis = ActiveWorkoutState.pastStartMillis
+                                ?.let { it + ActiveWorkoutState.pastMinutes * 60_000L }
+                                ?: System.currentTimeMillis(),
+                            isPast = ActiveWorkoutState.isPast
                         )
-                        true
-                    } catch (e: Exception) {
-                        Log.e("EndWorkout", "Couldn't save workout ${workout.id} on the phone", e)
-                        CrashReporting.record(e)
-                        false
-                    }
-                    if (saved) {
-                        // 2. Upload now if there's signal (a few seconds at most);
-                        //    otherwise it's queued and goes up on its own later.
-                        val uploaded = OfflineSync.syncNow(context, workout.id)
-                        if (uploaded) {
-                            try {
-                                WorkoutHeatmapWidget().updateAll(context)
-                            } catch (e: Exception) {
-                                Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
-                            }
-                        }
-                        WorkoutNamer.init(context)
-                        if (WorkoutNamer.enabled && !namedByUser) {
-                            // Freeze the clock while the name card is up.
-                            ActiveWorkoutState.isPaused = true
-                            val facts = sessionFactsAfterSave(workout.id, exercises, ActiveWorkoutState.elapsedSeconds)
-                            nameSuggestion = WorkoutNamer.suggest(facts) to facts
-                            isEndingWorkout = false
-                        } else {
-                            // Make sure a name typed during the workout reached
-                            // the server (its first try may have failed). A
-                            // queued workout carries its name with it.
-                            if ((namedByUser || chosenDay != null) && !PendingWorkoutStore.has(workout.id)) {
-                                runCatching {
-                                    NetworkClient.workoutApi.updateWorkout(
-                                        workout.id,
-                                        UpdateWorkoutRequest(workoutName = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName)
-                                    )
-                                }
-                            }
-                            isEndingWorkout = false
-                            // Only now does the screen close - a failed save
-                            // keeps everything here to try again.
-                            onEndWorkout(notesText)
-                        }
-                    } else {
-                        isEndingWorkout = false
-                        endError = "Couldn't save your workout on this phone. Tap End Workout again - your sets are still here."
-                    }
+                    )
+                    true
+                } catch (e: Exception) {
+                    Log.e("EndWorkout", "Couldn't save workout ${workout.id} on the phone", e)
+                    CrashReporting.record(e)
+                    false
                 }
-            },
+                if (saved) {
+                    // 2. Upload now if there's signal (a few seconds at most);
+                    //    otherwise it's queued and goes up on its own later.
+                    val uploaded = OfflineSync.syncNow(context, workout.id)
+                    if (uploaded) {
+                        try {
+                            WorkoutHeatmapWidget().updateAll(context)
+                        } catch (e: Exception) {
+                            Log.e("EndWorkout", "Couldn't refresh the home-screen widget", e)
+                        }
+                    }
+                    WorkoutNamer.init(context)
+                    if (WorkoutNamer.enabled && !namedByUser && !ActiveWorkoutState.isPast) {
+                        // Freeze the clock while the name card is up.
+                        ActiveWorkoutState.isPaused = true
+                        val facts = sessionFactsAfterSave(workout.id, exercises, ActiveWorkoutState.elapsedSeconds)
+                        nameSuggestion = WorkoutNamer.suggest(facts) to facts
+                        isEndingWorkout = false
+                    } else {
+                        // Make sure a name typed during the workout reached
+                        // the server (its first try may have failed). A
+                        // queued workout carries its name with it.
+                        if ((namedByUser || chosenDay != null) && !PendingWorkoutStore.has(workout.id)) {
+                            runCatching {
+                                NetworkClient.workoutApi.updateWorkout(
+                                    workout.id,
+                                    UpdateWorkoutRequest(workoutName = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName)
+                                )
+                            }
+                        }
+                        isEndingWorkout = false
+                        // Only now does the screen close - a failed save
+                        // keeps everything here to try again.
+                        onEndWorkout(notesText)
+                    }
+                } else {
+                    isEndingWorkout = false
+                    endError = "Couldn't save your workout on this phone. Tap End Workout again - your sets are still here."
+                }
+            }
+        }
+        // A past workout gets one check of its day and numbers first.
+        if (showSavePast) {
+            SavePastWorkoutPopup(
+                dateLabel = ActiveWorkoutState.pastDateLabel.orEmpty(),
+                timeLabel = ActiveWorkoutState.pastTimeLine.orEmpty(),
+                exerciseCount = exercises.count { e -> e.sets.any { it.reps.toIntOrNull() != null } },
+                setCount = exercises.sumOf { e -> e.sets.count { it.reps.toIntOrNull() != null } },
+                onSave = { showSavePast = false; saveWorkout() },
+                onEdit = { showSavePast = false }
+            )
+        }
+        Button(
+            onClick = { if (ActiveWorkoutState.isPast) showSavePast = true else saveWorkout() },
             enabled = !isEndingWorkout,
             modifier = Modifier
                 .fillMaxWidth()
@@ -585,7 +627,7 @@ fun ActiveWorkoutScreen(
             if (isEndingWorkout) {
                 CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(20.dp))
             } else {
-                Text(text = "End Workout", fontWeight = FontWeight.SemiBold)
+                Text(text = if (ActiveWorkoutState.isPast) "Save Workout" else "End Workout", fontWeight = FontWeight.SemiBold)
                 Spacer(modifier = Modifier.width(8.dp))
                 Icon(imageVector = Icons.Filled.ArrowForward, contentDescription = null)
             }
@@ -787,7 +829,8 @@ private fun SetRow(
         // consecutive sets' values show how much rest was taken
         // between them.
         Text(
-            text = formatElapsedShort(set.loggedAtSeconds),
+            // A past workout has no timer, so no time per set.
+            text = if (ActiveWorkoutState.isPast) "–" else formatElapsedShort(set.loggedAtSeconds),
             color = AppTextMuted,
             style = MaterialTheme.typography.labelMedium,
             textAlign = TextAlign.Center,

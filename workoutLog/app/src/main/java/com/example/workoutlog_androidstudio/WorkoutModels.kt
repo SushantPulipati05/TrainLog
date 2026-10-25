@@ -21,8 +21,16 @@ data class WorkoutSummary(
     val exerciseSets: List<ExerciseSetCount> = emptyList()
 )
 
-/** One exercise's sets inside a finished workout. */
-data class ExerciseSetCount(val name: String, val muscleGroup: String?, val sets: Int)
+/** One exercise's sets inside a finished workout, with the body-map muscles
+ *  it trains (BodyRegion names - empty when unknown, then they're guessed
+ *  from the name). */
+data class ExerciseSetCount(
+    val name: String,
+    val muscleGroup: String?,
+    val sets: Int,
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
+)
 
 /** One row in an exercise's set table during an active workout. Serializable
  *  so a workout in progress can be saved on the phone (see ActiveWorkoutState). */

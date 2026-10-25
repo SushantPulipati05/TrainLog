@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -68,7 +69,8 @@ enum class BodyRegion {
     HEAD, NECK,
     UPPER_CHEST, MID_CHEST, LOWER_CHEST,
     FRONT_DELT, SIDE_DELT, REAR_DELT,
-    BICEPS_LONG, BICEPS_SHORT, BRACHIALIS, FOREARMS,
+    BICEPS_LONG, BICEPS_SHORT, BRACHIALIS,
+    FOREARM_FLEXORS, FOREARM_EXTENSORS,
     TRICEPS_LONG, TRICEPS_LATERAL, TRICEPS_MEDIAL,
     ABS, OBLIQUES,
     UPPER_TRAPS, MID_TRAPS, UPPER_BACK, LATS, LOWER_BACK,
@@ -82,7 +84,7 @@ enum class BodyView { FRONT, BACK }
 enum class BodyType { MALE, FEMALE }
 
 /** Never shaded - just part of the silhouette. */
-private val NEUTRAL_REGIONS = setOf(BodyRegion.HEAD, BodyRegion.NECK, BodyRegion.OBLIQUES)
+private val NEUTRAL_REGIONS = setOf(BodyRegion.HEAD, BodyRegion.NECK)
 
 private val CHEST_PARTS = setOf(BodyRegion.UPPER_CHEST, BodyRegion.MID_CHEST, BodyRegion.LOWER_CHEST)
 private val DELT_PARTS = setOf(BodyRegion.FRONT_DELT, BodyRegion.SIDE_DELT, BodyRegion.REAR_DELT)
@@ -92,6 +94,8 @@ private val QUAD_PARTS = setOf(BodyRegion.QUAD_OUTER, BodyRegion.QUAD_FRONT, Bod
 private val HAM_PARTS = setOf(BodyRegion.HAM_OUTER, BodyRegion.HAM_INNER)
 private val CALF_PARTS = setOf(BodyRegion.CALF_OUTER, BodyRegion.CALF_INNER, BodyRegion.SOLEUS, BodyRegion.SHIN)
 private val GLUTE_PARTS = setOf(BodyRegion.GLUTES, BodyRegion.GLUTE_MED)
+/** Front of the forearm (wrist flexors + brachioradialis) and the back (wrist extensors). */
+private val FOREARM_PARTS = setOf(BodyRegion.FOREARM_FLEXORS, BodyRegion.FOREARM_EXTENSORS)
 
 /** The exercise list's muscle names -> the shapes that show them (every part
  *  of that muscle - used where only the muscle is known, like recovery). */
@@ -100,8 +104,8 @@ private val REGIONS_OF_MUSCLE: Map<String, Set<BodyRegion>> = mapOf(
     "SHOULDERS" to DELT_PARTS,
     "TRICEPS" to TRICEPS_PARTS,
     "BICEPS" to BICEPS_PARTS,
-    "FOREARMS" to setOf(BodyRegion.FOREARMS),
-    "ABDOMINALS" to setOf(BodyRegion.ABS),
+    "FOREARMS" to FOREARM_PARTS,
+    "ABDOMINALS" to setOf(BodyRegion.ABS, BodyRegion.OBLIQUES),
     "LATS" to setOf(BodyRegion.LATS),
     "MIDDLE BACK" to setOf(BodyRegion.UPPER_BACK, BodyRegion.MID_TRAPS),
     "TRAPS" to setOf(BodyRegion.UPPER_TRAPS, BodyRegion.MID_TRAPS),
@@ -146,7 +150,7 @@ fun regionsOfPart(part: MusclePart): Set<BodyRegion> = when (part) {
 fun progressGroupOf(region: BodyRegion): String? = when (region) {
     in CHEST_PARTS -> "Chest"
     in DELT_PARTS -> "Shoulders"
-    in TRICEPS_PARTS, in BICEPS_PARTS, BodyRegion.FOREARMS -> "Arms"
+    in TRICEPS_PARTS, in BICEPS_PARTS, in FOREARM_PARTS -> "Arms"
     BodyRegion.ABS, BodyRegion.OBLIQUES -> "Abs"
     BodyRegion.UPPER_TRAPS, BodyRegion.MID_TRAPS, BodyRegion.UPPER_BACK, BodyRegion.LATS, BodyRegion.LOWER_BACK -> "Back"
     BodyRegion.HEAD, BodyRegion.NECK -> null
@@ -264,7 +268,7 @@ private val FRONT_SHAPES: List<Pair<BodyRegion, List<String>>> = listOf(
         "M32.4,114.4 L31.9,114.8 L31.5,115.5 L31.1,118.8 L31.0,122.0 L31.1,122.9 L31.4,123.8 L33.1,126.2 L38.3,131.9 L39.4,132.6 L39.9,132.7 L40.3,132.6 L40.6,132.4 L40.9,131.9 L41.1,130.8 L40.5,125.8 L40.2,120.4 L39.9,119.1 L39.1,117.9 L37.9,116.9 L35.8,115.8 L33.8,114.6 L33.0,114.4Z",
         "M67.6,114.4 L68.1,114.8 L68.5,115.5 L68.9,118.8 L69.0,122.0 L68.9,122.9 L68.6,123.8 L66.9,126.2 L61.7,131.9 L60.6,132.6 L60.1,132.7 L59.7,132.6 L59.4,132.4 L59.1,131.9 L58.9,130.8 L59.5,125.8 L59.8,120.4 L60.1,119.1 L60.9,117.9 L62.1,116.9 L64.2,115.8 L66.2,114.6 L67.0,114.4Z"
     ),
-    BodyRegion.FOREARMS to listOf(
+    BodyRegion.FOREARM_FLEXORS to listOf(
         "M11.6,102.2 L11.0,102.4 L10.2,103.0 L9.6,103.7 L9.1,104.5 L8.2,107.1 L7.0,112.1 L6.2,119.4 L5.9,127.2 L5.9,128.6 L6.2,129.8 L6.6,130.4 L7.1,130.7 L7.7,130.7 L8.4,130.3 L9.0,129.6 L9.4,128.8 L10.5,126.0 L11.3,123.4 L15.5,111.8 L16.4,108.1 L16.4,106.7 L16.3,105.5 L15.9,104.4 L15.3,103.4 L14.5,102.6 L13.6,102.2 L12.8,102.1Z",
         "M88.4,102.2 L89.0,102.4 L89.8,103.0 L90.4,103.7 L90.9,104.5 L91.8,107.1 L93.0,112.1 L93.8,119.4 L94.1,127.2 L94.1,128.6 L93.8,129.8 L93.4,130.4 L92.9,130.7 L92.3,130.7 L91.6,130.3 L91.0,129.6 L90.6,128.8 L89.5,126.0 L88.7,123.4 L84.5,111.8 L83.6,108.1 L83.6,106.7 L83.7,105.5 L84.1,104.4 L84.7,103.4 L85.5,102.6 L86.4,102.2 L87.2,102.1Z"
     ),
@@ -332,7 +336,7 @@ private val BACK_SHAPES: List<Pair<BodyRegion, List<String>>> = listOf(
     BodyRegion.LOWER_BACK to listOf(
         "M48.1,105.4 L45.9,105.9 L43.9,106.5 L36.2,110.6 L34.7,111.6 L33.9,112.4 L33.6,113.1 L33.8,113.9 L34.5,114.6 L36.0,115.1 L38.1,115.4 L41.8,115.7 L47.4,117.1 L49.9,117.3 L52.3,117.1 L58.2,115.7 L61.6,115.5 L63.5,115.1 L65.3,114.7 L65.9,114.4 L66.2,113.9 L66.4,113.4 L66.1,112.6 L65.6,111.9 L64.7,111.2 L63.6,110.4 L56.6,106.6 L54.6,105.9 L52.6,105.6 L50.4,105.4Z"
     ),
-    BodyRegion.FOREARMS to listOf(
+    BodyRegion.FOREARM_EXTENSORS to listOf(
         "M10.4,107.4 L9.5,107.6 L8.7,108.2 L8.1,108.9 L7.5,109.9 L6.6,112.0 L5.9,115.7 L5.7,123.6 L6.0,127.4 L6.3,129.1 L6.7,130.4 L7.1,131.0 L7.6,131.2 L8.5,130.9 L9.1,130.1 L10.3,127.0 L11.6,124.3 L14.6,115.2 L15.3,111.8 L15.4,110.9 L15.1,109.9 L14.8,109.1 L14.1,108.5 L13.2,107.9 L12.1,107.4 L11.2,107.3Z",
         "M89.6,107.4 L90.5,107.6 L91.3,108.2 L91.9,108.9 L92.5,109.9 L93.4,112.0 L94.1,115.7 L94.3,123.6 L94.0,127.4 L93.7,129.1 L93.3,130.4 L92.9,131.0 L92.4,131.2 L91.5,130.9 L90.9,130.1 L89.7,127.0 L88.4,124.3 L85.4,115.2 L84.7,111.8 L84.6,110.9 L84.9,109.9 L85.2,109.1 L85.9,108.5 L86.8,107.9 L87.9,107.4 L88.8,107.3Z"
     ),
@@ -459,8 +463,8 @@ private fun regionAt(shapes: List<ParsedShape>, x: Float, y: Float): BodyRegion?
     val px = (x * HIT_SCALE).toInt()
     val py = (y * HIT_SCALE).toInt()
     shapes.firstOrNull { it.region !in NEUTRAL_REGIONS && it.hit.contains(px, py) }?.let { return it.region }
-    // Nothing exactly under the finger: the closest shape within ~4 units.
-    val reach = (4 * HIT_SCALE).toInt()
+    // Nothing exactly under the finger: the closest shape within ~6 units.
+    val reach = (6 * HIT_SCALE).toInt()
     return shapes
         .filter { s ->
             val b = s.hit.bounds
@@ -539,23 +543,33 @@ fun BodyMapPair(
     modifier: Modifier = Modifier,
     figureWidth: Dp = 88.dp,
     outlined: Set<BodyRegion> = emptySet(),
+    fillWidth: Boolean = false,
     onTap: ((BodyRegion) -> Unit)? = null
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { BodyFigureStore.init(context) }
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally)
-    ) {
-        listOf(BodyView.FRONT to "FRONT", BodyView.BACK to "BACK").forEach { (view, label) ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                BodyFigure(view = view, level = level, width = figureWidth, outlined = outlined, onTap = onTap)
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(text = label, style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+    // fillWidth: the two figures grow with the width (bigger = easier to tap), up to MAX_FIGURE_WIDTH.
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val gap = 28.dp
+        val width = if (fillWidth) ((maxWidth - gap) / 2).coerceAtMost(MAX_FIGURE_WIDTH) else figureWidth
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally)
+        ) {
+            listOf(BodyView.FRONT to "FRONT", BodyView.BACK to "BACK").forEach { (view, label) ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    BodyFigure(view = view, level = level, width = width, outlined = outlined, onTap = onTap)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(text = label, style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                }
             }
         }
     }
 }
+
+/** Biggest a figure gets when filling the width - big enough to tap a
+ *  muscle, small enough that Recent PRs still show on the first screen. */
+private val MAX_FIGURE_WIDTH = 110.dp
 
 /** "Fewer sets ▪ ▪ ▪ More" - a small key under the figure. */
 @Composable
@@ -741,21 +755,153 @@ fun setsByRegion(muscleSets: Map<String, Int>): Map<BodyRegion, Double> {
 /** Muscles that have their own shape but no parts in WorkoutCompleteness. */
 private val DIRECT_MUSCLES = setOf("FOREARMS", "ABDOMINALS", "ADDUCTORS", "ABDUCTORS")
 
-/** How much each shape was worked in a workout, from its exercises: the
- *  part each exercise works (incline press -> upper chest), helping
- *  muscles counted less (see [partCredit]). */
+/** A helping muscle gets this share of each set... */
+private const val SECONDARY_SHARE = 0.5
+/** ...but never more than this many sets' worth in one workout, so a heavy
+ *  bench day doesn't paint the triceps as if they were trained directly. */
+private const val SECONDARY_CAP = 1.0
+
+/** "UPPER_CHEST" -> BodyRegion.UPPER_CHEST (null for anything unknown). */
+fun regionOf(name: String): BodyRegion? =
+    runCatching { BodyRegion.valueOf(name.trim().uppercase()) }.getOrNull()
+
+/** Stretches and mobility drills don't count as training a muscle. */
+private fun isStretch(exerciseName: String): Boolean =
+    AppDataCache.exercises?.firstOrNull { it.name.equals(exerciseName, ignoreCase = true) }
+        ?.category?.startsWith("Mobility", ignoreCase = true) == true
+
+/** The shapes an exercise works, guessed from its name - only for exercises
+ *  the server has no muscles for (old custom ones). First = main, second = helping. */
+private fun guessedRegions(name: String, muscleGroup: String?): Pair<Set<BodyRegion>, Set<BodyRegion>> {
+    val parts = exerciseParts(name, muscleGroup)
+    val main = parts.main.flatMap { regionsOfPart(it) }.toMutableSet()
+    val muscle = muscleGroup?.trim()?.uppercase()
+    if (muscle != null && muscle in DIRECT_MUSCLES) main += regionsOfMuscle(muscle)
+    val helping = (parts.assist - parts.main).flatMap { regionsOfPart(it) }.toSet() - main
+    return main to helping
+}
+
+/** The main + helping muscles to store for a new custom exercise, guessed
+ *  from its name and muscle group (BodyRegion names). */
+fun suggestedMuscles(name: String, muscleGroup: String?): Pair<List<String>, List<String>> {
+    val (main, helping) = guessedRegions(name, muscleGroup)
+    val primary = main.ifEmpty { regionsOfMuscle(muscleGroup.orEmpty()) }
+    return primary.map { it.name } to (helping - primary).map { it.name }
+}
+
+/** Whether an exercise trains [region] as one of its main muscles. */
+fun exerciseTrains(region: BodyRegion, primaryMuscles: List<String>, name: String, muscleGroup: String?): Boolean =
+    if (primaryMuscles.isNotEmpty()) primaryMuscles.any { regionOf(it) == region }
+    else region in guessedRegions(name, muscleGroup).first
+
+/** How much each shape was worked in a workout, in sets: every set counts
+ *  fully for the exercise's main muscles and half for its helping muscles
+ *  (capped, see [SECONDARY_CAP]). Exercises the server has no muscles for
+ *  fall back to guessing from the name (see [partCredit]). Stretches don't count. */
 fun creditByRegion(exercises: List<ExerciseSetCount>): Map<BodyRegion, Double> {
+    val counted = exercises.filter { it.sets > 0 && !isStretch(it.name) }
+    val (tagged, untagged) = counted.partition { e -> e.primaryMuscles.any { regionOf(it) != null } }
     val out = HashMap<BodyRegion, Double>()
-    partCredit(exercises).forEach { (part, credit) ->
+
+    // Known muscles, straight from the exercise library.
+    val main = HashMap<BodyRegion, Double>()
+    val helping = HashMap<BodyRegion, Double>()
+    tagged.forEach { e ->
+        val primary = e.primaryMuscles.mapNotNull { regionOf(it) }.toSet()
+        primary.forEach { main[it] = (main[it] ?: 0.0) + e.sets }
+        e.secondaryMuscles.mapNotNull { regionOf(it) }.filterNot { it in primary }.toSet()
+            .forEach { helping[it] = (helping[it] ?: 0.0) + e.sets * SECONDARY_SHARE }
+    }
+    (main.keys + helping.keys).forEach { r ->
+        out[r] = (main[r] ?: 0.0) + (helping[r] ?: 0.0).coerceAtMost(SECONDARY_CAP)
+    }
+
+    // Unknown ones: guessed from the name.
+    partCredit(untagged).forEach { (part, credit) ->
         regionsOfPart(part).forEach { out[it] = (out[it] ?: 0.0) + credit }
     }
-    exercises.forEach { e ->
+    untagged.forEach { e ->
         val muscle = e.muscleGroup?.trim()?.uppercase() ?: return@forEach
-        if (muscle in DIRECT_MUSCLES && e.sets > 0) {
+        if (muscle in DIRECT_MUSCLES) {
             regionsOfMuscle(muscle).forEach { out[it] = (out[it] ?: 0.0) + e.sets }
         }
     }
     return out
+}
+
+/** Sets that make a muscle count as "trained" for recovery. */
+private const val RECOVERY_MIN_SETS = 2.0
+
+/**
+ * Days since each shape was last trained properly (0 = today, 1 =
+ * yesterday), over the last 2 days. Uses each exercise's own muscles, so a
+ * day of incline presses leaves the upper chest recovering, not the whole
+ * chest. Workouts from an older server (no per-exercise data) fall back
+ * to their muscle groups.
+ */
+fun recentlyTrainedRegions(workouts: List<WorkoutSummary>, today: java.time.LocalDate = java.time.LocalDate.now()): Map<BodyRegion, Long> {
+    val out = HashMap<BodyRegion, Long>()
+    fun mark(region: BodyRegion, days: Long) { out[region] = minOf(out[region] ?: days, days) }
+    workouts.forEach { w ->
+        val date = runCatching { java.time.LocalDate.parse(w.date) }.getOrNull() ?: return@forEach
+        val days = java.time.temporal.ChronoUnit.DAYS.between(date, today)
+        if (days < 0 || days >= 2) return@forEach
+        if (w.exerciseSets.isNotEmpty()) {
+            creditByRegion(w.exerciseSets).forEach { (region, sets) -> if (sets >= RECOVERY_MIN_SETS) mark(region, days) }
+        } else {
+            val total = w.muscleSets.values.sum().toDouble()
+            w.muscleSets.forEach { (muscle, sets) ->
+                if (total > 0 && sets / total >= 0.25) regionsOfMuscle(muscle).forEach { mark(it, days) }
+            }
+        }
+    }
+    return out
+}
+
+/** Recovery shading from the workouts themselves (see [recentlyTrainedRegions]):
+ *  trained today = full orange, yesterday = faded, otherwise grey. */
+fun recoveryShadingFor(workouts: List<WorkoutSummary>, today: java.time.LocalDate = java.time.LocalDate.now()): (BodyRegion) -> Float {
+    val byRegion = recentlyTrainedRegions(workouts, today)
+    return { r -> when (byRegion[r]) { 0L -> 1f; 1L -> RECOVERY_YESTERDAY_LEVEL; else -> 0f } }
+}
+
+/** The muscle's name for people: "Upper chest", "Triceps (long head)"... */
+fun regionLabel(region: BodyRegion): String = when (region) {
+    BodyRegion.HEAD -> "Head"
+    BodyRegion.NECK -> "Neck"
+    BodyRegion.UPPER_CHEST -> "Upper chest"
+    BodyRegion.MID_CHEST -> "Middle chest"
+    BodyRegion.LOWER_CHEST -> "Lower chest"
+    BodyRegion.FRONT_DELT -> "Front delts"
+    BodyRegion.SIDE_DELT -> "Side delts"
+    BodyRegion.REAR_DELT -> "Rear delts"
+    BodyRegion.BICEPS_LONG -> "Biceps (long head)"
+    BodyRegion.BICEPS_SHORT -> "Biceps (short head)"
+    BodyRegion.BRACHIALIS -> "Brachialis"
+    BodyRegion.FOREARM_FLEXORS -> "Forearms (front)"
+    BodyRegion.FOREARM_EXTENSORS -> "Forearms (back)"
+    BodyRegion.TRICEPS_LONG -> "Triceps (long head)"
+    BodyRegion.TRICEPS_LATERAL -> "Triceps (lateral head)"
+    BodyRegion.TRICEPS_MEDIAL -> "Triceps (medial head)"
+    BodyRegion.ABS -> "Abs"
+    BodyRegion.OBLIQUES -> "Obliques"
+    BodyRegion.UPPER_TRAPS -> "Upper traps"
+    BodyRegion.MID_TRAPS -> "Middle traps"
+    BodyRegion.UPPER_BACK -> "Upper back"
+    BodyRegion.LATS -> "Lats"
+    BodyRegion.LOWER_BACK -> "Lower back"
+    BodyRegion.QUAD_OUTER -> "Outer quads"
+    BodyRegion.QUAD_FRONT -> "Front quads"
+    BodyRegion.QUAD_INNER -> "Inner quads"
+    BodyRegion.ADDUCTORS -> "Adductors"
+    BodyRegion.SHIN -> "Shins"
+    BodyRegion.GLUTE_MED -> "Glute medius"
+    BodyRegion.GLUTES -> "Glutes"
+    BodyRegion.HAM_OUTER -> "Outer hamstrings"
+    BodyRegion.HAM_INNER -> "Inner hamstrings"
+    BodyRegion.CALF_OUTER -> "Outer calves"
+    BodyRegion.CALF_INNER -> "Inner calves"
+    BodyRegion.SOLEUS -> "Soleus"
 }
 
 /** Workout view: the most-worked shape is full orange, the rest scaled by
@@ -802,10 +948,14 @@ fun MuscleCountChip(muscle: String, sets: Int, modifier: Modifier = Modifier) {
 // Bitmap version - for home-screen widgets, which can't run Compose drawing
 // ---------------------------------------------------------------------------
 
-private val FRONT_ONLY = CHEST_PARTS + BICEPS_PARTS + QUAD_PARTS + setOf(BodyRegion.ABS, BodyRegion.FRONT_DELT, BodyRegion.ADDUCTORS)
+private val FRONT_ONLY = CHEST_PARTS + BICEPS_PARTS + QUAD_PARTS + setOf(
+    BodyRegion.ABS, BodyRegion.OBLIQUES, BodyRegion.FRONT_DELT, BodyRegion.ADDUCTORS,
+    BodyRegion.FOREARM_FLEXORS, BodyRegion.SHIN
+)
 private val BACK_ONLY = TRICEPS_PARTS + HAM_PARTS + GLUTE_PARTS + setOf(
     BodyRegion.UPPER_TRAPS, BodyRegion.MID_TRAPS, BodyRegion.UPPER_BACK, BodyRegion.LATS,
-    BodyRegion.LOWER_BACK, BodyRegion.REAR_DELT
+    BodyRegion.LOWER_BACK, BodyRegion.REAR_DELT, BodyRegion.FOREARM_EXTENSORS,
+    BodyRegion.CALF_OUTER, BodyRegion.CALF_INNER, BodyRegion.SOLEUS
 )
 
 /** Front or back - whichever shows more of [regions] (a pull day shows the back). */

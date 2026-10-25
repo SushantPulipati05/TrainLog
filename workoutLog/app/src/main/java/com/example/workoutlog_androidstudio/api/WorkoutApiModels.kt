@@ -25,7 +25,9 @@ data class ExerciseResponse(
     // (created before this field existed) won't have one.
     val category: String? = null,
     val timesLogged: Int = 0,
-    val lastLoggedAt: String? = null
+    val lastLoggedAt: String? = null,
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 @Serializable
@@ -47,7 +49,9 @@ data class WorkoutSummaryResponse(
 data class ExerciseSetCountResponse(
     val name: String,
     val muscleGroup: String? = null,
-    val sets: Int
+    val sets: Int,
+    val primaryMuscles: List<String> = emptyList(),
+    val secondaryMuscles: List<String> = emptyList()
 )
 
 
@@ -97,7 +101,10 @@ data class NewExerciseRequest(
     val name: String,
     val muscleGroup: String?,
     val equipment: String?,
-    val category: String? = null
+    val category: String? = null,
+    // Body-map muscles (BodyRegion names); the server drops unknown ones.
+    val primaryMuscles: List<String>? = null,
+    val secondaryMuscles: List<String>? = null
 )
 
 @Serializable
@@ -115,7 +122,8 @@ data class UpdateSetRequest(
 data class CompleteWorkoutRequest(
     val notes: String? = null,
     val sets: List<NewSetRequest>,
-    val endedAtMillis: Long? = null
+    val endedAtMillis: Long? = null,
+    val startedAtMillis: Long? = null
 )
 
 @Serializable

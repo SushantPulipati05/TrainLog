@@ -104,7 +104,10 @@ data class PendingWorkout(
     val sets: List<PendingSet>,
     val exercises: List<PendingExercise>,
     /** The account it belongs to - never uploaded under someone else's login. */
-    val ownerUid: String? = null
+    val ownerUid: String? = null,
+    /** Only for a past workout: when it really started (the server moves
+     *  the workout to that time). Null for a normal, live workout. */
+    val startedAtMillis: Long? = null
 )
 
 /** Builds the queue entry for a workout that was just ended. */
@@ -115,7 +118,8 @@ fun pendingWorkoutFrom(
     notes: String,
     elapsedSeconds: Int,
     startedAtMillis: Long,
-    endedAtMillis: Long = System.currentTimeMillis()
+    endedAtMillis: Long = System.currentTimeMillis(),
+    isPast: Boolean = false
 ): PendingWorkout {
     // Same rule as the upload always had: only sets with reps filled in.
     val sets = exercises.flatMap { exercise ->
@@ -145,7 +149,8 @@ fun pendingWorkoutFrom(
         notes = notes.ifBlank { null },
         sets = sets,
         exercises = summary,
-        ownerUid = currentUid()
+        ownerUid = currentUid(),
+        startedAtMillis = if (isPast) startedAtMillis else null
     )
 }
 
@@ -176,7 +181,11 @@ fun PendingWorkout.toSummary(): WorkoutSummary {
         volumeLabel = "%,.0f KG".format(exercises.sumOf { it.volumeKg }),
         tags = exercises.map { it.muscleGroup }.distinct(),
         muscleSets = exercises.groupBy { it.muscleGroup }.mapValues { (_, list) -> list.sumOf { it.sets } },
-        exerciseSets = exercises.map { ExerciseSetCount(it.name, it.muscleGroup, it.sets) }
+        exerciseSets = exercises.map { e ->
+            // The muscles come from the exercise list (not stored in the queue).
+            val known = AppDataCache.exercises?.firstOrNull { it.id == e.exerciseId }
+            ExerciseSetCount(e.name, e.muscleGroup, e.sets, known?.primaryMuscles.orEmpty(), known?.secondaryMuscles.orEmpty())
+        }
     )
 }
 
@@ -266,7 +275,8 @@ object OfflineSync {
                                 loggedAtSeconds = it.loggedAtSeconds
                             )
                         },
-                        endedAtMillis = pending.endedAtMillis
+                        endedAtMillis = pending.endedAtMillis,
+                        startedAtMillis = pending.startedAtMillis
                     )
                 )
                 // Its name (a rename during the workout or from the fun-name card).
