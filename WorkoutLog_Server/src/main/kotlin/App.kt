@@ -3301,11 +3301,14 @@ private val notifyClient: java.net.http.HttpClient = java.net.http.HttpClient.ne
     .build()
 
 /**
- * Sends a new piece of feedback to the owner's phone, in the background (the
- * app's request never waits for it, and a failure here never loses the
- * feedback - it's already saved). Set in Railway -> Variables:
- *  - DISCORD_WEBHOOK_URL: a channel's webhook link (Discord: channel ->
- *    Edit channel -> Integrations -> Webhooks -> New Webhook -> Copy URL), and/or
+ * Sends a new piece of feedback to the owner, in the background (the app's
+ * request never waits for it, and a failure here never loses the feedback -
+ * it's already saved). Any of these, set in Railway -> Variables:
+ *  - RESEND_API_KEY + FEEDBACK_TO_EMAIL: an email per message through
+ *    Resend (resend.com). Until a domain is verified there, Resend only
+ *    sends to the email you signed up with - so sign up with the inbox you
+ *    want the feedback in. Replying to the email replies to the user.
+ *  - DISCORD_WEBHOOK_URL: a channel's webhook link, and/or
  *  - TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID: from @BotFather and your chat.
  * Nothing set = it's only saved in the feedback table.
  */
@@ -3313,6 +3316,20 @@ private fun forwardFeedback(kind: String, message: String, email: String?, appVe
     val title = when (kind) { "BUG" -> "Bug report"; "IDEA" -> "Idea"; else -> "Feedback" }
     val details = listOfNotNull(email, appVersion?.let { "TrainLog $it" }, device).joinToString(" · ")
     val text = "New TrainLog $title\n\n$message" + if (details.isNotEmpty()) "\n\n$details" else ""
+
+    val resendKey = System.getenv("RESEND_API_KEY")?.trim()?.ifEmpty { null }
+    val toEmail = System.getenv("FEEDBACK_TO_EMAIL")?.trim()?.ifEmpty { null }
+    if (resendKey != null && toEmail != null) {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            // Resend's shared sender works without setting up a domain.
+            put("from", kotlinx.serialization.json.JsonPrimitive(System.getenv("FEEDBACK_FROM_EMAIL")?.trim()?.ifEmpty { null } ?: "TrainLog <onboarding@resend.dev>"))
+            put("to", kotlinx.serialization.json.JsonArray(listOf(kotlinx.serialization.json.JsonPrimitive(toEmail))))
+            put("subject", kotlinx.serialization.json.JsonPrimitive("TrainLog $title: ${message.lineSequence().first().take(60)}"))
+            put("text", kotlinx.serialization.json.JsonPrimitive(text))
+            if (email != null) put("reply_to", kotlinx.serialization.json.JsonPrimitive(email))
+        }.toString()
+        postJson("https://api.resend.com/emails", body, bearer = resendKey)
+    }
 
     val discord = System.getenv("DISCORD_WEBHOOK_URL")?.trim()?.takeIf { it.startsWith("https://") }
     if (discord != null) {
@@ -3333,10 +3350,11 @@ private fun forwardFeedback(kind: String, message: String, email: String?, appVe
     }
 }
 
-private fun postJson(url: String, body: String) {
+private fun postJson(url: String, body: String, bearer: String? = null) {
     val request = java.net.http.HttpRequest.newBuilder(URI(url))
         .timeout(java.time.Duration.ofSeconds(10))
         .header("Content-Type", "application/json")
+        .apply { if (bearer != null) header("Authorization", "Bearer $bearer") }
         .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
         .build()
     notifyClient.sendAsync(request, java.net.http.HttpResponse.BodyHandlers.discarding())

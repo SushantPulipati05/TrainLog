@@ -18,6 +18,14 @@ data class SaveTrainingPlanRequest(
 )
 
 @Serializable
+data class FeedbackRequest(
+    val kind: String,          // "BUG", "IDEA" or "OTHER"
+    val message: String,
+    val appVersion: String? = null,
+    val device: String? = null
+)
+
+@Serializable
 data class WorkoutResponse(
     val id: Int,
     val workoutName: String,

@@ -99,6 +99,9 @@ interface WorkoutApi {
 
     @PUT("training-plan")
     suspend fun saveTrainingPlan(@Body request: SaveTrainingPlanRequest): TrainingPlanResponse
+
+    @POST("feedback")
+    suspend fun sendFeedback(@Body request: FeedbackRequest)
 }
 
 object NetworkClient {

@@ -14,7 +14,7 @@ import kotlin.random.Random
 
 /*
  * Fun workout names, picked when a workout ends ("Today's workout is
- * called... Pec Deck Diaries"). No AI: the session is read first - which
+ * called... Iron Chest"). No AI: the session is read first - which
  * muscles got how many sets, which exercises, how long, what time, any PR -
  * and then only names that are TRUE for it can be picked. A name about
  * shoulders needs real shoulder work; a name about bench press needs a bench
@@ -119,96 +119,91 @@ object WorkoutNamer {
     private val BACK = FAMILIES.getValue("Back")
     private val LEGS = FAMILIES.getValue("Legs")
 
+    // Short, strong names - titles, not jokes. Each one still only fits a
+    // session that really trained what it's about.
     private val IDEAS: List<NameIdea> = listOf(
         // Push, general
-        NameIdea("Push It Real Good", P), NameIdea("Pushin' P", P), NameIdea("Push Notifications", P),
-        NameIdea("Pushover", P), NameIdea("The Pressing Matters", P),
+        NameIdea("Iron Press", P), NameIdea("Front Line", P), NameIdea("Full Force", P),
+        NameIdea("Pressure Point", P), NameIdea("Push Protocol", P),
         // Chest
-        NameIdea("Chest Day, Best Day", muscles = setOf("CHEST")), NameIdea("Pec Deck Diaries", muscles = setOf("CHEST")),
-        NameIdea("Chest Fest", muscles = setOf("CHEST")), NameIdea("Chesty La Rue", muscles = setOf("CHEST")),
-        NameIdea("Pec-tacular", muscles = setOf("CHEST")), NameIdea("Fly Me to the Moon", muscles = setOf("CHEST"), exercise = "fly"),
-        NameIdea("Bench Warmers", exercise = "bench"), NameIdea("Bench Press Conference", exercise = "bench"),
-        NameIdea("Press Release", exercise = "press"), NameIdea("Dip Dip Hooray", exercise = "dip"),
+        NameIdea("Iron Chest", muscles = setOf("CHEST")), NameIdea("Chest Plate", muscles = setOf("CHEST")),
+        NameIdea("Armor Up", muscles = setOf("CHEST")), NameIdea("Breastplate", muscles = setOf("CHEST")),
+        NameIdea("Wide Open", muscles = setOf("CHEST"), exercise = "fly"),
+        NameIdea("Benchmark", exercise = "bench"), NameIdea("Flat Out", exercise = "bench"),
+        NameIdea("Pressed Steel", exercise = "press"), NameIdea("Parallel Bars", exercise = "dip"),
         // Shoulders
-        NameIdea("Shoulder Season", muscles = setOf("SHOULDERS")), NameIdea("Delts & Dragons", muscles = setOf("SHOULDERS")),
-        NameIdea("Boulder Shoulders", muscles = setOf("SHOULDERS")), NameIdea("Raise the Roof", muscles = setOf("SHOULDERS"), exercise = "raise"),
+        NameIdea("Atlas", muscles = setOf("SHOULDERS")), NameIdea("Cannonballs", muscles = setOf("SHOULDERS")),
+        NameIdea("Capped", muscles = setOf("SHOULDERS")), NameIdea("Broad Shoulders", muscles = setOf("SHOULDERS")),
+        NameIdea("Side Load", muscles = setOf("SHOULDERS"), exercise = "raise"),
         // Triceps
-        NameIdea("Tricep Treaty", muscles = setOf("TRICEPS")), NameIdea("Tri Harder", muscles = setOf("TRICEPS")),
-        NameIdea("Horseshoe Club", muscles = setOf("TRICEPS")), NameIdea("Push(down) It to the Limit", exercise = "pushdown"),
+        NameIdea("Lockout", muscles = setOf("TRICEPS")), NameIdea("Horseshoe", muscles = setOf("TRICEPS")),
+        NameIdea("Triple Threat", muscles = setOf("TRICEPS")), NameIdea("Downforce", exercise = "pushdown"),
         // Pull, general
-        NameIdea("Pulling Strings", PU), NameIdea("Pull Request", PU), NameIdea("Got Your Back", PU, BACK),
-        NameIdea("Back in Business", muscles = BACK), NameIdea("Back to the Future", muscles = BACK),
-        NameIdea("Back That Thing Up", muscles = BACK), NameIdea("Pull Up & Shut Up", exercise = "pull"),
+        NameIdea("Pull Force", PU), NameIdea("Undertow", PU), NameIdea("Backbone", PU, BACK),
+        NameIdea("Behind the Lines", muscles = BACK), NameIdea("Back Engine", muscles = BACK),
+        NameIdea("Iron Pull", exercise = "pull"),
         // Back specifics
-        NameIdea("Lat Night Show", muscles = setOf("LATS")), NameIdea("The Lat Pack", muscles = setOf("LATS")),
-        NameIdea("Wingspan Season", muscles = setOf("LATS")),
-        NameIdea("Row Row Row Your Bod", exercise = "row"), NameIdea("Row-mantic Evening", exercise = "row"),
-        NameIdea("Rows Before Bros", exercise = "row"), NameIdea("Deadlift Society", exercise = "deadlift"),
-        NameIdea("Shrug Life", muscles = setOf("TRAPS")),
+        NameIdea("Wingspan", muscles = setOf("LATS")), NameIdea("V-Taper", muscles = setOf("LATS")),
+        NameIdea("Spread Wings", muscles = setOf("LATS")),
+        NameIdea("Heavy Rows", exercise = "row"), NameIdea("Row Engine", exercise = "row"),
+        NameIdea("Dead Weight", exercise = "deadlift"), NameIdea("Floor to Lockout", exercise = "deadlift"),
+        NameIdea("The Yoke", muscles = setOf("TRAPS")),
         // Arms
-        NameIdea("Bicep Bistro", muscles = setOf("BICEPS")), NameIdea("Curl Power", exercise = "curl"),
-        NameIdea("Gun Show", muscles = setOf("BICEPS", "TRICEPS")), NameIdea("Sleeve Season", muscles = setOf("BICEPS", "TRICEPS")),
-        NameIdea("Curls Just Wanna Have Fun", exercise = "curl"), NameIdea("Grip It & Rip It", muscles = setOf("FOREARMS")),
+        NameIdea("Peaks", muscles = setOf("BICEPS")), NameIdea("Iron Curls", exercise = "curl"),
+        NameIdea("Arsenal", muscles = setOf("BICEPS", "TRICEPS")), NameIdea("Gunsmith", muscles = setOf("BICEPS", "TRICEPS")),
+        NameIdea("Arms Race", muscles = setOf("BICEPS", "TRICEPS")),
+        NameIdea("Iron Grip", muscles = setOf("FOREARMS")), NameIdea("Vise Grip", muscles = setOf("FOREARMS")),
         // Legs, general
-        NameIdea("Never Skip", L), NameIdea("Leg Day (Survived)", L), NameIdea("Wheel Day", L),
-        NameIdea("Leg-endary", L), NameIdea("The Stairs Are Lava", L), NameIdea("Knees Weak, Arms Spaghetti", L),
+        NameIdea("Foundation", L), NameIdea("Pillars", L), NameIdea("Ground Zero", L),
+        NameIdea("Iron Legs", L), NameIdea("Heavy Legs", L),
         // Leg specifics
-        NameIdea("Quadfather", muscles = setOf("QUADRICEPS")), NameIdea("Quad Squad", muscles = setOf("QUADRICEPS")),
-        NameIdea("Squat Happens", exercise = "squat"), NameIdea("Squat Goals", exercise = "squat"),
-        NameIdea("Hamstring Theory", muscles = setOf("HAMSTRINGS")), NameIdea("Glute Expectations", muscles = setOf("GLUTES")),
-        NameIdea("Booty Camp", muscles = setOf("GLUTES")), NameIdea("Calf Raise Your Hand", muscles = setOf("CALVES")),
-        NameIdea("Calf-way There", muscles = setOf("CALVES")), NameIdea("Lunge Lizard", exercise = "lunge"),
-        NameIdea("Thigh Society", muscles = setOf("QUADRICEPS", "ADDUCTORS", "ABDUCTORS")),
-        NameIdea("Leg Press Pass", exercise = "leg press"),
+        NameIdea("Teardrop", muscles = setOf("QUADRICEPS")), NameIdea("Quad Fire", muscles = setOf("QUADRICEPS")),
+        NameIdea("Below Parallel", exercise = "squat"), NameIdea("Under the Bar", exercise = "squat"),
+        NameIdea("Posterior Chain", muscles = setOf("HAMSTRINGS", "GLUTES")), NameIdea("The Hinge", muscles = setOf("HAMSTRINGS")),
+        NameIdea("Power Source", muscles = setOf("GLUTES")), NameIdea("Drive", muscles = setOf("GLUTES")),
+        NameIdea("Diamonds", muscles = setOf("CALVES")), NameIdea("Diamond Cut", muscles = setOf("CALVES")),
+        NameIdea("Forward March", exercise = "lunge"), NameIdea("The Sled", exercise = "leg press"),
+        NameIdea("Inner Strength", muscles = setOf("ADDUCTORS", "ABDUCTORS")),
         // Abs
-        NameIdea("Core Values", muscles = setOf("ABDOMINALS")), NameIdea("Abs-olutely", muscles = setOf("ABDOMINALS")),
-        NameIdea("Crunch Time", muscles = setOf("ABDOMINALS")), NameIdea("Plank You Very Much", exercise = "plank"),
+        NameIdea("Steel Core", muscles = setOf("ABDOMINALS")), NameIdea("Core Lock", muscles = setOf("ABDOMINALS")),
+        NameIdea("Midsection", muscles = setOf("ABDOMINALS")), NameIdea("Hold the Line", exercise = "plank"),
         // Upper / Lower / Full / Mixed
-        NameIdea("Upper Management", setOf(WorkoutKind.UPPER)), NameIdea("Top Shelf", setOf(WorkoutKind.UPPER)),
-        NameIdea("Upper Echelon", setOf(WorkoutKind.UPPER)), NameIdea("Shirt Stretcher", setOf(WorkoutKind.UPPER)),
-        NameIdea("Above the Belt", setOf(WorkoutKind.UPPER)), NameIdea("Upper Class", setOf(WorkoutKind.UPPER)),
-        NameIdea("Lower Expectations", setOf(WorkoutKind.LOWER)), NameIdea("Down Under", setOf(WorkoutKind.LOWER)),
-        NameIdea("Ground Floor", setOf(WorkoutKind.LOWER)), NameIdea("The Bottom Line", setOf(WorkoutKind.LOWER)),
-        NameIdea("Full Send", setOf(WorkoutKind.FULL)), NameIdea("The Whole Enchilada", setOf(WorkoutKind.FULL)),
-        NameIdea("Head to Toe", setOf(WorkoutKind.FULL)), NameIdea("No Muscle Left Behind", setOf(WorkoutKind.FULL)),
-        NameIdea("Everything Everywhere All at Once", setOf(WorkoutKind.FULL)),
-        NameIdea("Choose Your Own Adventure", setOf(WorkoutKind.MIXED)), NameIdea("Chaos Theory", setOf(WorkoutKind.MIXED)),
-        NameIdea("Gym Buffet", setOf(WorkoutKind.MIXED)), NameIdea("Off Script", setOf(WorkoutKind.MIXED)),
-        NameIdea("The Sampler Platter", setOf(WorkoutKind.MIXED))
-    )
-
-    private val OPENERS = listOf("Operation", "Certified", "Attack of", "Ultimate", "Deluxe", "Classic", "Unhinged", "Legendary")
-    private val ENDINGS = listOf(
-        "Part II", "Director's Cut", "Final Boss Edition", "Remastered", "Deluxe Edition", "Electric Boogaloo", "The Sequel", "Unplugged"
+        NameIdea("Upper Hand", setOf(WorkoutKind.UPPER)), NameIdea("Top Half", setOf(WorkoutKind.UPPER)),
+        NameIdea("Upper Deck", setOf(WorkoutKind.UPPER)),
+        NameIdea("Ground Force", setOf(WorkoutKind.LOWER)), NameIdea("Bedrock", setOf(WorkoutKind.LOWER)),
+        NameIdea("Lower Deck", setOf(WorkoutKind.LOWER)),
+        NameIdea("All In", setOf(WorkoutKind.FULL)), NameIdea("Total Body", setOf(WorkoutKind.FULL)),
+        NameIdea("Head to Toe", setOf(WorkoutKind.FULL)), NameIdea("Full Spectrum", setOf(WorkoutKind.FULL)),
+        NameIdea("Wildcard", setOf(WorkoutKind.MIXED)), NameIdea("Freestyle", setOf(WorkoutKind.MIXED)),
+        NameIdea("Off Script", setOf(WorkoutKind.MIXED)), NameIdea("Open Floor", setOf(WorkoutKind.MIXED))
     )
 
     // {s} = what the session was ("Chest" for a chest-only day, else "Push"),
     // {c} = a name idea that fits, {w} = a weight, {x} = an exercise,
     // {n} = session number, {day} = weekday.
     private val PR = listOf(
-        "{s}: PR Edition", "New Record: {c}", "{c}: Record Breaker", "The {w} kg Glow-Up",
-        "Personal Best of {s}", "{s} Hall of Fame", "Plot Twist: PR", "Fresh PR, Who Dis", "{x}: New High Score"
+        "Record Breaker", "New Ceiling", "Uncharted", "Peak {s}", "{x}: New Best", "The {w} kg Club", "Personal Record"
     )
     private val BIGGEST = listOf(
-        "{c}: Final Boss", "The Biggest {s} Ever", "{s}: Maximum Overdrive", "Volume Turned to 11", "{c}: Extended Universe"
+        "Workhorse", "Max Volume", "Heavy Duty", "Biggest {s} Yet", "{s} at Full Capacity"
     )
     private val COMEBACK = listOf(
-        "The Return of the {s}", "{s}: The Comeback", "Guess Who's Back", "{c}: Reunion Tour", "{s} Strikes Back", "Back From the Couch"
+        "The Return", "Back in Iron", "Reloaded", "Rust Off", "{s}: Reloaded"
     )
     private val SHORT = listOf(
-        "{s} Speedrun", "{s} Express", "Quick {s}, No Lunch", "{c} (Short Version)", "The {s} Sprint", "TL;DR {s}"
+        "Blitz", "Quick Strike", "{s} Blitz", "In and Out", "Short and Heavy"
     )
     private val LONG = listOf(
-        "{c}: Extended Cut", "The Never-Ending {s}", "{s}: The Long Haul", "{c} Marathon", "Overtime {s}", "{s} Till Closing"
+        "Long Haul", "The Grind", "{s} Marathon", "Overtime", "Endurance Run"
     )
     private val LATE = listOf(
-        "Midnight {s}", "{s} After Dark", "Late Night {c}", "Night Shift {s}", "{s} by Moonlight", "The {day} Night {s} Show"
+        "Night Shift", "After Hours", "Midnight Iron", "Night {s}", "Lights Out"
     )
     private val EARLY = listOf(
-        "Sunrise {s}", "{s} Before Breakfast", "Early Bird {s}", "Dawn of the {s}", "{s} & Coffee", "Rise and {s}"
+        "First Light", "Dawn Patrol", "Early Iron", "Sunrise {s}", "Before the World Wakes"
     )
     private val NUMBERED = listOf(
-        "The {w} kg Incident", "{day} {s} Special", "{s} Day No. {n}", "{x} Appreciation Society", "{x} & Friends", "{w} kg of Pure {s}"
+        "{c} Vol. {n}", "{s} Vol. {n}", "{day} {s}", "The {w} kg Club", "{x} Day"
     )
 
     // ---------------------------------------------------------------- rules
@@ -258,7 +253,7 @@ object WorkoutNamer {
 
         val special: Pair<List<String>, String>? = when {
             facts.prExercise != null ->
-                PR to "🏆 PR on ${facts.prExercise}" + (facts.prWeightKg?.let { " ${formatDecimal(it)} kg" } ?: "")
+                PR to "New best on ${facts.prExercise}" + (facts.prWeightKg?.let { ": ${formatDecimal(it)} kg" } ?: "")
             facts.biggestEver -> BIGGEST to "Biggest ${label.lowercase()} session yet"
             facts.comebackDays != null -> COMEBACK to "First session in ${facts.comebackDays} days"
             facts.durationMinutes in 1..34 -> SHORT to "Done in ${facts.durationMinutes} min"
@@ -293,12 +288,7 @@ object WorkoutNamer {
                 reason = listOf(special.second, summary).filter { it.isNotBlank() }.joinToString(" · ")
             } else {
                 val roll = random.nextFloat()
-                name = when {
-                    roll < 0.3f -> fill(NUMBERED.random(random), forPr = false)
-                    roll < 0.45f -> "${OPENERS.random(random)} ${weighted.random(random)}"
-                    roll < 0.6f -> "${weighted.random(random)}: ${ENDINGS.random(random)}"
-                    else -> weighted.random(random)
-                }
+                name = if (roll < 0.25f) fill(NUMBERED.random(random), forPr = false) else weighted.random(random)
             }
             if (name != null && name.length <= 60 && name.lowercase() !in used) return SuggestedName(name, reason)
         }
