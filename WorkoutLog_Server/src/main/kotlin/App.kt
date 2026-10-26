@@ -356,6 +356,15 @@ data class ProfileResponse(
  * stored as-is (null = none set up). On PUT, a null [plan] clears it and a
  * null [promptDismissed] keeps the current value.
  */
+/** Profile -> Send feedback. [kind] is "BUG", "IDEA" or "OTHER". */
+@Serializable
+data class FeedbackRequest(
+    val kind: String,
+    val message: String,
+    val appVersion: String? = null,
+    val device: String? = null
+)
+
 @Serializable
 data class TrainingPlanResponse(val plan: String? = null, val promptDismissed: Boolean = false)
 
@@ -506,7 +515,7 @@ fun Application.module() {
         // Creates any of these tables that don't already exist yet. Safe to run
         // on every startup (including every future deploy) - it never touches
         // a table that's already there.
-        SchemaUtils.create(Users, Exercises, Workouts, SetEntries, AthleteProfile, WorkoutTemplates, WorkoutTemplateExercises, HiddenExercises)
+        SchemaUtils.create(Users, Exercises, Workouts, SetEntries, AthleteProfile, WorkoutTemplates, WorkoutTemplateExercises, HiddenExercises, Feedback)
     }
 
     migrateSetEntriesWeightNullable()
@@ -1700,6 +1709,48 @@ fun Application.module() {
                 call.respond(loadProfileResponse(me, zone)!!)
             }
 
+            // Feedback from Profile -> Send feedback: saved, then forwarded to
+            // the owner's Discord / Telegram (see forwardFeedback).
+            post("/feedback") {
+                val me = call.userId()
+                val email = call.principal<JWTPrincipal>()?.payload?.getClaim("email")?.asString()
+                val request = try {
+                    call.receive<FeedbackRequest>()
+                } catch (e: Exception) {
+                    call.respondText("invalid request body", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val kind = request.kind.trim().uppercase()
+                val message = request.message.trim()
+                if (kind !in setOf("BUG", "IDEA", "OTHER") || message.isEmpty() || message.length > 2000) {
+                    call.respondText("feedback must have a type and 1-2000 characters", status = HttpStatusCode.BadRequest)
+                    return@post
+                }
+                val appVersion = request.appVersion?.trim()?.take(40)?.ifEmpty { null }
+                val device = request.device?.trim()?.take(100)?.ifEmpty { null }
+                val saved = transaction {
+                    val today = Feedback.selectAll()
+                        .where { (Feedback.userId eq me) and (Feedback.createdAt greaterEq nowUtc().minusHours(24)) }
+                        .count()
+                    if (today >= 20) return@transaction false
+                    Feedback.insert {
+                        it[userId] = me
+                        it[Feedback.kind] = kind
+                        it[Feedback.message] = message
+                        it[Feedback.appVersion] = appVersion
+                        it[Feedback.device] = device
+                        it[createdAt] = nowUtc()
+                    }
+                    true
+                }
+                if (!saved) {
+                    call.respondText("that's a lot of feedback for one day - try again tomorrow", status = HttpStatusCode.TooManyRequests)
+                    return@post
+                }
+                forwardFeedback(kind, message, email, appVersion, device)
+                call.respond(HttpStatusCode.Created)
+            }
+
             // The training plan saved to this account (see Users.trainingPlan).
             get("/training-plan") {
                 val me = call.userId()
@@ -2802,6 +2853,7 @@ private fun deleteAccount(me: Int) {
         HiddenExercises.deleteWhere { HiddenExercises.userId eq me }
         Exercises.deleteWhere { Exercises.userId eq me }
         AthleteProfile.deleteWhere { AthleteProfile.userId eq me }
+        Feedback.deleteWhere { Feedback.userId eq me }
         Users.deleteWhere { Users.id eq me }
     }
     userIdCache.entries.removeIf { it.value == me }
@@ -3238,4 +3290,60 @@ private fun progressFor(me: Int, zone: ZoneId): ProgressResponse {
         recentPrs = prs.sortedByDescending { it.date }.take(8),
         insights = formInsights + notDoneInsights + winInsights
     )
+}
+
+// ---------------------------------------------------------------------------
+// Feedback notifications
+// ---------------------------------------------------------------------------
+
+private val notifyClient: java.net.http.HttpClient = java.net.http.HttpClient.newBuilder()
+    .connectTimeout(java.time.Duration.ofSeconds(5))
+    .build()
+
+/**
+ * Sends a new piece of feedback to the owner's phone, in the background (the
+ * app's request never waits for it, and a failure here never loses the
+ * feedback - it's already saved). Set in Railway -> Variables:
+ *  - DISCORD_WEBHOOK_URL: a channel's webhook link (Discord: channel ->
+ *    Edit channel -> Integrations -> Webhooks -> New Webhook -> Copy URL), and/or
+ *  - TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID: from @BotFather and your chat.
+ * Nothing set = it's only saved in the feedback table.
+ */
+private fun forwardFeedback(kind: String, message: String, email: String?, appVersion: String?, device: String?) {
+    val title = when (kind) { "BUG" -> "Bug report"; "IDEA" -> "Idea"; else -> "Feedback" }
+    val details = listOfNotNull(email, appVersion?.let { "TrainLog $it" }, device).joinToString(" · ")
+    val text = "New TrainLog $title\n\n$message" + if (details.isNotEmpty()) "\n\n$details" else ""
+
+    val discord = System.getenv("DISCORD_WEBHOOK_URL")?.trim()?.takeIf { it.startsWith("https://") }
+    if (discord != null) {
+        // Discord's limit is 2000 characters per message.
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("content", kotlinx.serialization.json.JsonPrimitive(text.take(1990)))
+        }.toString()
+        postJson(discord, body)
+    }
+    val botToken = System.getenv("TELEGRAM_BOT_TOKEN")?.trim()?.ifEmpty { null }
+    val chatId = System.getenv("TELEGRAM_CHAT_ID")?.trim()?.ifEmpty { null }
+    if (botToken != null && chatId != null) {
+        val body = kotlinx.serialization.json.buildJsonObject {
+            put("chat_id", kotlinx.serialization.json.JsonPrimitive(chatId))
+            put("text", kotlinx.serialization.json.JsonPrimitive(text.take(4000)))
+        }.toString()
+        postJson("https://api.telegram.org/bot$botToken/sendMessage", body)
+    }
+}
+
+private fun postJson(url: String, body: String) {
+    val request = java.net.http.HttpRequest.newBuilder(URI(url))
+        .timeout(java.time.Duration.ofSeconds(10))
+        .header("Content-Type", "application/json")
+        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(body))
+        .build()
+    notifyClient.sendAsync(request, java.net.http.HttpResponse.BodyHandlers.discarding())
+        .whenComplete { response, error ->
+            when {
+                error != null -> println("Feedback notification failed: ${error.message}")
+                response.statusCode() >= 300 -> println("Feedback notification refused: HTTP ${response.statusCode()}")
+            }
+        }
 }

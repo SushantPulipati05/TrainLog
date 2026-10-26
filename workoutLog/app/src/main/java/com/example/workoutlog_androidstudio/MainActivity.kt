@@ -100,6 +100,7 @@ private sealed class Screen {
     data class TemplateDetail(val template: WorkoutTemplateSummaryResponse) : Screen()
     data class ExerciseHistory(val exerciseId: Int, val exerciseName: String) : Screen()
     object TrainingPlan : Screen()
+    object AccountDetails : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -450,7 +451,8 @@ class MainActivity : ComponentActivity() {
                     ) {
                         ProfileScreen(
                             onOpenTargets = { push(Screen.Targets) },
-                            onOpenTrainingPlan = { push(Screen.TrainingPlan) }
+                            onOpenTrainingPlan = { push(Screen.TrainingPlan) },
+                            onOpenAccountDetails = { push(Screen.AccountDetails) }
                         )
                     }
 
@@ -549,6 +551,9 @@ class MainActivity : ComponentActivity() {
                             }
                             Screen.TrainingPlan -> {
                                 TrainingPlanScreen(onBack = { pop() })
+                            }
+                            Screen.AccountDetails -> {
+                                AccountDetailsScreen(onBack = { pop() })
                             }
                             Screen.AllWorkouts -> {
                                 AllWorkoutsScreen(

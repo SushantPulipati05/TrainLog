@@ -183,3 +183,23 @@ object AthleteProfile : Table("athlete_profile") {
 
     override val primaryKey = PrimaryKey(id)
 }
+
+/**
+ * Feedback sent from the app (Profile -> Send feedback). Each one is also
+ * forwarded to the owner's Discord and/or Telegram when those are set up
+ * (see forwardFeedback() in App.kt).
+ */
+object Feedback : Table("feedback") {
+    val id = integer("id").autoIncrement()
+    val userId = integer("user_id").references(Users.id)
+    // "BUG", "IDEA" or "OTHER".
+    val kind = varchar("kind", 10)
+    val message = text("message")
+    // e.g. "1.0 (1)" and "Pixel 7 · Android 15" - only when the user left
+    // "Include app version and phone model" ticked.
+    val appVersion = varchar("app_version", 40).nullable()
+    val device = varchar("device", 100).nullable()
+    val createdAt = datetime("created_at")
+
+    override val primaryKey = PrimaryKey(id)
+}

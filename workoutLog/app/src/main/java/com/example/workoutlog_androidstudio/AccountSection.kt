@@ -37,49 +37,22 @@ import androidx.compose.ui.unit.dp
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import kotlinx.coroutines.launch
 
-/** The bottom of the Profile screen: log out, and permanently delete the
- *  account (which Google Play requires an in-app way to do). */
+/**
+ * "Delete account" from the Profile screen's Account list: a fresh sign-in
+ * (password, or the Google sheet), then the server data, then the login.
+ * Google Play requires an in-app way to do this.
+ */
 @Composable
-fun AccountSection() {
+fun DeleteAccountSheet(visible: Boolean, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    var showDelete by remember { mutableStateOf(false) }
-    var password by remember { mutableStateOf("") }
+    var password by remember(visible) { mutableStateOf("") }
     var isDeleting by remember { mutableStateOf(false) }
-    var deleteError by remember { mutableStateOf<String?>(null) }
+    var deleteError by remember(visible) { mutableStateOf<String?>(null) }
+    val showDelete = visible
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(AppSurface, RoundedCornerShape(16.dp))
-                .clickable { AuthManager.signOut() }
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = "LOG OUT", style = MaterialTheme.typography.labelMedium, color = AppTextPrimary)
-        }
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(AppSurface, RoundedCornerShape(16.dp))
-                .clickable {
-                    password = ""
-                    deleteError = null
-                    showDelete = true
-                }
-                .padding(vertical = 16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = "DELETE ACCOUNT", style = MaterialTheme.typography.labelMedium, color = AppDanger)
-        }
-    }
-
-    AppBottomSheet(visible = showDelete, onDismissRequest = { if (!isDeleting) showDelete = false }) {
+    AppBottomSheet(visible = showDelete, onDismissRequest = { if (!isDeleting) onDismiss() }) {
         Text(text = "Delete your account?", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary)
         Spacer(modifier = Modifier.height(8.dp))
         Text(
@@ -158,7 +131,7 @@ fun AccountSection() {
         }
         Spacer(modifier = Modifier.height(8.dp))
         TextButton(
-            onClick = { showDelete = false },
+            onClick = onDismiss,
             enabled = !isDeleting,
             modifier = Modifier.fillMaxWidth()
         ) {

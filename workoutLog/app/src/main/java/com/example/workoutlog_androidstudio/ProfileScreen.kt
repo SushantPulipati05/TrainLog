@@ -81,6 +81,7 @@ private fun initialsFor(name: String): String =
 fun ProfileScreen(
     onOpenTargets: () -> Unit,
     onOpenTrainingPlan: () -> Unit = {},
+    onOpenAccountDetails: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
 
@@ -398,32 +399,12 @@ fun ProfileScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        TrainingPlanEntryRow(onClick = onOpenTrainingPlan)
-
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        // Fun names for finished workouts - off for people who
-                        // prefer naming their own.
-                        FunNamesSettingRow()
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        // Sex - sets the body map figure.
-                        SexSettingRow()
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        AccountSection()
-
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "FORGE OS v3.8.4 • ENCRYPTED ATHLETE STORAGE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = AppTextMuted,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        // Training, App, Account and About (ProfileSettings.kt).
+                        // Sex moved to Account details.
+                        ProfileSettingsSections(
+                            onOpenTrainingPlan = onOpenTrainingPlan,
+                            onOpenTargets = onOpenTargets,
+                            onOpenAccountDetails = onOpenAccountDetails
                         )
                     }
                 }
