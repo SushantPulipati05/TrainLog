@@ -64,12 +64,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.aspectRatio
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 /*
  * Helping a new user find their way (see new-user-guidance mockup):
- *  1. three welcome cards right after onboarding,
+ *  1. three welcome cards before the personal-details questions,
  *  2. a "Getting started" checklist on Home that ticks itself off,
  *  3. one-time tips the first time someone reaches a screen.
  * Only for accounts that just went through onboarding on this phone -
@@ -102,6 +104,11 @@ object GuideStore {
         private set
     var welcomePending by mutableStateOf(false)
         private set
+    /** The welcome cards a brand-new account sees before the personal-
+     *  details questions have been shown (so they don't replay if the app
+     *  is closed halfway through onboarding). */
+    var introSeen by mutableStateOf(false)
+        private set
     var checklistHidden by mutableStateOf(false)
         private set
     private var doneSteps by mutableStateOf<Set<String>>(emptySet())
@@ -117,21 +124,32 @@ object GuideStore {
         prefs = p
         isNewUser = p.getBoolean("new_user", false)
         welcomePending = p.getBoolean("welcome_pending", false)
+        introSeen = p.getBoolean("intro_seen", false)
         checklistHidden = p.getBoolean("checklist_hidden", false)
         doneSteps = p.getStringSet("done", emptySet()).orEmpty().toSet()
         seenTips = p.getStringSet("tips", emptySet()).orEmpty().toSet()
     }
 
-    /** Onboarding just finished: welcome cards next, then the checklist and tips. */
+    /** The welcome cards were read (or skipped): on to the personal details. */
+    fun finishIntro() {
+        introSeen = true
+        prefs?.edit()?.putBoolean("intro_seen", true)?.apply()
+    }
+
+    /** Onboarding just finished: the checklist and tips start. (The welcome
+     *  cards already came before onboarding.) The intro flag is reset, so a
+     *  different new account on this phone sees the cards too. */
     fun startForNewUser() {
         isNewUser = true
-        welcomePending = true
+        welcomePending = false
+        introSeen = false
         checklistHidden = false
         doneSteps = emptySet()
         seenTips = emptySet()
         prefs?.edit()
             ?.putBoolean("new_user", true)
-            ?.putBoolean("welcome_pending", true)
+            ?.putBoolean("welcome_pending", false)
+            ?.putBoolean("intro_seen", false)
             ?.putBoolean("checklist_hidden", false)
             ?.putStringSet("done", emptySet())
             ?.putStringSet("tips", emptySet())
@@ -193,24 +211,39 @@ fun Modifier.guideTarget(tip: GuideTip): Modifier = composed {
 // 1. Welcome cards
 // ---------------------------------------------------------------------------
 
-private class WelcomePage(val art: @Composable () -> Unit, val lead: String, val highlight: String, val body: String)
+/** Same grey as last time's numbers on the real exercise card. */
+private val WELCOME_GHOST = Color(0xFF55555B)
 
-/** Three swipeable cards over everything, right after onboarding. */
+private class WelcomePage(
+    val kicker: String,
+    val lead: String,
+    val highlight: String,
+    val body: String,
+    val art: @Composable () -> Unit
+)
+
+/**
+ * Three swipeable cards a brand-new account sees first, before the
+ * personal-details questions. Each one shows a small copy of the real
+ * screen it talks about, so the app looks familiar once they get there.
+ * [onDone] runs from "Get started" on the last card or from Skip.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WelcomeCards(onDone: () -> Unit) {
     val pages = remember {
         listOf(
-            WelcomePage({ GuideGlyph(GlyphKind.DUMBBELL, Modifier.size(74.dp)) }, "Just start ", "lifting.",
-                "Tap Start, add exercises as you go. Your last numbers show up as you type, and it saves even with no signal."),
-            WelcomePage({ GuideGlyph(GlyphKind.UP_NEXT, Modifier.size(74.dp)) }, "It knows what's ", "next.",
-                "Up next picks today's day from what you actually trained, and skips what's still recovering."),
-            WelcomePage({ WelcomeBodyArt() }, "See every ", "muscle.",
-                "Each workout lights up exactly what it hit - upper chest, side delts, the long head of your triceps.")
+            WelcomePage("LOG", "Just start ", "lifting.",
+                "Last time's numbers wait in grey. Type over them. It saves even with no signal.") { WelcomeExerciseArt() },
+            WelcomePage("PLAN", "It knows what's ", "next.",
+                "Up next follows what you actually trained and skips what's still recovering.") { WelcomeUpNextArt() },
+            WelcomePage("SEE", "See every ", "muscle.",
+                "Each workout lights up exactly what it hit, down to the side delts.") { WelcomeBodyArt() }
         )
     }
     val pager = rememberPagerState(pageCount = { pages.size })
     val scope = rememberCoroutineScope()
+    val last = pager.currentPage == pages.lastIndex
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -221,28 +254,49 @@ fun WelcomeCards(onDone: () -> Unit) {
             .padding(20.dp)
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            Text(
-                text = "Skip",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AppTextSecondary,
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable(onClick = onDone)
-                    .padding(horizontal = 8.dp, vertical = 6.dp)
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth().height(36.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${pager.currentPage + 1} / ${pages.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTextMuted,
+                    modifier = Modifier.weight(1f)
+                )
+                if (!last) {
+                    Text(
+                        text = "Skip",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextSecondary,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(onClick = onDone)
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                    )
+                }
+            }
             HorizontalPager(state = pager, modifier = Modifier.weight(1f)) { index ->
                 val page = pages[index]
                 Column(modifier = Modifier.fillMaxSize()) {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(260.dp)
-                            .background(AppSurface, RoundedCornerShape(22.dp)),
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(AppSurface),
                         contentAlignment = Alignment.Center
                     ) { page.art() }
-                    Spacer(modifier = Modifier.height(28.dp))
+                    Spacer(modifier = Modifier.height(26.dp))
+                    Text(
+                        text = page.kicker,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = AppAccent
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = buildAnnotatedString {
                             append(page.lead)
@@ -270,16 +324,171 @@ fun WelcomeCards(onDone: () -> Unit) {
                     )
                 }
             }
-            val last = pager.currentPage == pages.lastIndex
             Button(
                 onClick = { if (last) onDone() else scope.launch { pager.animateScrollToPage(pager.currentPage + 1) } },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (last) AppAccent else Color.White,
+                    contentColor = if (last) AppOnAccent else Color.Black
+                )
             ) {
-                Text(text = if (last) "Start training" else "Next", fontWeight = FontWeight.SemiBold)
+                Text(text = if (last) "Get started" else "Next", fontWeight = if (last) FontWeight.Bold else FontWeight.SemiBold)
             }
         }
+    }
+}
+
+/** First card: a copy of an exercise card mid-workout - last time's numbers
+ *  in grey, one box being typed over, saved with no signal. */
+@Composable
+private fun WelcomeExerciseArt() {
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.Top) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Incline Bench Press", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+                Text("UPPER CHEST", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AppTextMuted)
+            }
+            Text(
+                text = "NO SIGNAL · SAVED",
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppTextMuted,
+                modifier = Modifier
+                    .background(AppSurfaceVariant, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 8.dp, vertical = 5.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(3.dp))
+        Text(
+            text = buildAnnotatedString {
+                append("Best ")
+                withStyle(SpanStyle(color = AppAccent, fontWeight = FontWeight.SemiBold)) { append("70 kg × 6") }
+                append(" · last time 65 kg × 8")
+            },
+            fontSize = 12.sp,
+            color = AppTextSecondary
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("SET", "KG", "REPS").forEachIndexed { i, label ->
+                Text(
+                    text = label,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTextMuted,
+                    textAlign = TextAlign.Center,
+                    modifier = if (i == 0) Modifier.width(34.dp) else Modifier.weight(1f)
+                )
+            }
+        }
+        WelcomeSetRow("1", "65", "8")
+        WelcomeSetRow("2", "67.5", "8", typing = true, repsGhost = true)
+        WelcomeSetRow("3", "65", "7", kgGhost = true, repsGhost = true)
+    }
+}
+
+@Composable
+private fun WelcomeSetRow(
+    number: String,
+    kg: String,
+    reps: String,
+    typing: Boolean = false,
+    kgGhost: Boolean = false,
+    repsGhost: Boolean = false
+) {
+    Spacer(modifier = Modifier.height(6.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            modifier = Modifier.width(34.dp).height(34.dp).background(AppSurfaceVariant, RoundedCornerShape(9.dp)),
+            contentAlignment = Alignment.Center
+        ) { Text(number, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppTextPrimary) }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(34.dp)
+                .background(AppSurfaceVariant, RoundedCornerShape(9.dp))
+                .then(if (typing) Modifier.border(1.5.dp, AppAccent, RoundedCornerShape(9.dp)) else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(kg, fontSize = 13.sp, color = if (kgGhost) WELCOME_GHOST else AppTextPrimary)
+                // The text cursor, so it reads as being typed.
+                if (typing) Box(modifier = Modifier.padding(start = 1.dp).width(1.5.dp).height(14.dp).background(AppAccent))
+            }
+        }
+        Box(
+            modifier = Modifier.weight(1f).height(34.dp).background(AppSurfaceVariant, RoundedCornerShape(9.dp)),
+            contentAlignment = Alignment.Center
+        ) { Text(reps, fontSize = 13.sp, color = if (repsGhost) WELCOME_GHOST else AppTextPrimary) }
+    }
+}
+
+/** Second card: a copy of Up next - the split's days, this week so far,
+ *  and why Pull is next. */
+@Composable
+private fun WelcomeUpNextArt() {
+    Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "UP NEXT · PULL DAY",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppAccent,
+                modifier = Modifier.weight(1f)
+            )
+            Text("6:30 PM", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppTextMuted)
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Push" to 0, "Pull" to 1, "Legs" to 2).forEach { (day, kind) ->
+                Text(
+                    text = day,
+                    fontSize = 11.sp,
+                    fontWeight = if (kind == 1) FontWeight.Bold else FontWeight.Normal,
+                    color = when (kind) { 1 -> AppOnAccent; 0 -> AppTextMuted; else -> AppTextSecondary },
+                    modifier = Modifier
+                        .background(if (kind == 1) AppAccent else AppSurfaceVariant, RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 7.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        // Mon..Sun this week: trained days lit, today outlined.
+        val days = listOf("M", "T", "W", "T", "F", "S", "S")
+        val labels = listOf("Push", "Legs", "Push", "", "Today", "", "")
+        val fills = listOf(1f, 1f, 0.55f, 0f, 0f, 0f, 0f)
+        Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            days.forEachIndexed { i, d ->
+                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(d, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AppTextMuted)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .background(
+                                if (fills[i] > 0f) AppAccent.copy(alpha = fills[i]) else AppSurfaceVariant,
+                                RoundedCornerShape(5.dp)
+                            )
+                            .then(if (i == 4) Modifier.border(1.5.dp, AppTextPrimary, RoundedCornerShape(5.dp)) else Modifier)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(labels[i], fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = AppTextSecondary, maxLines = 1)
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = buildAnnotatedString {
+                append("Chest is still recovering from Wednesday, so ")
+                withStyle(SpanStyle(color = AppTextPrimary, fontWeight = FontWeight.SemiBold)) { append("Pull") }
+                append(" is up next.")
+            },
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
+            color = AppTextSecondary
+        )
     }
 }
 
@@ -292,8 +501,8 @@ private fun WelcomeBodyArt() {
         BodyRegion.TRICEPS_LATERAL to 0.8f, BodyRegion.TRICEPS_MEDIAL to 0.7f
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        BodyFigure(view = BodyView.FRONT, level = { push[it] ?: 0f }, width = 76.dp, gapColor = AppSurface)
-        BodyFigure(view = BodyView.BACK, level = { push[it] ?: 0f }, width = 76.dp, gapColor = AppSurface)
+        BodyFigure(view = BodyView.FRONT, level = { push[it] ?: 0f }, width = 80.dp, gapColor = AppSurface)
+        BodyFigure(view = BodyView.BACK, level = { push[it] ?: 0f }, width = 80.dp, gapColor = AppSurface)
     }
 }
 

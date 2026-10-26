@@ -185,11 +185,17 @@ class MainActivity : ComponentActivity() {
                 if (onboardingDone != true) {
                     val profileForOnboarding = startupProfile
                     if (onboardingDone == false && profileForOnboarding != null) {
-                        OnboardingScreen(initial = profileForOnboarding, onFinished = {
-                            // A new account: welcome cards, then the checklist and tips.
-                            GuideStore.startForNewUser()
-                            onboardingDone = true
-                        })
+                        if (!GuideStore.introSeen) {
+                            // A brand-new account: what the app does first,
+                            // then the personal-details questions.
+                            WelcomeCards(onDone = { GuideStore.finishIntro() })
+                        } else {
+                            OnboardingScreen(initial = profileForOnboarding, onFinished = {
+                                // Then into the app, with the checklist and tips.
+                                GuideStore.startForNewUser()
+                                onboardingDone = true
+                            })
+                        }
                     } else {
                         StartupStatus(failed = startupFailed, onRetry = { startupAttempt++ })
                     }
