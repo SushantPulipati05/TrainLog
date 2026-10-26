@@ -32,6 +32,24 @@ data class ExerciseSetCount(
     val secondaryMuscles: List<String> = emptyList()
 )
 
+/** A typed weight as a number: "62.5" and "62,5" (comma keyboards) both
+ *  give 62.5. null when empty or not a number. */
+fun parseKg(text: String): Double? = text.trim().replace(',', '.').toDoubleOrNull()
+
+/** What a weight box accepts while typing: digits and one decimal point (a
+ *  comma becomes a point), at most 6 characters - so "62,5" can't silently
+ *  turn into "no weight" when the workout is saved. */
+fun cleanKgInput(raw: String): String {
+    val normalized = raw.replace(',', '.').filter { it.isDigit() || it == '.' }
+    val firstDot = normalized.indexOf('.')
+    val oneDot = if (firstDot < 0) normalized
+        else normalized.substring(0, firstDot + 1) + normalized.substring(firstDot + 1).replace(".", "")
+    return oneDot.take(6)
+}
+
+/** What a reps box accepts: digits only, at most 4. */
+fun cleanRepsInput(raw: String): String = raw.filter { it.isDigit() }.take(4)
+
 /** One row in an exercise's set table during an active workout. Serializable
  *  so a workout in progress can be saved on the phone (see ActiveWorkoutState). */
 @Serializable
@@ -46,7 +64,14 @@ data class ExerciseSet(
     // correctly through pauses/backgrounding exactly like the timer
     // itself does. Shown beside each set so two consecutive sets' values
     // reveal how much rest was taken between them.
-    val loggedAtSeconds: Int = 0
+    val loggedAtSeconds: Int = 0,
+    // The user typed in this row or tapped its set number. A touched row's
+    // empty box takes last time's number (shown in white) when it's saved;
+    // an untouched row is never saved, grey numbers or not.
+    val touched: Boolean = false,
+    // Workout timer when this row was last typed in - the real "last set"
+    // time, used to spot a workout that was left running.
+    val editedAtSeconds: Int? = null
 )
 
 /** One exercise card during an active workout, with all its logged sets. */

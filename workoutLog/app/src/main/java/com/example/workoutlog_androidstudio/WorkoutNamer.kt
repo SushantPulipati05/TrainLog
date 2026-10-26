@@ -350,8 +350,8 @@ object WorkoutNamer {
 
         val top = doneSets
             .filter { !it.first.isBodyweight }
-            .maxByOrNull { it.second.kg.toDoubleOrNull() ?: 0.0 }
-            ?.takeIf { (it.second.kg.toDoubleOrNull() ?: 0.0) > 0.0 }
+            .maxByOrNull { parseKg(it.second.kg) ?: 0.0 }
+            ?.takeIf { (parseKg(it.second.kg) ?: 0.0) > 0.0 }
 
         val previous = history.filter { it.id != workoutId }
         val sameKind = previous.filter { it.kind(plan) == kind }
@@ -374,7 +374,7 @@ object WorkoutNamer {
             durationMinutes = elapsedSeconds / 60,
             startedAt = now.minusSeconds(elapsedSeconds.toLong()),
             topExercise = top?.first?.name,
-            topWeightKg = top?.second?.kg?.toDoubleOrNull(),
+            topWeightKg = top?.second?.kg?.let { parseKg(it) },
             sessionNumber = sameKind.size + 1,
             totalSets = doneSets.size
         )

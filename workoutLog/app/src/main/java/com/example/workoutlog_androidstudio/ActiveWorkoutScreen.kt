@@ -17,6 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -64,6 +70,7 @@ import androidx.glance.appwidget.updateAll
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.NewExerciseRequest
+import com.example.workoutlog_androidstudio.api.SetEntryResponse
 import com.example.workoutlog_androidstudio.api.UpdateWorkoutRequest
 import com.example.workoutlog_androidstudio.api.WorkoutResponse
 import kotlinx.coroutines.delay
@@ -111,6 +118,7 @@ fun ActiveWorkoutScreen(
     var endError by remember { mutableStateOf<String?>(null) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
     var showSavePast by remember { mutableStateOf(false) }
+    var showEndConfirm by remember { mutableStateOf(false) }
 
     var showCustomExerciseDialog by remember { mutableStateOf(false) }
     var customExercisePrefillName by remember { mutableStateOf("") }
@@ -197,23 +205,18 @@ fun ActiveWorkoutScreen(
 
     fun addExerciseToWorkout(selected: ExerciseResponse) {
         val isBodyweight = selected.equipment.equals("Body Only", ignoreCase = true)
+        // As many rows as last time (when its history is already on the
+        // phone), so last time's numbers show in grey on every set. If it
+        // isn't loaded yet, the card adds the rows once it is.
+        val lastCount = AppDataCache.exerciseHistories[selected.id]?.history?.lastOrNull()?.sets?.size ?: 1
+        val now = ActiveWorkoutState.elapsedSeconds
         exercises = exercises + ActiveExercise(
             exerciseId = selected.id,
             name = selected.name,
             muscleGroup = selected.muscleGroup?.uppercase() ?: "GENERAL",
             restLabel = "90S",
             isBodyweight = isBodyweight,
-
-            sets = listOf(
-                ExerciseSet(
-                    setNumber = 1,
-                    previousLabel = "-",
-                    kg = if (isBodyweight) "0" else "",
-                    reps = "",
-                    // Read from the clock at the tap, not the value from the last redraw.
-                    loggedAtSeconds = ActiveWorkoutState.elapsedSeconds
-                )
-            )
+            sets = blankSets(count = lastCount.coerceIn(1, 10), isBodyweight = isBodyweight, loggedAtSeconds = now)
         )
     }
 
@@ -372,11 +375,19 @@ fun ActiveWorkoutScreen(
         }
     )
 
+    // While the keyboard is up the screen shrinks to the space above it
+    // (imePadding), and Notes and End Workout step aside so the set rows
+    // keep the room - unless Notes is what's being typed in.
+    @OptIn(ExperimentalLayoutApi::class)
+    val keyboardOpen = WindowInsets.isImeVisible
+    var notesFocused by remember { mutableStateOf(false) }
+    val showBottom = !keyboardOpen || notesFocused
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(AppBackground)
             .statusBarsPadding()
+            .imePadding()
     ) {
         Row(
             modifier = Modifier
@@ -515,13 +526,18 @@ fun ActiveWorkoutScreen(
             }
         }
 
-        NotesField(
-            value = notesText,
-            onValueChange = { notesText = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-        )
+        if (showBottom) {
+            NotesField(
+                value = notesText,
+                onValueChange = { notesText = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .onFocusChanged { notesFocused = it.isFocused },
+                // Typing notes: the keyboard's Done closes it again.
+                maxLines = if (keyboardOpen) 3 else Int.MAX_VALUE
+            )
+        }
 
         if (endError != null) {
             Text(
@@ -536,9 +552,14 @@ fun ActiveWorkoutScreen(
         }
 
         // Saves the workout: on the phone first, then uploaded (see OfflineSync).
-        fun saveWorkout() {
+        // [finishedAtSeconds]: the workout timer value it really ended at
+        // (from "Did you finish earlier?"), or null for now.
+        fun saveWorkout(finishedAtSeconds: Int? = null) {
             if (isEndingWorkout) return
-            logWorkoutData(workout, exercises, notesText)
+            // Touched rows take last time's number in any box left empty.
+            val finalExercises = withLastTimeFilled(exercises)
+            val durationSeconds = finishedAtSeconds ?: ActiveWorkoutState.elapsedSeconds
+            logWorkoutData(workout, finalExercises, notesText)
             isEndingWorkout = true
             endError = null
             coroutineScope.launch {
@@ -550,13 +571,15 @@ fun ActiveWorkoutScreen(
                         pendingWorkoutFrom(
                             workoutId = workout.id,
                             name = ActiveWorkoutState.workout?.workoutName ?: workout.workoutName,
-                            exercises = exercises,
+                            exercises = finalExercises,
                             notes = notesText,
-                            elapsedSeconds = ActiveWorkoutState.elapsedSeconds,
+                            elapsedSeconds = durationSeconds,
                             startedAtMillis = ActiveWorkoutState.effectiveStartMillis,
-                            // A past workout ends when its length says, on its own day.
+                            // A past workout ends when its length says, on its own day;
+                            // "Finished at 7:45 PM" ends it then, not now.
                             endedAtMillis = ActiveWorkoutState.pastStartMillis
                                 ?.let { it + ActiveWorkoutState.pastMinutes * 60_000L }
+                                ?: finishedAtSeconds?.let { ActiveWorkoutState.effectiveStartMillis + it * 1000L }
                                 ?: System.currentTimeMillis(),
                             isPast = ActiveWorkoutState.isPast
                         )
@@ -582,7 +605,7 @@ fun ActiveWorkoutScreen(
                     if (WorkoutNamer.enabled && !namedByUser && !ActiveWorkoutState.isPast) {
                         // Freeze the clock while the name card is up.
                         ActiveWorkoutState.isPaused = true
-                        val facts = sessionFactsAfterSave(OfflineSync.serverIdFor(workout.id), exercises, ActiveWorkoutState.elapsedSeconds)
+                        val facts = sessionFactsAfterSave(OfflineSync.serverIdFor(workout.id), finalExercises, durationSeconds)
                         nameSuggestion = WorkoutNamer.suggest(facts) to facts
                         isEndingWorkout = false
                     } else {
@@ -613,14 +636,33 @@ fun ActiveWorkoutScreen(
             SavePastWorkoutPopup(
                 dateLabel = ActiveWorkoutState.pastDateLabel.orEmpty(),
                 timeLabel = ActiveWorkoutState.pastTimeLine.orEmpty(),
-                exerciseCount = exercises.count { e -> e.sets.any { it.reps.toIntOrNull() != null } },
-                setCount = exercises.sumOf { e -> e.sets.count { it.reps.toIntOrNull() != null } },
+                exerciseCount = withLastTimeFilled(exercises).count { e -> e.sets.any { it.reps.toIntOrNull() != null } },
+                setCount = withLastTimeFilled(exercises).sumOf { e -> e.sets.count { it.reps.toIntOrNull() != null } },
                 onSave = { showSavePast = false; saveWorkout() },
                 onEdit = { showSavePast = false }
             )
         }
-        Button(
-            onClick = { if (ActiveWorkoutState.isPast) showSavePast = true else saveWorkout() },
+        // End Workout asks first (see EndWorkoutPopup).
+        if (showEndConfirm) {
+            val filled = withLastTimeFilled(exercises)
+            val doneSets = filled.flatMap { e -> e.sets.filter { it.reps.toIntOrNull() != null } }
+            val elapsed = ActiveWorkoutState.elapsedSeconds
+            // When the last set was really typed (rows added in advance
+            // don't count), to catch a workout that was left running.
+            val lastActivity = doneSets.maxOfOrNull { it.editedAtSeconds ?: it.loggedAtSeconds } ?: 0
+            EndWorkoutPopup(
+                durationSeconds = elapsed,
+                exerciseCount = filled.count { e -> e.sets.any { it.reps.toIntOrNull() != null } },
+                setCount = doneSets.size,
+                startMillis = ActiveWorkoutState.effectiveStartMillis,
+                lastSetSeconds = lastActivity.takeIf { doneSets.isNotEmpty() && elapsed - it > FORGOT_AFTER_SECONDS },
+                onKeepGoing = { showEndConfirm = false },
+                onDiscard = { showEndConfirm = false; onClose() },
+                onEnd = { finishedAt -> showEndConfirm = false; saveWorkout(finishedAt) }
+            )
+        }
+        if (!keyboardOpen) Button(
+            onClick = { if (ActiveWorkoutState.isPast) showSavePast = true else showEndConfirm = true },
             enabled = !isEndingWorkout,
             modifier = Modifier
                 .fillMaxWidth()
@@ -693,6 +735,21 @@ private fun ExerciseCard(
     val best = remember(history) { topSetOf(history?.history.orEmpty().flatMap { it.sets }) }
     val lastSets = remember(history) { history?.history?.lastOrNull()?.sets.orEmpty().sortedBy { it.setNumber } }
     val lastTime = remember(lastSets) { topSetOf(lastSets) }
+    // Its history arrived after it was added: give it as many rows as last
+    // time - only while it's still one untouched row, so nothing typed (or
+    // deliberately removed) is ever changed.
+    LaunchedEffect(lastSets.size) {
+        val untouched = exercise.sets.size == 1 && exercise.sets.all { it.isBlank(exercise.isBodyweight) }
+        if (untouched && lastSets.size > 1) {
+            onSetsChange(
+                blankSets(
+                    count = lastSets.size.coerceAtMost(10),
+                    isBodyweight = exercise.isBodyweight,
+                    loggedAtSeconds = exercise.sets.first().loggedAtSeconds
+                )
+            )
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -764,16 +821,30 @@ private fun ExerciseCard(
             Box(modifier = if (tipHere) Modifier.guideTarget(GuideTip.EXERCISE_CARD) else Modifier) {
                 SwipeToDeleteSetRow(
                     set = set,
-                    ghostKg = ghost?.weightKg?.takeIf { it > 0.0 }?.let { formatDecimal(it) },
-                    ghostReps = ghost?.reps?.toString(),
+                    ghostKg = ghostKgOf(ghost),
+                    ghostReps = ghostRepsOf(ghost),
+                    // Tap the set number: last time's numbers, both boxes, one tap.
+                    onFillFromLast = if (ghost == null) null else {
+                        {
+                            val updated = exercise.sets.toMutableList()
+                            val kgEmpty = set.kg.isBlank() || (exercise.isBodyweight && set.kg == "0")
+                            updated[rowIndex] = set.copy(
+                                kg = if (kgEmpty) ghostKgOf(ghost) ?: set.kg else set.kg,
+                                reps = set.reps.ifBlank { ghostRepsOf(ghost).orEmpty() },
+                                touched = true,
+                                editedAtSeconds = ActiveWorkoutState.elapsedSeconds
+                            )
+                            onSetsChange(updated)
+                        }
+                    },
                     onKgChange = { newKg ->
                         val updated = exercise.sets.toMutableList()
-                        updated[rowIndex] = set.copy(kg = newKg)
+                        updated[rowIndex] = set.copy(kg = cleanKgInput(newKg), touched = true, editedAtSeconds = ActiveWorkoutState.elapsedSeconds)
                         onSetsChange(updated)
                     },
                     onRepsChange = { newReps ->
                         val updated = exercise.sets.toMutableList()
-                        updated[rowIndex] = set.copy(reps = newReps)
+                        updated[rowIndex] = set.copy(reps = cleanRepsInput(newReps), touched = true, editedAtSeconds = ActiveWorkoutState.elapsedSeconds)
                         onSetsChange(updated)
                     },
                     onDelete = {
@@ -787,9 +858,9 @@ private fun ExerciseCard(
             Spacer(modifier = Modifier.height(8.dp))
         }
         // Beat your best with a set typed in just now: say so straight away.
-        val todayTop = topSetOf(exercise.sets.mapNotNull { s ->
+        val todayTop = topSetOf(withLastTimeFilled(listOf(exercise)).first().sets.mapNotNull { s ->
             val reps = s.reps.toIntOrNull() ?: return@mapNotNull null
-            TopSet(s.kg.toDoubleOrNull()?.takeIf { it > 0.0 }, reps)
+            TopSet(parseKg(s.kg)?.takeIf { it > 0.0 }, reps)
         })
         if (best != null && todayTop != null && todayTop.beats(best)) {
             Text(
@@ -803,7 +874,10 @@ private fun ExerciseCard(
         TextButton(
             onClick = {
                 val nextNumber = exercise.sets.size + 1
-                val defaultKg = if (exercise.isBodyweight) "0" else ""
+                // Same weight as the set above (most sets repeat it); reps
+                // stay empty - they usually change.
+                val defaultKg = exercise.sets.lastOrNull()?.kg?.takeIf { it.isNotBlank() }
+                    ?: if (exercise.isBodyweight) "0" else ""
                 onSetsChange(
                     exercise.sets + ExerciseSet(
                         setNumber = nextNumber,
@@ -850,11 +924,19 @@ private fun SwipeToDeleteSetRow(
     onRepsChange: (String) -> Unit,
     onDelete: () -> Unit,
     ghostKg: String? = null,
-    ghostReps: String? = null
+    ghostReps: String? = null,
+    onFillFromLast: (() -> Unit)? = null
 ) {
     SwipeToDeleteBox(onRequestDelete = onDelete, contentDescription = "Delete set", cornerRadius = 10.dp) {
         Box(modifier = Modifier.fillMaxWidth().background(AppSurface)) {
-            SetRow(set = set, onKgChange = onKgChange, onRepsChange = onRepsChange, ghostKg = ghostKg, ghostReps = ghostReps)
+            SetRow(
+                set = set,
+                onKgChange = onKgChange,
+                onRepsChange = onRepsChange,
+                ghostKg = ghostKg,
+                ghostReps = ghostReps,
+                onFillFromLast = onFillFromLast
+            )
         }
     }
 }
@@ -865,8 +947,12 @@ private fun SetRow(
     onKgChange: (String) -> Unit,
     onRepsChange: (String) -> Unit,
     ghostKg: String? = null,
-    ghostReps: String? = null
+    ghostReps: String? = null,
+    onFillFromLast: (() -> Unit)? = null
 ) {
+    // Once the row is touched, last time's number in an empty box will be
+    // saved with it - so it turns white instead of grey.
+    val placeholderColor = if (set.touched) AppTextPrimary else GHOST_TEXT
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -876,7 +962,13 @@ private fun SetRow(
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(AppSurfaceVariant, RoundedCornerShape(10.dp)),
+                .clip(RoundedCornerShape(10.dp))
+                .background(AppSurfaceVariant)
+                .then(
+                    if (onFillFromLast != null) {
+                        Modifier.clickable(onClickLabel = "Fill in last time's numbers", onClick = onFillFromLast)
+                    } else Modifier
+                ),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -904,6 +996,8 @@ private fun SetRow(
             backgroundColor = AppSurfaceVariant,
             textColor = AppTextPrimary,
             placeholder = ghostKg,
+            placeholderColor = placeholderColor,
+            isWeight = true,
             modifier = Modifier.weight(1f)
         )
         SetInputField(
@@ -912,6 +1006,7 @@ private fun SetRow(
             backgroundColor = AppSurfaceVariant,
             textColor = AppTextPrimary,
             placeholder = ghostReps,
+            placeholderColor = placeholderColor,
             modifier = Modifier.weight(1f)
         )
     }
@@ -925,14 +1020,17 @@ private fun SetInputField(
     textColor: Color,
     modifier: Modifier = Modifier,
     /** Shown in grey while empty - last time's number for this set. */
-    placeholder: String? = null
+    placeholder: String? = null,
+    placeholderColor: Color = GHOST_TEXT,
+    /** A weight box: the keypad has a decimal point (for 2.5 kg steps). */
+    isWeight: Boolean = false
 ) {
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyMedium.copy(color = textColor, textAlign = TextAlign.Center),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = if (isWeight) KeyboardType.Decimal else KeyboardType.Number),
         modifier = modifier
             .background(backgroundColor, RoundedCornerShape(10.dp))
             .padding(vertical = 10.dp),
@@ -942,7 +1040,7 @@ private fun SetInputField(
                     Text(
                         text = placeholder,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = GHOST_TEXT,
+                        color = placeholderColor,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -956,7 +1054,8 @@ private fun SetInputField(
 private fun NotesField(
     value: String,
     onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    maxLines: Int = Int.MAX_VALUE
 ) {
     Column(modifier = modifier) {
         Text(
@@ -968,6 +1067,7 @@ private fun NotesField(
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
+            maxLines = maxLines,
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = AppTextPrimary),
             modifier = Modifier
                 .fillMaxWidth()
@@ -1102,3 +1202,186 @@ private fun topSetOf(sets: List<com.example.workoutlog_androidstudio.api.SetEntr
 
 /** Last time's numbers shown in empty set boxes - a dim grey. */
 private val GHOST_TEXT = Color(0xFF55555B)
+
+/** [count] empty set rows, numbered from 1. Bodyweight ones start at 0 kg added. */
+private fun blankSets(count: Int, isBodyweight: Boolean, loggedAtSeconds: Int): List<ExerciseSet> =
+    (1..count).map { n ->
+        ExerciseSet(
+            setNumber = n,
+            previousLabel = "-",
+            kg = if (isBodyweight) "0" else "",
+            reps = "",
+            loggedAtSeconds = loggedAtSeconds
+        )
+    }
+
+/** Nothing typed into this row yet. */
+private fun ExerciseSet.isBlank(isBodyweight: Boolean): Boolean =
+    reps.isBlank() && (kg.isBlank() || (isBodyweight && kg == "0"))
+
+/** A workout whose last set was typed more than an hour before End is
+ *  probably one that was left running. */
+private const val FORGOT_AFTER_SECONDS = 60 * 60
+
+/** Rest assumed after the last set when ending "at the last set". */
+private const val AFTER_LAST_SET_SECONDS = 3 * 60
+
+/** Last session's sets for an exercise, in set order (from the history the
+ *  exercise card loaded - the same numbers shown in grey). */
+private fun lastTimeSets(exerciseId: Int): List<SetEntryResponse> =
+    AppDataCache.exerciseHistories[exerciseId]?.history?.lastOrNull()?.sets.orEmpty().sortedBy { it.setNumber }
+
+private fun ghostKgOf(last: SetEntryResponse?): String? = last?.weightKg?.takeIf { it > 0.0 }?.let { formatDecimal(it) }
+
+private fun ghostRepsOf(last: SetEntryResponse?): String? = last?.reps?.toString()
+
+/**
+ * The exercises as they'll be saved: in every row the user touched, an
+ * empty box takes last time's number for that set (the white placeholder
+ * they saw). Untouched rows stay as they are - empty, so not saved.
+ */
+private fun withLastTimeFilled(exercises: List<ActiveExercise>): List<ActiveExercise> =
+    exercises.map { exercise ->
+        val last = lastTimeSets(exercise.exerciseId)
+        exercise.copy(sets = exercise.sets.mapIndexed { i, set ->
+            if (!set.touched) return@mapIndexed set
+            val ghost = last.getOrNull(i) ?: return@mapIndexed set
+            val kgEmpty = set.kg.isBlank() || (exercise.isBodyweight && set.kg == "0")
+            set.copy(
+                kg = if (kgEmpty) ghostKgOf(ghost) ?: set.kg else set.kg,
+                reps = set.reps.ifBlank { ghostRepsOf(ghost).orEmpty() }
+            )
+        })
+    }
+
+/** "52m", "1h 05m". */
+private fun durationLabel(seconds: Int): String {
+    val minutes = seconds / 60
+    return if (minutes >= 60) "${minutes / 60}h ${(minutes % 60).toString().padStart(2, '0')}m" else "${minutes}m"
+}
+
+/**
+ * Asks before ending a workout - three versions (see logging-fixes mockup):
+ * nothing logged (discard instead of saving an empty workout), last set
+ * over an hour ago (end at the last set or now), or the usual summary.
+ * [onEnd] gets the workout-timer second it ended at, or null for now.
+ */
+@Composable
+private fun EndWorkoutPopup(
+    durationSeconds: Int,
+    exerciseCount: Int,
+    setCount: Int,
+    startMillis: Long,
+    lastSetSeconds: Int?,
+    onKeepGoing: () -> Unit,
+    onDiscard: () -> Unit,
+    onEnd: (Int?) -> Unit
+) {
+    val context = LocalContext.current
+    fun clock(timerSeconds: Int): String {
+        val time = java.time.Instant.ofEpochMilli(startMillis + timerSeconds * 1000L)
+            .atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+        return formatGymTime(context, time.hour, time.minute)
+    }
+    androidx.compose.ui.window.Popup(
+        alignment = Alignment.Center,
+        onDismissRequest = onKeepGoing,
+        properties = androidx.compose.ui.window.PopupProperties(focusable = true, dismissOnClickOutside = true)
+    ) {
+        Column(
+            modifier = Modifier
+                .width(300.dp)
+                .background(AppSurface, RoundedCornerShape(20.dp))
+                .padding(20.dp)
+        ) {
+            when {
+                setCount == 0 -> {
+                    Text("Nothing logged yet", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "No sets have reps, so there's nothing to save.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    PopupButtons(secondary = "Keep going", onSecondary = onKeepGoing, primary = "Discard", onPrimary = onDiscard)
+                }
+                lastSetSeconds != null -> {
+                    val finishedAt = lastSetSeconds + AFTER_LAST_SET_SECONDS
+                    Text("Did you finish earlier?", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = androidx.compose.ui.text.buildAnnotatedString {
+                            append("Your last set was at ")
+                            withStyle(androidx.compose.ui.text.SpanStyle(color = AppTextPrimary, fontWeight = FontWeight.SemiBold)) {
+                                append(clock(lastSetSeconds))
+                            }
+                            append(", ${durationLabel(durationSeconds - lastSetSeconds)} ago.")
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = AppTextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Button(
+                        onClick = { onEnd(finishedAt) },
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        shape = RoundedCornerShape(13.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppAccent, contentColor = AppOnAccent)
+                    ) { Text("Finished at ${clock(finishedAt)}", fontWeight = FontWeight.Bold) }
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Button(
+                        onClick = { onEnd(null) },
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        shape = RoundedCornerShape(13.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AppSurfaceVariant, contentColor = AppTextPrimary)
+                    ) { Text("Finished just now", fontWeight = FontWeight.SemiBold) }
+                    TextButton(onClick = onKeepGoing, modifier = Modifier.fillMaxWidth()) {
+                        Text("Keep going", color = AppTextSecondary)
+                    }
+                }
+                else -> {
+                    Text("End workout?", style = MaterialTheme.typography.titleLarge, color = AppTextPrimary)
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PopupStat(durationLabel(durationSeconds), "TIME", Modifier.weight(1f))
+                        PopupStat(exerciseCount.toString(), "EXERCISES", Modifier.weight(1f))
+                        PopupStat(setCount.toString(), "SETS", Modifier.weight(1f))
+                    }
+                    Spacer(modifier = Modifier.height(18.dp))
+                    PopupButtons(secondary = "Keep going", onSecondary = onKeepGoing, primary = "End workout", onPrimary = { onEnd(null) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PopupStat(value: String, label: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(AppSurfaceVariant, RoundedCornerShape(12.dp))
+            .padding(vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = AppTextPrimary, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+    }
+}
+
+@Composable
+private fun PopupButtons(secondary: String, onSecondary: () -> Unit, primary: String, onPrimary: () -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(
+            onClick = onSecondary,
+            modifier = Modifier.weight(1f).height(46.dp),
+            shape = RoundedCornerShape(13.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AppSurfaceVariant, contentColor = AppTextPrimary)
+        ) { Text(secondary, fontWeight = FontWeight.SemiBold) }
+        Button(
+            onClick = onPrimary,
+            modifier = Modifier.weight(1f).height(46.dp),
+            shape = RoundedCornerShape(13.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = Color.Black)
+        ) { Text(primary, fontWeight = FontWeight.SemiBold) }
+    }
+}

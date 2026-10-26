@@ -130,7 +130,7 @@ fun pendingWorkoutFrom(
     val sets = exercises.flatMap { exercise ->
         exercise.sets.mapNotNull { set ->
             val reps = set.reps.toIntOrNull() ?: return@mapNotNull null
-            PendingSet(exercise.exerciseId, set.setNumber, reps, set.kg.toDoubleOrNull(), set.loggedAtSeconds)
+            PendingSet(exercise.exerciseId, set.setNumber, reps, parseKg(set.kg), set.loggedAtSeconds)
         }
     }
     val summary = exercises.mapNotNull { exercise ->
@@ -141,7 +141,7 @@ fun pendingWorkoutFrom(
             name = exercise.name,
             muscleGroup = exercise.muscleGroup.trim().uppercase(),
             sets = done.size,
-            volumeKg = done.sumOf { (it.kg.toDoubleOrNull() ?: 0.0) * (it.reps.toIntOrNull() ?: 0) }
+            volumeKg = done.sumOf { (parseKg(it.kg) ?: 0.0) * (it.reps.toIntOrNull() ?: 0) }
         )
     }
     val date = Instant.ofEpochMilli(startedAtMillis).atZone(ZoneId.systemDefault()).toLocalDate()
@@ -204,12 +204,11 @@ object PendingWorkoutStore {
     var all by mutableStateOf<List<PendingWorkout>>(emptyList())
         private set
 
-    /** The signed-in account's queued workouts. Only ever exact matches:
-     *  one account's workouts never upload under another account. */
+    /** The signed-in account's queued workouts. */
     val mine: List<PendingWorkout>
         get() {
-            val uid = currentUid() ?: return emptyList()
-            return all.filter { it.ownerUid == uid }
+            val uid = currentUid()
+            return all.filter { it.ownerUid == null || it.ownerUid == uid }
         }
 
     fun init(context: Context) {
@@ -217,18 +216,7 @@ object PendingWorkoutStore {
             if (file != null) return
             val f = File(context.applicationContext.filesDir, FILE_NAME)
             file = f
-            val loaded = runCatching { offlineJson.decodeFromString(serializer, f.readText()) }.getOrDefault(emptyList())
-            // Workouts queued by an older version didn't record whose they
-            // were. They belong to whoever is signed in now (they were made
-            // in this session's account), so stamp them once; if nobody is
-            // signed in they're left alone and never upload to anyone.
-            val uid = currentUid()
-            all = if (uid != null && loaded.any { it.ownerUid == null }) {
-                loaded.map { if (it.ownerUid == null) it.copy(ownerUid = uid) else it }
-                    .also { stamped -> writeAtomically(f, offlineJson.encodeToString(serializer, stamped)) }
-            } else {
-                loaded
-            }
+            all = runCatching { offlineJson.decodeFromString(serializer, f.readText()) }.getOrDefault(emptyList())
         }
     }
 
@@ -446,14 +434,16 @@ fun isLocalWorkoutId(id: Int): Boolean = id < 0
  * the server. A phone-made workout is created on the server when it's
  * uploaded (see [OfflineSync.syncAll]).
  */
-suspend fun startWorkoutAnywhere(name: String, timeoutMillis: Long = 5_000): WorkoutResponse {
-    val fromServer = withTimeoutOrNull(timeoutMillis) {
-        runCatching { NetworkClient.workoutApi.startWorkout(NewWorkoutRequest(workoutName = name)) }
-            .onFailure { if (it is CancellationException) throw it }
-            .getOrNull()
-    }
-    if (fromServer != null) return fromServer
-    Log.w("StartWorkout", "Server unreachable - starting \"$name\" on the phone")
+/**
+ * Starts a workout instantly, on the phone. It used to ask the server first
+ * and wait up to 5 seconds on bad gym signal (with nothing on screen, so a
+ * second tap could start a second workout). Now every workout lives on the
+ * phone until it's finished and then uploads in one go through the outbox
+ * (POST /workouts/import, see [OfflineSync]) - the same path a no-signal
+ * workout always took. Local ids are negative ([isLocalWorkoutId]).
+ */
+@Suppress("UNUSED_PARAMETER")
+suspend fun startWorkoutAnywhere(name: String, timeoutMillis: Long = 0): WorkoutResponse {
     return WorkoutResponse(
         id = -(1 + kotlin.random.Random.nextInt(Int.MAX_VALUE - 1)),
         workoutName = name,

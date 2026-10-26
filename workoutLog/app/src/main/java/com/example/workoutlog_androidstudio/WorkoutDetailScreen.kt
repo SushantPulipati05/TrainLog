@@ -270,7 +270,7 @@ fun WorkoutDetailScreen(
 
                     for (set in editedExercise.sets) {
                         val reps = set.reps.toIntOrNull() ?: continue
-                        val weight = set.kg.toDoubleOrNull()
+                        val weight = parseKg(set.kg)
 
                         if (set.id == null) {
                             // A newly added row - either on a brand-new exercise,
@@ -1099,14 +1099,15 @@ private fun EditableExerciseCard(
                 )
                 EditableCellField(
                     value = set.kg,
-                    onValueChange = { onSetChange(set, it, set.reps) },
+                    onValueChange = { onSetChange(set, cleanKgInput(it), set.reps) },
+                    isWeight = true,
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 4.dp)
                 )
                 EditableCellField(
                     value = set.reps,
-                    onValueChange = { onSetChange(set, set.kg, it) },
+                    onValueChange = { onSetChange(set, set.kg, cleanRepsInput(it)) },
                     modifier = Modifier
                         .weight(1f)
                         .padding(horizontal = 4.dp)
@@ -1134,13 +1135,19 @@ private fun EditableExerciseCard(
 }
 
 @Composable
-private fun EditableCellField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
+private fun EditableCellField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    /** A weight box: the keypad has a decimal point (for 2.5 kg steps). */
+    isWeight: Boolean = false
+) {
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyMedium.copy(color = AppTextPrimary, textAlign = TextAlign.Center),
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = if (isWeight) KeyboardType.Decimal else KeyboardType.Number),
         modifier = modifier
             .background(AppSurfaceVariant, RoundedCornerShape(10.dp))
             .padding(vertical = 10.dp),
