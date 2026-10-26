@@ -95,9 +95,19 @@ enum class GuideTip(val title: String, val body: String) {
     HEATMAP("Each square is a day", "Brighter = a fuller workout. Tap Calendar for every day in detail.")
 }
 
+/**
+ * The guide's progress, saved per account (SharedPreferences "guide_<uid>"),
+ * so signing out and back in never restarts it, and another account on
+ * the same phone has its own. Steps that are done stay done even while the
+ * app is still loading after a sign-in, and once every step is done the
+ * checklist is finished for good.
+ */
 object GuideStore {
-    private const val PREFS = "guide"
+    /** Before guide progress was saved per account. */
+    private const val LEGACY_PREFS = "guide"
+    private var appContext: Context? = null
     private var prefs: android.content.SharedPreferences? = null
+    private var accountUid: String? = null
 
     /** True for an account that finished onboarding on this phone. */
     var isNewUser by mutableStateOf(false)
@@ -119,11 +129,46 @@ object GuideStore {
         private set
 
     fun init(context: Context) {
-        if (prefs != null) return
-        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (appContext != null) return
+        appContext = context.applicationContext
+        useAccount(runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid }.getOrNull())
+    }
+
+    /** Loads [uid]'s guide progress (null = signed out: nothing shows). */
+    fun useAccount(uid: String?) {
+        val context = appContext ?: return
+        if (uid == accountUid && (uid == null || prefs != null)) return
+        accountUid = uid
+        targets = emptyMap()
+        if (uid == null) {
+            prefs = null
+            isNewUser = false
+            welcomePending = false
+            introSeen = false
+            checklistHidden = false
+            doneSteps = emptySet()
+            seenTips = emptySet()
+            return
+        }
+        val p = context.getSharedPreferences("guide_" + uid.filter { it.isLetterOrDigit() }, Context.MODE_PRIVATE)
+        // One-time move: progress saved before it was per account belongs
+        // to whoever is signed in when this version first runs.
+        val legacy = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE)
+        if (p.all.isEmpty() && legacy.all.isNotEmpty()) {
+            p.edit()
+                .putBoolean("new_user", legacy.getBoolean("new_user", false))
+                .putBoolean("welcome_pending", legacy.getBoolean("welcome_pending", false))
+                .putBoolean("checklist_hidden", legacy.getBoolean("checklist_hidden", false))
+                .putStringSet("done", legacy.getStringSet("done", emptySet()).orEmpty().toSet())
+                .putStringSet("tips", legacy.getStringSet("tips", emptySet()).orEmpty().toSet())
+                .apply()
+            legacy.edit().clear().apply()
+        }
         prefs = p
         isNewUser = p.getBoolean("new_user", false)
         welcomePending = p.getBoolean("welcome_pending", false)
+        // Whether this account has seen the welcome cards (shown before
+        // its personal-details questions).
         introSeen = p.getBoolean("intro_seen", false)
         checklistHidden = p.getBoolean("checklist_hidden", false)
         doneSteps = p.getStringSet("done", emptySet()).orEmpty().toSet()
@@ -170,6 +215,23 @@ object GuideStore {
         if (!isNewUser || step.name in doneSteps) return
         doneSteps = doneSteps + step.name
         prefs?.edit()?.putStringSet("done", doneSteps)?.apply()
+        finishIfAllDone()
+    }
+
+    /**
+     * Saves steps the app's data shows are done (a workout exists, a split
+     * is set), so they stay ticked after signing back in - when that data
+     * is briefly missing until it reloads.
+     */
+    fun recordAutoSteps(hasWorkouts: Boolean, hasPlan: Boolean) {
+        if (!isNewUser) return
+        if (hasWorkouts) markDone(GuideStep.FIRST_WORKOUT)
+        if (hasPlan) markDone(GuideStep.SET_SPLIT)
+    }
+
+    /** Every step done: the checklist is finished and never comes back. */
+    private fun finishIfAllDone() {
+        if (!checklistHidden && GuideStep.values().all { it.name in doneSteps }) hideChecklist()
     }
 
     /** Done if it was done by hand, or the app's state already shows it. */
@@ -179,8 +241,11 @@ object GuideStore {
         else -> step.name in doneSteps
     }
 
+    /** Waits for the workout list to load after a sign-in, so steps that
+     *  are done never flash up as not done. */
     val showChecklist: Boolean
-        get() = isNewUser && !checklistHidden && !GuideStep.values().all { isDone(it) }
+        get() = isNewUser && !checklistHidden && AppDataCache.workoutSummaries != null &&
+            !GuideStep.values().all { isDone(it) }
 
     fun shouldShowTip(tip: GuideTip): Boolean = isNewUser && !welcomePending && tip.name !in seenTips
 

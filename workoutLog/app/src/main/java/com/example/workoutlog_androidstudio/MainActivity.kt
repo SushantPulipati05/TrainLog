@@ -136,6 +136,10 @@ class MainActivity : ComponentActivity() {
                 // wipes everything tied to the previous account: cached data,
                 // any workout in progress, and its ongoing notification.
                 LaunchedEffect(AuthManager.isSignedIn, AuthManager.needsEmailVerification) {
+                    // The guide's progress belongs to the signed-in account.
+                    GuideStore.useAccount(
+                        if (AuthManager.isSignedIn) com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid else null
+                    )
                     if (!AuthManager.isSignedIn) {
                         AppDataCache.clear()
                         TrainingPlanStore.clear(this@MainActivity)

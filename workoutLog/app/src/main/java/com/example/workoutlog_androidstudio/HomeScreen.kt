@@ -219,6 +219,12 @@ fun HomeScreen(
             )
             Spacer(modifier = Modifier.height(20.dp))
             // New accounts: what to try first, ticked off as it's done.
+            LaunchedEffect(previousWorkouts.isNotEmpty(), TrainingPlanStore.plan != null) {
+                GuideStore.recordAutoSteps(
+                    hasWorkouts = previousWorkouts.isNotEmpty(),
+                    hasPlan = TrainingPlanStore.plan != null
+                )
+            }
             if (GuideStore.showChecklist) {
                 GettingStartedCard(onOpen = { step ->
                     if (step == GuideStep.FIRST_WORKOUT) onStartWorkout(DEFAULT_WORKOUT_NAME) else onGuideStep(step)
