@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -222,10 +221,7 @@ fun ProfileScreen(
                     IconButton(onClick = { startEditing() }) {
                         Icon(imageVector = Icons.Filled.Edit, contentDescription = "Edit profile", tint = AppAccent)
                     }
-
-                    IconButton(onClick = onOpenTargets) {
-                        Icon(imageVector = Icons.Filled.Tune, contentDescription = "Targets", tint = AppTextMuted)
-                    }
+                    // Targets opens from Training -> Weekly target below.
                 }
             }
         }
