@@ -66,6 +66,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import kotlinx.coroutines.launch
 
 /**
@@ -325,7 +332,24 @@ fun LoginScreen() {
             Text(text = "Continue with Google", color = AppTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        // Signing up (or a first Google sign-in) means agreeing to these.
+        Spacer(modifier = Modifier.height(14.dp))
+        Text(
+            text = buildAnnotatedString {
+                val link = TextLinkStyles(SpanStyle(color = AppTextSecondary, textDecoration = TextDecoration.Underline))
+                append("By continuing, you agree to the ")
+                withLink(LinkAnnotation.Url(TERMS_URL, link)) { append("Terms") }
+                append(" and ")
+                withLink(LinkAnnotation.Url(PRIVACY_URL, link)) { append("Privacy Policy") }
+                append(".")
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextMuted,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
 
         // The way to the other page.
         Row(

@@ -68,8 +68,9 @@ import java.util.Locale
  * About) and the Account details page they lead to.
  */
 
-private const val PRIVACY_URL = "https://trainlog.sushnt.dev/privacy"
-private const val TERMS_URL = "https://trainlog.sushnt.dev/terms"
+/** Website pages also linked from the sign-in screen. */
+const val PRIVACY_URL = "https://trainlog.sushnt.dev/privacy"
+const val TERMS_URL = "https://trainlog.sushnt.dev/terms"
 
 @Composable
 fun ProfileSettingsSections(
