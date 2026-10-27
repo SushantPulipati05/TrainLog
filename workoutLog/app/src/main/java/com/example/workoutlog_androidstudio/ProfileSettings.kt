@@ -173,7 +173,8 @@ fun ProfileSettingsSections(
 
     Spacer(modifier = Modifier.height(18.dp))
     Text(
-        text = "TrainLog ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+        text = "TrainLog ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})" +
+            (if (BuildConfig.DEBUG) installedAtLabel(context)?.let { " · installed $it" }.orEmpty() else ""),
         style = MaterialTheme.typography.labelSmall,
         color = AppTextMuted,
         modifier = Modifier.fillMaxWidth(),
@@ -722,6 +723,18 @@ private fun openNotificationSettings(context: Context) {
         }
     }
 }
+
+/**
+ * When this copy of the app was last fully installed on the phone ("27 Oct
+ * 14:32"). Shown on debug builds only, to tell at a glance whether the phone
+ * has the latest code: Android Studio's Apply Changes / Live Edit patch the
+ * running app without reinstalling, so they don't move this time - and once
+ * Android closes the app, it starts again from this install.
+ */
+private fun installedAtLabel(context: Context): String? = runCatching {
+    val info = context.packageManager.getPackageInfo(context.packageName, 0)
+    java.text.SimpleDateFormat("d MMM HH:mm", Locale.ENGLISH).format(java.util.Date(info.lastUpdateTime))
+}.getOrNull()
 
 private fun openUrl(context: Context, url: String) {
     runCatching {
