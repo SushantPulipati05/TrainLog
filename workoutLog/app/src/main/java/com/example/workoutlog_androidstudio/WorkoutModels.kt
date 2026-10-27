@@ -71,7 +71,10 @@ data class ExerciseSet(
     val touched: Boolean = false,
     // Workout timer when this row was last typed in - the real "last set"
     // time, used to spot a workout that was left running.
-    val editedAtSeconds: Int? = null
+    val editedAtSeconds: Int? = null,
+    // A drop set: a lighter weight done straight after the set above it.
+    // Shown as "D" under that set; it counts for volume but not as a set.
+    val isDrop: Boolean = false
 )
 
 /** One exercise card during an active workout, with all its logged sets. */
@@ -84,3 +87,15 @@ data class ActiveExercise(
     val isBodyweight: Boolean,  // true when the backend lists this exercise's equipment as "Body Only"
     val sets: List<ExerciseSet>
 )
+
+/** What each row's set box shows: working sets are numbered 1, 2, 3 and
+ *  drop sets show "D" without taking a number. */
+fun setLabels(isDrop: List<Boolean>): List<String> {
+    var n = 0
+    return isDrop.map { drop -> if (drop) "D" else (++n).toString() }
+}
+
+/** Rows renumbered in order after a change. The first row can't be a drop -
+ *  there's no set above it to drop from. */
+fun List<ExerciseSet>.renumbered(): List<ExerciseSet> =
+    mapIndexed { i, s -> s.copy(setNumber = i + 1, isDrop = s.isDrop && i > 0) }

@@ -107,6 +107,9 @@ object SetEntries : Table("set_entries") {
     // The workout timer's value (seconds since the workout started) when the
     // set was added in the app. Null for sets logged before this existed.
     val loggedAtSeconds = integer("logged_at_seconds").nullable()
+    // A drop set: done straight after the set before it at a lighter weight.
+    // It counts for volume but not for set counts or PRs.
+    val isDrop = bool("is_drop").default(false)
     val createdAt = datetime("created_at")
 
     override val primaryKey = PrimaryKey(id)

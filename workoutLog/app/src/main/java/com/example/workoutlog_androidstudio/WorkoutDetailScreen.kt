@@ -212,7 +212,8 @@ fun WorkoutDetailScreen(
                         id = s.id,
                         setNumber = s.setNumber,
                         kg = s.weightKg?.let { formatKgForInput(it) } ?: "",
-                        reps = s.reps.toString()
+                        reps = s.reps.toString(),
+                        isDrop = s.isDrop
                     )
                 }
             )
@@ -613,7 +614,8 @@ fun WorkoutDetailScreen(
                     StatCard(label = "VOLUME", value = workout.volumeLabel, modifier = Modifier.weight(1f))
                     StatCard(
                         label = "TOTAL SETS",
-                        value = (if (isEditing) editableExercises.sumOf { it.sets.size } else (detail?.sets?.size ?: workout.totalSets)).toString(),
+                        // Drop sets belong to the set above them, so they aren't counted.
+                        value = (if (isEditing) editableExercises.sumOf { e -> e.sets.count { !it.isDrop } } else (detail?.sets?.count { !it.isDrop } ?: workout.totalSets)).toString(),
                         modifier = Modifier.weight(1f)
                     )
                     StatCard(
@@ -899,7 +901,8 @@ private data class EditableSet(
     val id: Int?,
     val setNumber: Int,
     val kg: String,
-    val reps: String
+    val reps: String,
+    val isDrop: Boolean = false
 )
 
 /** One exercise card's worth of state while editing a past workout. */
@@ -988,18 +991,22 @@ private fun ExerciseDetailCard(
         }
         Spacer(modifier = Modifier.height(8.dp))
 
-        sets.sortedBy { it.setNumber }.forEach { set ->
+        val ordered = sets.sortedBy { it.setNumber }
+        val labels = setLabels(ordered.map { it.isDrop })
+        ordered.forEachIndexed { i, set ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // A drop shows an orange "D", nudged in under its set.
                 Text(
-                    text = set.setNumber.toString(),
+                    text = labels[i],
                     style = MaterialTheme.typography.bodyMedium,
-                    color = AppTextSecondary,
-                    modifier = Modifier.weight(1f)
+                    color = if (set.isDrop) AppAccent else AppTextSecondary,
+                    fontWeight = if (set.isDrop) FontWeight.SemiBold else null,
+                    modifier = Modifier.weight(1f).padding(start = if (set.isDrop) 12.dp else 0.dp)
                 )
                 if (showTime) {
                     Text(
@@ -1086,16 +1093,17 @@ private fun EditableExerciseCard(
         }
         Spacer(modifier = Modifier.height(8.dp))
 
-        exercise.sets.forEach { set ->
+        val editLabels = setLabels(exercise.sets.map { it.isDrop })
+        exercise.sets.forEachIndexed { i, set ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = set.setNumber.toString(),
+                    text = editLabels[i],
                     style = MaterialTheme.typography.bodyMedium,
-                    color = AppTextSecondary,
-                    modifier = Modifier.weight(0.6f)
+                    color = if (set.isDrop) AppAccent else AppTextSecondary,
+                    modifier = Modifier.weight(0.6f).padding(start = if (set.isDrop) 12.dp else 0.dp)
                 )
                 EditableCellField(
                     value = set.kg,

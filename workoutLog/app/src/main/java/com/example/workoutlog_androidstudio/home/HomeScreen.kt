@@ -1,4 +1,4 @@
-package com.example.workoutlog_androidstudio
+package com.example.workoutlog_androidstudio.home
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -34,7 +34,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
@@ -43,12 +42,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.TextRange
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,23 +55,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.boundsInWindow
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
+import com.example.workoutlog_androidstudio.DeletedToast
 import com.example.workoutlog_androidstudio.api.NetworkClient
+import com.example.workoutlog_androidstudio.onboarding.GettingStartedCard
+import com.example.workoutlog_androidstudio.onboarding.GlyphKind
+import com.example.workoutlog_androidstudio.onboarding.GuideStep
+import com.example.workoutlog_androidstudio.onboarding.GuideStore
+import com.example.workoutlog_androidstudio.onboarding.GuideTip
+import com.example.workoutlog_androidstudio.onboarding.TeachingEmptyState
+import com.example.workoutlog_androidstudio.onboarding.guideTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -84,7 +75,6 @@ import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Calendar
 import java.util.Locale
-import kotlin.math.roundToInt
 
 private const val DEFAULT_WEEKLY_TARGET_DAYS = 6
 
@@ -99,7 +89,7 @@ private fun isInCurrentWeek(isoDate: String): Boolean {
 @Composable
 fun HomeScreen(
     onStartWorkout: (workoutName: String) -> Unit,
-    onOpenWorkout: (WorkoutSummary) -> Unit,
+    onOpenWorkout: (com.example.workoutlog_androidstudio.WorkoutSummary) -> Unit,
     onOpenCalendar: () -> Unit,
     onOpenAllWorkouts: () -> Unit,
     onOpenTrainingPlan: () -> Unit = {},
@@ -113,13 +103,13 @@ fun HomeScreen(
     // Read straight from the shared cache (it's Compose state), so anything
     // that refreshes it - ending a workout, deleting one, another screen's
     // fetch - shows up here immediately, without restarting the app.
-    val previousWorkouts = AppDataCache.workoutSummaries ?: emptyList()
-    var isLoadingPrevious by remember { mutableStateOf(AppDataCache.workoutSummaries == null) }
+    val previousWorkouts = _root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.workoutSummaries ?: emptyList()
+    var isLoadingPrevious by remember { mutableStateOf(_root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.workoutSummaries == null) }
     var previousWorkoutsError by remember { mutableStateOf<String?>(null) }
 
-    val weeklyWorkoutTarget = AppDataCache.profile?.weeklyWorkoutTarget ?: DEFAULT_WEEKLY_TARGET_DAYS
+    val weeklyWorkoutTarget = _root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.profile?.weeklyWorkoutTarget ?: DEFAULT_WEEKLY_TARGET_DAYS
 
-    var workoutPendingDelete by remember { mutableStateOf<WorkoutSummary?>(null) }
+    var workoutPendingDelete by remember { mutableStateOf<com.example.workoutlog_androidstudio.WorkoutSummary?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     var deletedWorkoutTitle by remember { mutableStateOf<String?>(null) }
@@ -133,7 +123,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         try {
-            AppDataCache.loadWorkoutSummaries()
+            _root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.loadWorkoutSummaries()
         } catch (e: Exception) {
             previousWorkoutsError = "Couldn't load previous workouts. Check your connection."
         } finally {
@@ -143,7 +133,7 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         try {
-            AppDataCache.loadProfile()
+            _root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.loadProfile()
         } catch (e: Exception) {
 
         }
@@ -178,17 +168,20 @@ fun HomeScreen(
     // What's up next, worked out from the workout history (and the split,
     // if one is set). Saved so the reminder can name it too, and used to
     // pre-fill the workout name.
-    val upNext = remember(previousWorkouts, TrainingPlanStore.plan) {
-        computeUpNext(previousWorkouts, TrainingPlanStore.plan)
+    val upNext = remember(previousWorkouts, _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan) {
+        _root_ide_package_.com.example.workoutlog_androidstudio.computeUpNext(
+            previousWorkouts,
+            _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan
+        )
     }
-    LaunchedEffect(upNext) { TrainingPlanStore.saveUpNext(context, upNext) }
+    LaunchedEffect(upNext) { _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.saveUpNext(context, upNext) }
 
 
     Box(modifier = modifier.fillMaxSize()) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppBackground)
+            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppBackground)
             .statusBarsPadding()
             .padding(horizontal = 20.dp),
 
@@ -203,31 +196,33 @@ fun HomeScreen(
                 Text(
                     text = dateLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent
                 )
                 Text(
                     text = timeLabel,
                     style = MaterialTheme.typography.labelMedium,
-                    color = AppAccent
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent
                 )
             }
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "WEEK $weekOfYear/52 // DAY $dayOfWeekNumber",
                 style = MaterialTheme.typography.labelSmall,
-                color = AppAccent
+                color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent
             )
             Spacer(modifier = Modifier.height(20.dp))
             // New accounts: what to try first, ticked off as it's done.
-            LaunchedEffect(previousWorkouts.isNotEmpty(), TrainingPlanStore.plan != null) {
+            LaunchedEffect(previousWorkouts.isNotEmpty(), _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan != null) {
                 GuideStore.recordAutoSteps(
                     hasWorkouts = previousWorkouts.isNotEmpty(),
-                    hasPlan = TrainingPlanStore.plan != null
+                    hasPlan = _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan != null
                 )
             }
             if (GuideStore.showChecklist) {
                 GettingStartedCard(onOpen = { step ->
-                    if (step == GuideStep.FIRST_WORKOUT) onStartWorkout(DEFAULT_WORKOUT_NAME) else onGuideStep(step)
+                    if (step == GuideStep.FIRST_WORKOUT) onStartWorkout(_root_ide_package_.com.example.workoutlog_androidstudio.DEFAULT_WORKOUT_NAME) else onGuideStep(
+                        step
+                    )
                 })
                 Spacer(modifier = Modifier.height(20.dp))
             }
@@ -239,32 +234,51 @@ fun HomeScreen(
                 // Starts straight away as "Workout" - nothing assumed. What
                 // the day is comes from the chips / exercises in Add Exercise,
                 // and the title can be renamed any time during the workout.
-                onStartEmptyWorkout = { onStartWorkout(DEFAULT_WORKOUT_NAME) },
-                plan = TrainingPlanStore.plan,
+                onStartEmptyWorkout = { onStartWorkout(_root_ide_package_.com.example.workoutlog_androidstudio.DEFAULT_WORKOUT_NAME) },
+                plan = _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan,
                 upNext = upNext,
                 onOpenTrainingPlan = onOpenTrainingPlan
             )
             // The user's real split order differs from the plan's: offer to
             // update it. Nothing changes unless they tap Update.
-            val usualOrder = remember(previousWorkouts, TrainingPlanStore.plan) {
-                detectUsualOrder(previousWorkouts, TrainingPlanStore.plan)
+            val usualOrder = remember(previousWorkouts, _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan) {
+                _root_ide_package_.com.example.workoutlog_androidstudio.detectUsualOrder(
+                    previousWorkouts,
+                    _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan
+                )
             }
-            if (usualOrder != null && orderLabel(usualOrder) != TrainingPlanStore.dismissedOrder) {
+            if (usualOrder != null && _root_ide_package_.com.example.workoutlog_androidstudio.orderLabel(
+                    usualOrder
+                ) != _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.dismissedOrder) {
                 Spacer(modifier = Modifier.height(12.dp))
-                SplitOrderPromptCard(
+                _root_ide_package_.com.example.workoutlog_androidstudio.SplitOrderPromptCard(
                     order = usualOrder,
-                    onUpdate = { TrainingPlanStore.acceptOrder(context, usualOrder) },
-                    onKeep = { TrainingPlanStore.dismissOrder(context, usualOrder) }
+                    onUpdate = {
+                        _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.acceptOrder(
+                            context,
+                            usualOrder
+                        )
+                    },
+                    onKeep = {
+                        _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.dismissOrder(
+                            context,
+                            usualOrder
+                        )
+                    }
                 )
             }
             // One-time nudge after the first workout: set up a plan to get
             // gym reminders. Gone once a plan exists or it's dismissed.
-            if (previousWorkouts.isNotEmpty() && TrainingPlanStore.plan == null && !TrainingPlanStore.promptDismissed &&
-                TrainingPlanStore.accountChecked) {
+            if (previousWorkouts.isNotEmpty() && _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan == null && !_root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.promptDismissed &&
+                _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.accountChecked) {
                 Spacer(modifier = Modifier.height(12.dp))
-                GymReminderPromptCard(
+                _root_ide_package_.com.example.workoutlog_androidstudio.GymReminderPromptCard(
                     onSetUp = onOpenTrainingPlan,
-                    onDismiss = { TrainingPlanStore.dismissPrompt(context) }
+                    onDismiss = {
+                        _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.dismissPrompt(
+                            context
+                        )
+                    }
                 )
             }
             Spacer(modifier = Modifier.height(28.dp))
@@ -278,12 +292,12 @@ fun HomeScreen(
                 Text(
                     text = "Previous Workouts",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = AppTextPrimary
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextPrimary
                 )
                 Icon(
                     imageVector = Icons.Filled.ChevronRight,
                     contentDescription = "View all workouts",
-                    tint = AppTextSecondary
+                    tint = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextSecondary
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -301,7 +315,7 @@ fun HomeScreen(
                     Text(
                         text = previousWorkoutsError.orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = AppTextSecondary
+                        color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextSecondary
                     )
                 }
             }
@@ -319,7 +333,7 @@ fun HomeScreen(
                     Text(
                         text = "No workouts logged this week yet.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = AppTextSecondary
+                        color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextSecondary
                     )
                 }
             }
@@ -347,22 +361,29 @@ fun HomeScreen(
                     indication = null
                 ) { workoutPendingDelete = null }
         )
-        DeleteConfirmationPopup(
+        _root_ide_package_.com.example.workoutlog_androidstudio.DeleteConfirmationPopup(
             title = "Delete workout?",
             message = "\"${workout.title}\" will be permanently deleted. This can't be undone.",
             onCancel = { workoutPendingDelete = null },
             onConfirm = {
                 workoutPendingDelete = null
 
-                AppDataCache.removeWorkout(workout.id)
+                _root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.removeWorkout(
+                    workout.id
+                )
                 deletedWorkoutTitle = workout.title
                 toastVisible = true
                 coroutineScope.launch {
                     try {
                         // One that never uploaded only lived on the phone.
-                        if (!isLocalWorkoutId(workout.id)) NetworkClient.workoutApi.deleteWorkout(workout.id)
+                        if (!_root_ide_package_.com.example.workoutlog_androidstudio.isLocalWorkoutId(
+                                workout.id
+                            )
+                        ) NetworkClient.workoutApi.deleteWorkout(workout.id)
                     } catch (e: Exception) {
-                        AppDataCache.addWorkout(workout)
+                        _root_ide_package_.com.example.workoutlog_androidstudio.AppDataCache.addWorkout(
+                            workout
+                        )
                         toastVisible = false
                     }
                 }
@@ -379,7 +400,7 @@ private fun WeeklyTargetWidget(completedDays: Int, targetDays: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppSurface, RoundedCornerShape(16.dp))
+            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppSurface, RoundedCornerShape(16.dp))
             .padding(horizontal = 18.dp, vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -388,14 +409,14 @@ private fun WeeklyTargetWidget(completedDays: Int, targetDays: Int) {
             Text(
                 text = "WEEKLY TARGET",
                 style = MaterialTheme.typography.labelSmall,
-                color = AppAccent,
+                color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "$completedDays of $targetDays Completed",
                 style = MaterialTheme.typography.titleMedium,
-                color = AppTextPrimary,
+                color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextPrimary,
                 fontWeight = FontWeight.Bold
             )
         }
@@ -409,7 +430,7 @@ private fun WeeklyTargetWidget(completedDays: Int, targetDays: Int) {
                         .width(7.dp)
                         .height(30.dp)
                         .background(
-                            if (index < completedDays) AppTextPrimary else AppSurfaceVariant,
+                            if (index < completedDays) _root_ide_package_.com.example.workoutlog_androidstudio.AppTextPrimary else _root_ide_package_.com.example.workoutlog_androidstudio.AppSurfaceVariant,
                             RoundedCornerShape(3.dp)
                         )
                 )
@@ -426,14 +447,14 @@ private fun WeeklyTargetWidget(completedDays: Int, targetDays: Int) {
 @Composable
 private fun QuickStartCard(
     onStartEmptyWorkout: () -> Unit,
-    plan: TrainingPlan? = null,
-    upNext: UpNext? = null,
+    plan: com.example.workoutlog_androidstudio.TrainingPlan? = null,
+    upNext: com.example.workoutlog_androidstudio.UpNext? = null,
     onOpenTrainingPlan: () -> Unit = {}
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppSurface, RoundedCornerShape(20.dp))
+            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppSurface, RoundedCornerShape(20.dp))
             .padding(20.dp)
     ) {
         if (upNext != null || plan != null) {
@@ -455,7 +476,7 @@ private fun QuickStartCard(
                     },
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = AppAccent,
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent,
                     maxLines = 1,
                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -463,9 +484,13 @@ private fun QuickStartCard(
                 if (plan != null && !restToday) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = formatGymTime(LocalContext.current, plan.hour, plan.minute),
+                        text = _root_ide_package_.com.example.workoutlog_androidstudio.formatGymTime(
+                            LocalContext.current,
+                            plan.hour,
+                            plan.minute
+                        ),
                         style = MaterialTheme.typography.labelMedium,
-                        color = AppTextMuted
+                        color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted
                     )
                 }
             }
@@ -479,13 +504,13 @@ private fun QuickStartCard(
             Text(
                 text = "Quick Start",
                 style = MaterialTheme.typography.headlineSmall,
-                color = AppTextPrimary
+                color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextPrimary
             )
             IconButton(onClick = { }) {
                 Icon(
                     imageVector = Icons.Filled.OpenInFull,
                     contentDescription = null,
-                    tint = AppTextSecondary
+                    tint = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextSecondary
                 )
             }
         }
@@ -493,14 +518,14 @@ private fun QuickStartCard(
         Text(
             text = "Empty slate. Direct logging of load, target sets, micro-plates & instantaneous rest intervals.",
             style = MaterialTheme.typography.bodyMedium,
-            color = AppTextSecondary
+            color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextSecondary
         )
         Spacer(modifier = Modifier.height(18.dp))
         // Starting a second workout while one is already running would
         // orphan whichever one loses the race, so this is disabled for as
         // long as ActiveWorkoutState already has one - the same shared
         // state the floating mini-player and notification read.
-        val workoutAlreadyActive = ActiveWorkoutState.workout != null
+        val workoutAlreadyActive = _root_ide_package_.com.example.workoutlog_androidstudio.ActiveWorkoutState.workout != null
         Button(
             onClick = onStartEmptyWorkout,
             enabled = !workoutAlreadyActive,
@@ -526,11 +551,11 @@ private fun QuickStartCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SwipeToDeleteWorkoutCard(
-    workout: WorkoutSummary,
+    workout: com.example.workoutlog_androidstudio.WorkoutSummary,
     onClick: () -> Unit,
     onRequestDelete: () -> Unit
 ) {
-    SwipeToDeleteBox(
+    _root_ide_package_.com.example.workoutlog_androidstudio.SwipeToDeleteBox(
         onRequestDelete = onRequestDelete,
         contentDescription = "Delete workout"
     ) {
@@ -539,12 +564,12 @@ private fun SwipeToDeleteWorkoutCard(
 }
 
 @Composable
-private fun WorkoutCard(workout: WorkoutSummary, onClick: () -> Unit) {
+private fun WorkoutCard(workout: com.example.workoutlog_androidstudio.WorkoutSummary, onClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(AppSurface)
+            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppSurface)
             .clickable(onClick = onClick)
             .padding(18.dp)
     ) {
@@ -558,40 +583,56 @@ private fun WorkoutCard(workout: WorkoutSummary, onClick: () -> Unit) {
                     Box(
                         modifier = Modifier
                             .size(6.dp)
-                            .background(AppAccent, CircleShape)
+                            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppAccent, CircleShape)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = workout.dateLabel,
                         style = MaterialTheme.typography.labelSmall,
-                        color = AppAccent
+                        color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = workout.title,
                     style = MaterialTheme.typography.titleLarge,
-                    color = AppTextPrimary
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextPrimary
                 )
             }
             Icon(
                 imageVector = Icons.Filled.ChevronRight,
                 contentDescription = null,
-                tint = AppTextSecondary
+                tint = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextSecondary
             )
         }
         Spacer(modifier = Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            StatColumn(label = "DURATION", value = workout.duration, modifier = Modifier.weight(1f))
-            StatColumn(label = "TOTAL SETS", value = workout.totalSets.toString(), modifier = Modifier.weight(1f))
-            StatColumn(label = "VOLUME", value = workout.volumeLabel, modifier = Modifier.weight(1f))
+            _root_ide_package_.com.example.workoutlog_androidstudio.StatColumn(
+                label = "DURATION",
+                value = workout.duration,
+                modifier = Modifier.weight(1f)
+            )
+            _root_ide_package_.com.example.workoutlog_androidstudio.StatColumn(
+                label = "TOTAL SETS",
+                value = workout.totalSets.toString(),
+                modifier = Modifier.weight(1f)
+            )
+            _root_ide_package_.com.example.workoutlog_androidstudio.StatColumn(
+                label = "VOLUME",
+                value = workout.volumeLabel,
+                modifier = Modifier.weight(1f)
+            )
         }
         Spacer(modifier = Modifier.height(14.dp))
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            workout.tags.forEach { tag -> TagChip(text = tag) }
+            workout.tags.forEach { tag ->
+                _root_ide_package_.com.example.workoutlog_androidstudio.TagChip(
+                    text = tag
+                )
+            }
         }
     }
 }
@@ -610,9 +651,9 @@ private fun rememberShimmerBrush(): Brush {
     )
     return Brush.linearGradient(
         colors = listOf(
-            AppSurfaceVariant.copy(alpha = 0.55f),
-            AppSurfaceVariant.copy(alpha = 0.15f),
-            AppSurfaceVariant.copy(alpha = 0.55f)
+            _root_ide_package_.com.example.workoutlog_androidstudio.AppSurfaceVariant.copy(alpha = 0.55f),
+            _root_ide_package_.com.example.workoutlog_androidstudio.AppSurfaceVariant.copy(alpha = 0.15f),
+            _root_ide_package_.com.example.workoutlog_androidstudio.AppSurfaceVariant.copy(alpha = 0.55f)
         ),
         start = Offset(translateAnim, 0f),
         end = Offset(translateAnim + 300f, 300f)
@@ -635,7 +676,7 @@ private fun SkeletonWorkoutCard() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppSurface, RoundedCornerShape(18.dp))
+            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppSurface, RoundedCornerShape(18.dp))
             .padding(18.dp)
     ) {
         Row(
@@ -674,16 +715,28 @@ private fun SkeletonWorkoutCard() {
 }
 
 @Composable
-private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: () -> Unit) {
+private fun ConsistencyHeatmap(workouts: List<com.example.workoutlog_androidstudio.WorkoutSummary>, onOpenCalendar: () -> Unit) {
     val today = remember { LocalDate.now() }
     val lastMonthAnchor = remember(today) { today.minusMonths(1) }
-    val plan = TrainingPlanStore.plan
+    val plan = _root_ide_package_.com.example.workoutlog_androidstudio.TrainingPlanStore.plan
 
     // How full each day's training was, compared with the user's usual for
     // that kind of workout, and which planned days were missed (see
     // SplitInsights.kt).
-    val levelByDate = remember(workouts, plan) { heatmapLevels(workouts, plan, today) }
-    val missed = remember(workouts, plan) { missedDays(workouts, plan, today) }
+    val levelByDate = remember(workouts, plan) {
+        _root_ide_package_.com.example.workoutlog_androidstudio.heatmapLevels(
+            workouts,
+            plan,
+            today
+        )
+    }
+    val missed = remember(workouts, plan) {
+        _root_ide_package_.com.example.workoutlog_androidstudio.missedDays(
+            workouts,
+            plan,
+            today
+        )
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         // A header says what this is and where the full calendar is; the
@@ -696,7 +749,7 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
                 text = "LAST 2 MONTHS",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = AppTextMuted,
+                color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted,
                 modifier = Modifier.weight(1f)
             )
             Row(
@@ -706,16 +759,16 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
                     .padding(horizontal = 6.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                CalendarGlyph(color = AppAccent, modifier = Modifier.size(15.dp))
+                CalendarGlyph(color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent, modifier = Modifier.size(15.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "Calendar",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = AppAccent
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent
                 )
                 Spacer(modifier = Modifier.width(2.dp))
-                ChevronGlyph(color = AppAccent, modifier = Modifier.size(12.dp))
+                ChevronGlyph(color = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent, modifier = Modifier.size(12.dp))
             }
         }
         Spacer(modifier = Modifier.height(10.dp))
@@ -754,18 +807,18 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
                 modifier = Modifier.align(Alignment.End),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Less", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                Text(text = "Less", style = MaterialTheme.typography.labelSmall, color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted)
                 Spacer(modifier = Modifier.width(6.dp))
                 listOf(0.3f, 0.5f, 0.75f, 1f).forEach { level ->
                     Box(
                         modifier = Modifier
                             .padding(horizontal = 2.dp)
                             .size(10.dp)
-                            .background(AppAccent.copy(alpha = level), RoundedCornerShape(3.dp))
+                            .background(_root_ide_package_.com.example.workoutlog_androidstudio.AppAccent.copy(alpha = level), RoundedCornerShape(3.dp))
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "More", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                Text(text = "More", style = MaterialTheme.typography.labelSmall, color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted)
                 if (plan != null) {
                     Spacer(modifier = Modifier.width(12.dp))
                     Box(
@@ -774,7 +827,7 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
                             .border(1.dp, MISSED_OUTLINE, RoundedCornerShape(3.dp))
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "Missed", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                    Text(text = "Missed", style = MaterialTheme.typography.labelSmall, color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted)
                 }
             }
         }
@@ -782,7 +835,7 @@ private fun ConsistencyHeatmap(workouts: List<WorkoutSummary>, onOpenCalendar: (
 }
 
 /** Outline for a planned training day that was missed - a hint, not an alarm. */
-private val MISSED_OUTLINE = AppAccent.copy(alpha = 0.6f)
+private val MISSED_OUTLINE = _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent.copy(alpha = 0.6f)
 
 private val WEEKDAY_LETTERS = listOf("M", "T", "W", "T", "F", "S", "S")
 
@@ -794,13 +847,17 @@ private fun MonthGrid(
     today: LocalDate,
     modifier: Modifier = Modifier
 ) {
-    val weeks = remember(monthAnchor) { weeksOfMonth(monthAnchor) }
+    val weeks = remember(monthAnchor) {
+        _root_ide_package_.com.example.workoutlog_androidstudio.weeksOfMonth(
+            monthAnchor
+        )
+    }
 
     Column(modifier = modifier) {
         Text(
             text = monthAnchor.month.getDisplayName(TextStyle.SHORT, Locale.getDefault()).uppercase(),
             style = MaterialTheme.typography.labelSmall,
-            color = AppTextMuted
+            color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted
         )
         Spacer(modifier = Modifier.height(6.dp))
         Row(
@@ -812,7 +869,7 @@ private fun MonthGrid(
                     text = letter,
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 9.sp,
-                    color = AppTextMuted,
+                    color = _root_ide_package_.com.example.workoutlog_androidstudio.AppTextMuted,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f)
                 )
@@ -851,10 +908,10 @@ private fun HeatmapCell(
     val shape = RoundedCornerShape(4.dp)
     val color = when {
         !inCurrentMonth -> Color.Transparent
-        level > 0f -> AppAccent.copy(alpha = level)
+        level > 0f -> _root_ide_package_.com.example.workoutlog_androidstudio.AppAccent.copy(alpha = level)
         isMissed -> Color.Transparent
-        isFuture -> AppSurfaceVariant.copy(alpha = 0.45f)
-        else -> AppSurfaceVariant
+        isFuture -> _root_ide_package_.com.example.workoutlog_androidstudio.AppSurfaceVariant.copy(alpha = 0.45f)
+        else -> _root_ide_package_.com.example.workoutlog_androidstudio.AppSurfaceVariant
     }
     Box(
         modifier = modifier

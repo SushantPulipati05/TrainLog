@@ -82,7 +82,8 @@ data class PendingSet(
     val setNumber: Int,
     val reps: Int,
     val weightKg: Double?,
-    val loggedAtSeconds: Int
+    val loggedAtSeconds: Int,
+    val isDrop: Boolean = false
 )
 
 /** One exercise of a queued workout - enough to show it in history and on
@@ -128,19 +129,26 @@ fun pendingWorkoutFrom(
 ): PendingWorkout {
     // Same rule as the upload always had: only sets with reps filled in.
     val sets = exercises.flatMap { exercise ->
-        exercise.sets.mapNotNull { set ->
-            val reps = set.reps.toIntOrNull() ?: return@mapNotNull null
-            PendingSet(exercise.exerciseId, set.setNumber, reps, parseKg(set.kg), set.loggedAtSeconds)
+        val saved = mutableListOf<PendingSet>()
+        for (set in exercise.sets) {
+            val reps = set.reps.toIntOrNull() ?: continue
+            // A drop whose set above was left empty has nothing to drop
+            // from, so it's saved as a normal set.
+            val isDrop = set.isDrop && saved.isNotEmpty()
+            saved.add(PendingSet(exercise.exerciseId, set.setNumber, reps, parseKg(set.kg), set.loggedAtSeconds, isDrop))
         }
+        saved
     }
     val summary = exercises.mapNotNull { exercise ->
         val done = exercise.sets.filter { it.reps.toIntOrNull() != null }
         if (done.isEmpty()) return@mapNotNull null
+        // Drops count for volume but not as sets.
+        val workingSets = done.count { !it.isDrop }.coerceAtLeast(1)
         PendingExercise(
             exerciseId = exercise.exerciseId,
             name = exercise.name,
             muscleGroup = exercise.muscleGroup.trim().uppercase(),
-            sets = done.size,
+            sets = workingSets,
             volumeKg = done.sumOf { (parseKg(it.kg) ?: 0.0) * (it.reps.toIntOrNull() ?: 0) }
         )
     }
@@ -181,7 +189,7 @@ fun PendingWorkout.toSummary(): WorkoutSummary {
         date = date,
         title = name,
         duration = if (minutes >= 60) "${minutes / 60}h ${(minutes % 60).toString().padStart(2, '0')}m" else "${minutes}m",
-        totalSets = sets.size,
+        totalSets = sets.count { !it.isDrop },
         exerciseCount = exercises.size,
         volumeLabel = "%,.0f KG".format(exercises.sumOf { it.volumeKg }),
         tags = exercises.map { it.muscleGroup }.distinct(),
@@ -290,7 +298,8 @@ object OfflineSync {
                                     setNumber = it.setNumber,
                                     reps = it.reps,
                                     weightKg = it.weightKg,
-                                    loggedAtSeconds = it.loggedAtSeconds
+                                    loggedAtSeconds = it.loggedAtSeconds,
+                                    isDrop = it.isDrop
                                 )
                             }
                         )
@@ -311,7 +320,8 @@ object OfflineSync {
                                 setNumber = it.setNumber,
                                 reps = it.reps,
                                 weightKg = it.weightKg,
-                                loggedAtSeconds = it.loggedAtSeconds
+                                loggedAtSeconds = it.loggedAtSeconds,
+                                isDrop = it.isDrop
                             )
                         },
                         endedAtMillis = pending.endedAtMillis,
@@ -473,7 +483,8 @@ fun PendingWorkout.toDetail(): WorkoutDetailResponse {
                 setNumber = set.setNumber,
                 reps = set.reps,
                 weightKg = set.weightKg,
-                loggedAtSeconds = set.loggedAtSeconds
+                loggedAtSeconds = set.loggedAtSeconds,
+                isDrop = set.isDrop
             )
         }
     )

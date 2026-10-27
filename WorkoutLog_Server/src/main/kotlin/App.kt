@@ -219,7 +219,9 @@ data class NewSetRequest(
     val weightKg: Double?,
     // Workout timer value when the set was added (seconds). Optional so older
     // app versions that don't send it keep working.
-    val loggedAtSeconds: Int? = null
+    val loggedAtSeconds: Int? = null,
+    // A drop set (lighter weight straight after the set before it).
+    val isDrop: Boolean = false
 )
 
 /** What one logged set looks like as JSON, sent back to the app. */
@@ -231,7 +233,8 @@ data class SetEntryResponse(
     val setNumber: Int,
     val reps: Int,
     val weightKg: Double?,
-    val loggedAtSeconds: Int? = null
+    val loggedAtSeconds: Int? = null,
+    val isDrop: Boolean = false
 )
 
 /** What the app sends us when ending a workout. Notes are optional. */
@@ -526,6 +529,7 @@ fun Application.module() {
     migrateMultiUser()
     migrateAthleteProfileOnboarding()
     migrateSetEntriesLoggedAt()
+    migrateSetEntriesIsDrop()
     migrateExerciseMuscles()
     migrateWorkoutsClientId()
     migrateUsersTrainingPlan()
@@ -808,8 +812,11 @@ fun Application.module() {
 
                     var runningMaxWeightKg = 0.0
                     val history = rows.groupBy { it[SetEntries.workoutId] }.map { (workoutId, setsForWorkout) ->
-                        val maxWeightKg = setsForWorkout.mapNotNull { it[SetEntries.weightKg] }.maxOrNull()
-                        val maxReps = setsForWorkout.maxOf { it[SetEntries.reps] }
+                        // Drop sets are lighter on purpose, so best weight and
+                        // reps come from the working sets (volume still counts them).
+                        val workingSets = setsForWorkout.filterNot { it[SetEntries.isDrop] }.ifEmpty { setsForWorkout }
+                        val maxWeightKg = workingSets.mapNotNull { it[SetEntries.weightKg] }.maxOrNull()
+                        val maxReps = workingSets.maxOf { it[SetEntries.reps] }
                         val totalVolumeKg = setsForWorkout.sumOf { (it[SetEntries.weightKg] ?: 0.0) * it[SetEntries.reps] }
                         val startedAt = setsForWorkout.first()[Workouts.startedAt].toZone(zone)
 
@@ -837,7 +844,8 @@ fun Application.module() {
                                     setNumber = row[SetEntries.setNumber],
                                     reps = row[SetEntries.reps],
                                     weightKg = row[SetEntries.weightKg],
-                                    loggedAtSeconds = row[SetEntries.loggedAtSeconds]
+                                    loggedAtSeconds = row[SetEntries.loggedAtSeconds],
+                                    isDrop = row[SetEntries.isDrop]
                                 )
                             }
                         )
@@ -1203,12 +1211,15 @@ fun Application.module() {
                                 .mapNotNull { it.muscleGroup }
                                 .map { it.uppercase() }
                                 .distinct()
-                            val muscleSets = sets
+                            // Drop sets belong to the set before them: volume, yes;
+                            // set counts, no.
+                            val workingSets = sets.filterNot { it.isDrop }
+                            val muscleSets = workingSets
                                 .filterNot { it.category.equals("Cardio", ignoreCase = true) }
                                 .mapNotNull { it.muscleGroup?.trim()?.uppercase()?.ifEmpty { null } }
                                 .groupingBy { it }
                                 .eachCount()
-                            val exerciseSets = sets
+                            val exerciseSets = workingSets
                                 .filterNot { it.category.equals("Cardio", ignoreCase = true) }
                                 .groupBy { it.exerciseId }
                                 .map { (_, list) ->
@@ -1241,7 +1252,7 @@ fun Application.module() {
                                 date = startedDate.toString(),
                                 title = workoutRow[Workouts.workoutName],
                                 duration = durationLabel,
-                                totalSets = sets.size,
+                                totalSets = workingSets.size,
                                 exerciseCount = distinctExercises.size,
                                 volumeLabel = "%,.0f KG".format(totalVolume),
                                 tags = tags,
@@ -1283,7 +1294,8 @@ fun Application.module() {
                                 setNumber = row[SetEntries.setNumber],
                                 reps = row[SetEntries.reps],
                                 weightKg = row[SetEntries.weightKg],
-                                loggedAtSeconds = row[SetEntries.loggedAtSeconds]
+                                loggedAtSeconds = row[SetEntries.loggedAtSeconds],
+                                isDrop = row[SetEntries.isDrop]
                             )
                         }
 
@@ -1379,6 +1391,7 @@ fun Application.module() {
                         it[reps] = request.reps
                         it[weightKg] = request.weightKg
                         it[loggedAtSeconds] = request.loggedAtSeconds
+                        it[isDrop] = request.isDrop
                         it[createdAt] = nowUtc()
                     } get SetEntries.id
 
@@ -1389,7 +1402,8 @@ fun Application.module() {
                         setNumber = request.setNumber,
                         reps = request.reps,
                         weightKg = request.weightKg,
-                        loggedAtSeconds = request.loggedAtSeconds
+                        loggedAtSeconds = request.loggedAtSeconds,
+                        isDrop = request.isDrop
                     )
                 }
 
@@ -1568,7 +1582,8 @@ fun Application.module() {
                             setNumber = row[SetEntries.setNumber],
                             reps = row[SetEntries.reps],
                             weightKg = row[SetEntries.weightKg],
-                            loggedAtSeconds = row[SetEntries.loggedAtSeconds]
+                            loggedAtSeconds = row[SetEntries.loggedAtSeconds],
+                            isDrop = row[SetEntries.isDrop]
                         )
                     }.singleOrNull()
                 }
@@ -1841,6 +1856,7 @@ fun Application.module() {
                             it[reps] = set.reps
                             it[weightKg] = set.weightKg
                             it[loggedAtSeconds] = set.loggedAtSeconds
+                            it[isDrop] = set.isDrop
                             it[createdAt] = now
                         }
                     }
@@ -1968,6 +1984,7 @@ fun Application.module() {
                             it[reps] = set.reps
                             it[weightKg] = set.weightKg
                             it[loggedAtSeconds] = set.loggedAtSeconds
+                            it[isDrop] = set.isDrop
                             it[createdAt] = now
                         }
                     }
@@ -2385,6 +2402,15 @@ private fun migrateWorkoutTemplatesCustomFields() {
 /** Adds set_entries.logged_at_seconds (the workout timer value when each set
  *  was added) for databases that predate it. Existing sets stay NULL - the
  *  app just shows no time for them. */
+/** Adds set_entries.is_drop for databases that predate drop sets. */
+private fun migrateSetEntriesIsDrop() {
+    DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
+        connection.createStatement().use { statement ->
+            statement.execute("ALTER TABLE set_entries ADD COLUMN IF NOT EXISTS is_drop BOOLEAN NOT NULL DEFAULT FALSE")
+        }
+    }
+}
+
 private fun migrateSetEntriesLoggedAt() {
     DriverManager.getConnection(databaseUrl(), env("PGUSER", "postgres"), env("PGPASSWORD", "postgres")).use { connection ->
         connection.createStatement().use { statement ->
@@ -3052,7 +3078,8 @@ private data class SetWithExercise(
     val category: String? = null,
     val exerciseName: String = "",
     val primaryMuscles: String? = null,
-    val secondaryMuscles: String? = null
+    val secondaryMuscles: String? = null,
+    val isDrop: Boolean = false
 )
 
 /** Every set of this user's FINISHED workouts, joined with its exercise, in
@@ -3074,7 +3101,8 @@ private fun finishedSetsByWorkout(me: Int): Map<Int, List<SetWithExercise>> =
                 category = row[Exercises.category],
                 exerciseName = row[Exercises.name],
                 primaryMuscles = row[Exercises.primaryMuscles],
-                secondaryMuscles = row[Exercises.secondaryMuscles]
+                secondaryMuscles = row[Exercises.secondaryMuscles],
+                isDrop = row[SetEntries.isDrop]
             )
         }
         .groupBy { it.workoutId }
@@ -3114,7 +3142,11 @@ private fun kg(value: Double): String {
 
 /** Everything GET /progress returns. Must be called inside a transaction. */
 private fun progressFor(me: Int, zone: ZoneId): ProgressResponse {
+    // PRs, best sets and est. 1RM come from working sets only - a drop set
+    // is lighter on purpose.
     val setsByWorkout = finishedSetsByWorkout(me)
+        .mapValues { (_, sets) -> sets.filterNot { it.isDrop } }
+        .filterValues { it.isNotEmpty() }
     if (setsByWorkout.isEmpty()) return ProgressResponse(emptyList(), emptyList())
 
     val startedById = Workouts.selectAll()

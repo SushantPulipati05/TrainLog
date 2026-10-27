@@ -1,6 +1,7 @@
-package com.example.workoutlog_androidstudio
+package com.example.workoutlog_androidstudio.onboarding
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -66,6 +67,22 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.runtime.DisposableEffect
+import com.example.workoutlog_androidstudio.AppAccent
+import com.example.workoutlog_androidstudio.AppBackground
+import com.example.workoutlog_androidstudio.AppBorder
+import com.example.workoutlog_androidstudio.AppDataCache
+import com.example.workoutlog_androidstudio.AppOnAccent
+import com.example.workoutlog_androidstudio.AppSurface
+import com.example.workoutlog_androidstudio.AppSurfaceVariant
+import com.example.workoutlog_androidstudio.AppTextMuted
+import com.example.workoutlog_androidstudio.AppTextPrimary
+import com.example.workoutlog_androidstudio.AppTextSecondary
+import com.example.workoutlog_androidstudio.BodyFigure
+import com.example.workoutlog_androidstudio.BodyRegion
+import com.example.workoutlog_androidstudio.BodyView
+import com.example.workoutlog_androidstudio.TrainingPlanStore
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -106,7 +123,7 @@ object GuideStore {
     /** Before guide progress was saved per account. */
     private const val LEGACY_PREFS = "guide"
     private var appContext: Context? = null
-    private var prefs: android.content.SharedPreferences? = null
+    private var prefs: SharedPreferences? = null
     private var accountUid: String? = null
 
     /** True for an account that finished onboarding on this phone. */
@@ -131,7 +148,7 @@ object GuideStore {
     fun init(context: Context) {
         if (appContext != null) return
         appContext = context.applicationContext
-        useAccount(runCatching { com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid }.getOrNull())
+        useAccount(runCatching { FirebaseAuth.getInstance().currentUser?.uid }.getOrNull())
     }
 
     /** Loads [uid]'s guide progress (null = signed out: nothing shows). */
@@ -267,7 +284,7 @@ object GuideStore {
 /** Marks a composable as what [tip] points at (only while it's unseen). */
 fun Modifier.guideTarget(tip: GuideTip): Modifier = composed {
     // Forget the spot when the target leaves the screen.
-    androidx.compose.runtime.DisposableEffect(tip) { onDispose { GuideStore.clearTarget(tip) } }
+    DisposableEffect(tip) { onDispose { GuideStore.clearTarget(tip) } }
     if (!GuideStore.shouldShowTip(tip)) this
     else this.onGloballyPositioned { GuideStore.setTarget(tip, it.boundsInRoot()) }
 }
@@ -419,7 +436,7 @@ private fun WelcomeExerciseArt() {
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 color = AppTextMuted,
-                modifier = Modifier
+                modifier = Modifier.Companion
                     .background(AppSurfaceVariant, RoundedCornerShape(8.dp))
                     .padding(horizontal = 8.dp, vertical = 5.dp)
             )
@@ -473,13 +490,15 @@ private fun WelcomeSetRow(
                 .weight(1f)
                 .height(34.dp)
                 .background(AppSurfaceVariant, RoundedCornerShape(9.dp))
-                .then(if (typing) Modifier.border(1.5.dp, AppAccent, RoundedCornerShape(9.dp)) else Modifier),
+                .then(if (typing) Modifier.Companion.border(1.5.dp, AppAccent, RoundedCornerShape(9.dp)) else Modifier),
             contentAlignment = Alignment.Center
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(kg, fontSize = 13.sp, color = if (kgGhost) WELCOME_GHOST else AppTextPrimary)
                 // The text cursor, so it reads as being typed.
-                if (typing) Box(modifier = Modifier.padding(start = 1.dp).width(1.5.dp).height(14.dp).background(AppAccent))
+                if (typing) Box(modifier = Modifier.padding(start = 1.dp).width(1.5.dp).height(14.dp).background(
+                    AppAccent
+                ))
             }
         }
         Box(
@@ -511,8 +530,9 @@ private fun WelcomeUpNextArt() {
                     text = day,
                     fontSize = 11.sp,
                     fontWeight = if (kind == 1) FontWeight.Bold else FontWeight.Normal,
-                    color = when (kind) { 1 -> AppOnAccent; 0 -> AppTextMuted; else -> AppTextSecondary },
-                    modifier = Modifier
+                    color = when (kind) { 1 -> AppOnAccent; 0 -> AppTextMuted; else -> AppTextSecondary
+                    },
+                    modifier = Modifier.Companion
                         .background(if (kind == 1) AppAccent else AppSurfaceVariant, RoundedCornerShape(10.dp))
                         .padding(horizontal = 10.dp, vertical = 7.dp)
                 )
@@ -536,7 +556,8 @@ private fun WelcomeUpNextArt() {
                                 if (fills[i] > 0f) AppAccent.copy(alpha = fills[i]) else AppSurfaceVariant,
                                 RoundedCornerShape(5.dp)
                             )
-                            .then(if (i == 4) Modifier.border(1.5.dp, AppTextPrimary, RoundedCornerShape(5.dp)) else Modifier)
+                            .then(if (i == 4) Modifier.Companion.border(1.5.dp,
+                                AppTextPrimary, RoundedCornerShape(5.dp)) else Modifier)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(labels[i], fontSize = 8.sp, fontWeight = FontWeight.SemiBold, color = AppTextSecondary, maxLines = 1)
@@ -566,8 +587,18 @@ private fun WelcomeBodyArt() {
         BodyRegion.TRICEPS_LATERAL to 0.8f, BodyRegion.TRICEPS_MEDIAL to 0.7f
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        BodyFigure(view = BodyView.FRONT, level = { push[it] ?: 0f }, width = 80.dp, gapColor = AppSurface)
-        BodyFigure(view = BodyView.BACK, level = { push[it] ?: 0f }, width = 80.dp, gapColor = AppSurface)
+        BodyFigure(
+            view = BodyView.FRONT,
+            level = { push[it] ?: 0f },
+            width = 80.dp,
+            gapColor = AppSurface
+        )
+        BodyFigure(
+            view = BodyView.BACK,
+            level = { push[it] ?: 0f },
+            width = 80.dp,
+            gapColor = AppSurface
+        )
     }
 }
 

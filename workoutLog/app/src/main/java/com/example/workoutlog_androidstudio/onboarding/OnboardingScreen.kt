@@ -1,4 +1,4 @@
-package com.example.workoutlog_androidstudio
+package com.example.workoutlog_androidstudio.onboarding
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -57,6 +57,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -67,11 +68,31 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.workoutlog_androidstudio.AppAccent
+import com.example.workoutlog_androidstudio.AppBackground
+import com.example.workoutlog_androidstudio.AppBorder
+import com.example.workoutlog_androidstudio.AppDanger
+import com.example.workoutlog_androidstudio.AppDataCache
+import com.example.workoutlog_androidstudio.AppOnAccent
+import com.example.workoutlog_androidstudio.AppSurface
+import com.example.workoutlog_androidstudio.AppSurfaceVariant
+import com.example.workoutlog_androidstudio.AppTextMuted
+import com.example.workoutlog_androidstudio.AppTextPrimary
+import com.example.workoutlog_androidstudio.AppTextSecondary
+import com.example.workoutlog_androidstudio.BodyFigureStore
+import com.example.workoutlog_androidstudio.BodyType
+import com.example.workoutlog_androidstudio.SEX_FEMALE
+import com.example.workoutlog_androidstudio.SEX_MALE
+import com.example.workoutlog_androidstudio.SEX_UNSPECIFIED
+import com.example.workoutlog_androidstudio.SexChooser
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.ProfileResponse
 import com.example.workoutlog_androidstudio.api.UpdateProfileRequest
+import com.example.workoutlog_androidstudio.appTextFieldColors
+import com.example.workoutlog_androidstudio.auth.AuthManager
 import kotlinx.coroutines.launch
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** The questions, in order. SUMMARY is the review screen at the end. */
@@ -114,7 +135,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
     var weeklyTarget by rememberSaveable { mutableStateOf(4) }
     // Sex (sets the body map figure); the figure is only picked by someone
     // who prefers not to say.
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val context = LocalContext.current
     var sex by rememberSaveable { mutableStateOf(initial.sex?.uppercase()) }
     var figure by rememberSaveable { mutableStateOf(BodyFigureStore.chosen?.name) }
 
@@ -297,7 +318,7 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                         val delta = targetKg - weightKg
                         if (delta != 0f) {
                             val sign = if (delta > 0) "+" else "−"
-                            ValueChip(text = "$sign${formatKg(kotlin.math.abs(delta))} KG FROM NOW", color = AppAccent)
+                            ValueChip(text = "$sign${formatKg(abs(delta))} KG FROM NOW", color = AppAccent)
                         }
                     }
                     else -> {}
@@ -456,7 +477,7 @@ private fun OnboardingHeader(label: String, optional: Boolean, title: String, su
                     text = "OPTIONAL",
                     style = MaterialTheme.typography.labelSmall,
                     color = AppTextSecondary,
-                    modifier = Modifier
+                    modifier = Modifier.Companion
                         .background(AppSurfaceVariant, RoundedCornerShape(50))
                         .padding(horizontal = 8.dp, vertical = 2.dp)
                 )
@@ -513,7 +534,7 @@ private fun ValueChip(text: String, color: Color) {
         text = text,
         style = MaterialTheme.typography.labelMedium,
         color = color,
-        modifier = Modifier
+        modifier = Modifier.Companion
             .background(AppSurface, RoundedCornerShape(50))
             .padding(horizontal = 12.dp, vertical = 6.dp)
     )

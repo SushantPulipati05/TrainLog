@@ -1,4 +1,4 @@
-package com.example.workoutlog_androidstudio
+package com.example.workoutlog_androidstudio.auth
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -54,7 +54,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -73,6 +72,21 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withLink
+import com.example.workoutlog_androidstudio.AppAccent
+import com.example.workoutlog_androidstudio.AppBackground
+import com.example.workoutlog_androidstudio.AppBorder
+import com.example.workoutlog_androidstudio.AppDanger
+import com.example.workoutlog_androidstudio.AppOnAccent
+import com.example.workoutlog_androidstudio.AppSuccess
+import com.example.workoutlog_androidstudio.AppSurface
+import com.example.workoutlog_androidstudio.AppTextMuted
+import com.example.workoutlog_androidstudio.AppTextPrimary
+import com.example.workoutlog_androidstudio.AppTextSecondary
+import com.example.workoutlog_androidstudio.PRIVACY_URL
+import com.example.workoutlog_androidstudio.R
+import com.example.workoutlog_androidstudio.TERMS_URL
+import com.example.workoutlog_androidstudio.appTextFieldColors
+import com.example.workoutlog_androidstudio.heatmapCellColor
 import kotlinx.coroutines.launch
 
 /**
@@ -397,7 +411,11 @@ private fun HeatmapStrip() {
                         modifier = Modifier
                             .weight(1f)
                             .aspectRatio(1f)
-                            .background(heatmapCellColor(inCurrentMonth = true, exerciseCount = count), RoundedCornerShape(4.dp))
+                            .background(
+                                heatmapCellColor(
+                                    inCurrentMonth = true,
+                                    exerciseCount = count
+                                ), RoundedCornerShape(4.dp))
                     )
                 }
             }

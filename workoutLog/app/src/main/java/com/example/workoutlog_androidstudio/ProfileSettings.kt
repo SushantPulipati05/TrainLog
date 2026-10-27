@@ -57,6 +57,8 @@ import androidx.compose.ui.unit.dp
 import com.example.workoutlog_androidstudio.api.FeedbackRequest
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.UpdateProfileRequest
+import com.example.workoutlog_androidstudio.auth.AuthManager
+import com.example.workoutlog_androidstudio.auth.friendlyAuthError
 import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 import java.time.LocalDate

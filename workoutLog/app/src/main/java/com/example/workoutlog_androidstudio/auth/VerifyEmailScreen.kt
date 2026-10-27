@@ -1,4 +1,4 @@
-package com.example.workoutlog_androidstudio
+package com.example.workoutlog_androidstudio.auth
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -50,6 +50,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.workoutlog_androidstudio.AppAccent
+import com.example.workoutlog_androidstudio.AppBackground
+import com.example.workoutlog_androidstudio.AppBorder
+import com.example.workoutlog_androidstudio.AppOnAccent
+import com.example.workoutlog_androidstudio.AppSurface
+import com.example.workoutlog_androidstudio.AppTextMuted
+import com.example.workoutlog_androidstudio.AppTextPrimary
+import com.example.workoutlog_androidstudio.AppTextSecondary
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

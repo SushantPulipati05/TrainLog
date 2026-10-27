@@ -1,6 +1,7 @@
-package com.example.workoutlog_androidstudio
+package com.example.workoutlog_androidstudio.auth
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,6 +11,8 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
+import com.example.workoutlog_androidstudio.CrashReporting
+import com.example.workoutlog_androidstudio.R
 import com.google.android.gms.tasks.Task
 import com.google.android.gms.tasks.Tasks
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
@@ -27,7 +30,9 @@ import com.google.firebase.auth.FirebaseAuthWeakPasswordException
 import com.google.firebase.auth.GoogleAuthProvider
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Interceptor
+import okhttp3.Request
 import okhttp3.Response
+import java.util.TimeZone
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -184,7 +189,7 @@ class AuthInterceptor : Interceptor {
         // The phone's time zone (e.g. "Asia/Kolkata") goes on every request,
         // so the server can put each workout on the right local day.
         val request = chain.request().newBuilder()
-            .header("X-Time-Zone", java.util.TimeZone.getDefault().id)
+            .header("X-Time-Zone", TimeZone.getDefault().id)
             .build()
 
         val token = AuthManager.idTokenBlocking() ?: return chain.proceed(request)
@@ -199,7 +204,7 @@ class AuthInterceptor : Interceptor {
         return retried
     }
 
-    private fun okhttp3.Request.withBearer(token: String): okhttp3.Request =
+    private fun Request.withBearer(token: String): Request =
         newBuilder().header("Authorization", "Bearer $token").build()
 }
 
@@ -208,7 +213,7 @@ class AuthInterceptor : Interceptor {
  *  it's an ordinary user mistake like a wrong password, sent to Crashlytics -
  *  so a vague "no connection" can be traced to its actual cause. */
 fun friendlyAuthError(e: Throwable): String {
-    android.util.Log.w("TrainLogAuth", "Sign-in failed: ${e.javaClass.simpleName}: ${e.message}", e)
+    Log.w("TrainLogAuth", "Sign-in failed: ${e.javaClass.simpleName}: ${e.message}", e)
     val isUserMistake = e is FirebaseAuthInvalidCredentialsException ||
         e is FirebaseAuthInvalidUserException ||
         e is FirebaseAuthUserCollisionException ||

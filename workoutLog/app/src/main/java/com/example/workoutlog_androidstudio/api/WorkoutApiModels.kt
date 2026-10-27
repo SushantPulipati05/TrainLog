@@ -82,7 +82,8 @@ data class NewSetRequest(
     val setNumber: Int,
     val reps: Int,
     val weightKg: Double?,
-    val loggedAtSeconds: Int? = null
+    val loggedAtSeconds: Int? = null,
+    val isDrop: Boolean = false
 )
 
 
@@ -96,7 +97,8 @@ data class SetEntryResponse(
     val setNumber: Int,
     val reps: Int,
     val weightKg: Double?,
-    val loggedAtSeconds: Int? = null
+    val loggedAtSeconds: Int? = null,
+    val isDrop: Boolean = false
 )
 
 /** What we send the backend when ending a workout. Notes are optional. */

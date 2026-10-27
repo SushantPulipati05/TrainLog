@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,6 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.workoutlog_androidstudio.api.NetworkClient
+import com.example.workoutlog_androidstudio.onboarding.GlyphKind
+import com.example.workoutlog_androidstudio.onboarding.GuideStep
+import com.example.workoutlog_androidstudio.onboarding.GuideStore
+import com.example.workoutlog_androidstudio.onboarding.GuideTip
+import com.example.workoutlog_androidstudio.onboarding.TeachingEmptyState
+import com.example.workoutlog_androidstudio.onboarding.guideTarget
 import kotlinx.serialization.Serializable
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter

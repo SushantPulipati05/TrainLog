@@ -31,7 +31,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -77,8 +76,18 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.NetworkClient
-import com.example.workoutlog_androidstudio.api.NewWorkoutRequest
 import com.example.workoutlog_androidstudio.api.WorkoutTemplateSummaryResponse
+import com.example.workoutlog_androidstudio.auth.AuthManager
+import com.example.workoutlog_androidstudio.auth.LoginScreen
+import com.example.workoutlog_androidstudio.auth.VerifyEmailScreen
+import com.example.workoutlog_androidstudio.home.HomeScreen
+import com.example.workoutlog_androidstudio.onboarding.GuideStep
+import com.example.workoutlog_androidstudio.onboarding.GuideStore
+import com.example.workoutlog_androidstudio.onboarding.GuideTip
+import com.example.workoutlog_androidstudio.onboarding.GuideTipOverlay
+import com.example.workoutlog_androidstudio.onboarding.OnboardingScreen
+import com.example.workoutlog_androidstudio.onboarding.StartupStatus
+import com.example.workoutlog_androidstudio.onboarding.WelcomeCards
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
@@ -405,11 +414,19 @@ class MainActivity : ComponentActivity() {
                             onOpenCalendar = { push(Screen.Calendar) },
                             onOpenAllWorkouts = { push(Screen.AllWorkouts) },
                             onOpenTrainingPlan = { push(Screen.TrainingPlan) },
-                            onStartPlannedWorkout = { label -> coroutineScope.launch { startPlannedWorkout(label) } },
+                            onStartPlannedWorkout = { label ->
+                                coroutineScope.launch {
+                                    startPlannedWorkout(
+                                        label
+                                    )
+                                }
+                            },
                             // "Getting started" steps (logging a workout is handled on Home).
                             onGuideStep = { step ->
                                 when (step) {
-                                    GuideStep.SEE_BODY_MAP -> AppDataCache.workoutSummaries?.firstOrNull()?.let { push(Screen.WorkoutDetail(it)) }
+                                    GuideStep.SEE_BODY_MAP -> AppDataCache.workoutSummaries?.firstOrNull()
+                                        ?.let { push(Screen.WorkoutDetail(it)) }
+
                                     GuideStep.SET_SPLIT -> push(Screen.TrainingPlan)
                                     GuideStep.TAP_MUSCLE -> selectedTab = MainTab.PROGRESS
                                     GuideStep.OPEN_CALENDAR -> push(Screen.Calendar)

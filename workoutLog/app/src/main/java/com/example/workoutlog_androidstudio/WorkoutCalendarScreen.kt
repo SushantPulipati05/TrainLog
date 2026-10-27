@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import com.example.workoutlog_androidstudio.api.ExerciseResponse
 import com.example.workoutlog_androidstudio.api.SetEntryResponse
 import com.example.workoutlog_androidstudio.api.WorkoutDetailResponse
+import com.example.workoutlog_androidstudio.onboarding.GuideTip
+import com.example.workoutlog_androidstudio.onboarding.guideTarget
 import java.time.LocalDate
 import java.time.format.TextStyle
 import java.util.Locale

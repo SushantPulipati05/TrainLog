@@ -13,7 +13,7 @@ import retrofit2.http.POST
 import retrofit2.http.DELETE
 import retrofit2.http.PATCH
 import retrofit2.http.PUT
-import com.example.workoutlog_androidstudio.AuthInterceptor
+import com.example.workoutlog_androidstudio.auth.AuthInterceptor
 
 interface WorkoutApi {
     @POST("workouts")

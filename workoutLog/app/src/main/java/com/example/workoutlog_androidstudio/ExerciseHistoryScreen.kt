@@ -188,9 +188,11 @@ private fun metricValue(point: ExerciseHistoryPointResponse, metric: HistoryMetr
 
 private fun oneDecimal(value: Double): String = formatDecimal((value * 10).roundToInt() / 10.0)
 
-/** The best set of a session: heaviest weight, then most reps at that weight. */
+/** The best set of a session: heaviest weight, then most reps at that weight.
+ *  Drop sets are left out - they're lighter on purpose. */
 private fun topSetOf(sets: List<SetEntryResponse>): SetEntryResponse? =
-    sets.maxWithOrNull(compareBy<SetEntryResponse>({ it.weightKg ?: 0.0 }, { it.reps }))
+    sets.filterNot { it.isDrop }.ifEmpty { sets }
+        .maxWithOrNull(compareBy<SetEntryResponse>({ it.weightKg ?: 0.0 }, { it.reps }))
 
 /** One tile in the "Personal records" grid. */
 private data class RecordTile(
@@ -204,7 +206,8 @@ private data class RecordTile(
 /** All-time records across every session (not filtered by the range picker). */
 private fun personalRecords(history: ExerciseHistoryResponse): List<RecordTile> {
     val points = history.history
-    val allSets = points.flatMap { point -> point.sets.map { point.date to it } }
+    // Records come from working sets - drop sets are lighter on purpose.
+    val allSets = points.flatMap { point -> point.sets.filterNot { it.isDrop }.map { point.date to it } }
     if (allSets.isEmpty()) return emptyList()
 
     val weighted = allSets.filter { (it.second.weightKg ?: 0.0) > 0.0 }
@@ -784,7 +787,10 @@ private fun SessionHistoryCard(point: ExerciseHistoryPointResponse, isOpen: Bool
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = buildString {
-                    append("${sets.size} ${if (sets.size == 1) "set" else "sets"}")
+                    val working = sets.count { !it.isDrop }
+                    val drops = sets.size - working
+                    append("$working ${if (working == 1) "set" else "sets"}")
+                    if (drops > 0) append(" + $drops ${if (drops == 1) "drop" else "drops"}")
                     if (topSet != null) append(" · top ${formatSetLoad(topSet.weightKg).lowercase()} × ${topSet.reps}")
                     append("  ›")
                 },
@@ -799,7 +805,8 @@ private fun SessionHistoryCard(point: ExerciseHistoryPointResponse, isOpen: Bool
                 Text("REPS", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, textAlign = TextAlign.End, modifier = Modifier.width(56.dp))
             }
             Spacer(modifier = Modifier.height(4.dp))
-            sets.forEach { set ->
+            val labels = setLabels(sets.map { it.isDrop })
+            sets.forEachIndexed { i, set ->
                 // The session's top set is picked out in orange.
                 val isTop = set === topSet
                 val color = if (isTop) AppAccent else AppTextPrimary
@@ -809,12 +816,13 @@ private fun SessionHistoryCard(point: ExerciseHistoryPointResponse, isOpen: Bool
                         .fillMaxWidth()
                         .padding(vertical = 5.dp)
                 ) {
+                    // A drop shows "D", nudged in under its set.
                     Text(
-                        text = set.setNumber.toString(),
+                        text = labels[i],
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (isTop) AppAccent else AppTextMuted,
+                        color = if (isTop || set.isDrop) AppAccent else AppTextMuted,
                         fontWeight = weight,
-                        modifier = Modifier.width(48.dp)
+                        modifier = Modifier.width(48.dp).padding(start = if (set.isDrop) 12.dp else 0.dp)
                     )
                     Text(
                         text = formatSetLoad(set.weightKg),

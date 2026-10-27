@@ -2,8 +2,20 @@ package com.example.workoutlog_androidstudio
 
 import android.util.Log
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.MenuDefaults
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,7 +33,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.isImeVisible
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -34,13 +45,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -73,6 +82,8 @@ import com.example.workoutlog_androidstudio.api.NewExerciseRequest
 import com.example.workoutlog_androidstudio.api.SetEntryResponse
 import com.example.workoutlog_androidstudio.api.UpdateWorkoutRequest
 import com.example.workoutlog_androidstudio.api.WorkoutResponse
+import com.example.workoutlog_androidstudio.onboarding.GuideTip
+import com.example.workoutlog_androidstudio.onboarding.guideTarget
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitAll
@@ -637,7 +648,7 @@ fun ActiveWorkoutScreen(
                 dateLabel = ActiveWorkoutState.pastDateLabel.orEmpty(),
                 timeLabel = ActiveWorkoutState.pastTimeLine.orEmpty(),
                 exerciseCount = withLastTimeFilled(exercises).count { e -> e.sets.any { it.reps.toIntOrNull() != null } },
-                setCount = withLastTimeFilled(exercises).sumOf { e -> e.sets.count { it.reps.toIntOrNull() != null } },
+                setCount = withLastTimeFilled(exercises).sumOf { e -> e.sets.count { it.reps.toIntOrNull() != null && !it.isDrop } },
                 onSave = { showSavePast = false; saveWorkout() },
                 onEdit = { showSavePast = false }
             )
@@ -653,7 +664,7 @@ fun ActiveWorkoutScreen(
             EndWorkoutPopup(
                 durationSeconds = elapsed,
                 exerciseCount = filled.count { e -> e.sets.any { it.reps.toIntOrNull() != null } },
-                setCount = doneSets.size,
+                setCount = doneSets.count { !it.isDrop }.coerceAtLeast(if (doneSets.isEmpty()) 0 else 1),
                 startMillis = ActiveWorkoutState.effectiveStartMillis,
                 lastSetSeconds = lastActivity.takeIf { doneSets.isNotEmpty() && elapsed - it > FORGOT_AFTER_SECONDS },
                 onKeepGoing = { showEndConfirm = false },
@@ -732,9 +743,10 @@ private fun ExerciseCard(
     LaunchedEffect(exercise.exerciseId) {
         runCatching { AppDataCache.loadExerciseHistory(exercise.exerciseId) }.getOrNull()?.let { history = it }
     }
-    val best = remember(history) { topSetOf(history?.history.orEmpty().flatMap { it.sets }) }
+    // Drops are lighter on purpose, so "best" and "last time" use working sets.
+    val best = remember(history) { topSetOf(history?.history.orEmpty().flatMap { it.sets }.filterNot { it.isDrop }) }
     val lastSets = remember(history) { history?.history?.lastOrNull()?.sets.orEmpty().sortedBy { it.setNumber } }
-    val lastTime = remember(lastSets) { topSetOf(lastSets) }
+    val lastTime = remember(lastSets) { topSetOf(lastSets.filterNot { it.isDrop }) }
     // Its history arrived after it was added: give it as many rows as last
     // time - only while it's still one untouched row, so nothing typed (or
     // deliberately removed) is ever changed.
@@ -745,7 +757,8 @@ private fun ExerciseCard(
                 blankSets(
                     count = lastSets.size.coerceAtMost(10),
                     isBodyweight = exercise.isBodyweight,
-                    loggedAtSeconds = exercise.sets.first().loggedAtSeconds
+                    loggedAtSeconds = exercise.sets.first().loggedAtSeconds,
+                    dropPattern = lastSets.map { it.isDrop }
                 )
             )
         }
@@ -812,15 +825,46 @@ private fun ExerciseCard(
             Text("REPS", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
         }
         Spacer(modifier = Modifier.height(10.dp))
+        val labels = setLabels(exercise.sets.map { it.isDrop })
+        val ghosts = matchLastTime(exercise.sets, lastSets)
         exercise.sets.forEachIndexed { rowIndex, set ->
-            // Empty boxes show last time's numbers for this set in grey.
-            val ghost = lastSets.getOrNull(rowIndex)
+            // Empty boxes show last time's numbers for this set in grey -
+            // set 2 against last time's set 2, its drop against that drop.
+            val ghost = ghosts[rowIndex]
+            // The working set a drop hangs off (for "Attach to set 2").
+            val setAbove = labels.take(rowIndex).lastOrNull { it != "D" }
             // New users: the tip about grey numbers points at the first such row.
             val tipHere = ghost != null && rowIndex == 0 &&
                 ActiveWorkoutState.exercises.firstOrNull { e -> e.sets.isNotEmpty() }?.exerciseId == exercise.exerciseId
             Box(modifier = if (tipHere) Modifier.guideTarget(GuideTip.EXERCISE_CARD) else Modifier) {
                 SwipeToDeleteSetRow(
                     set = set,
+                    label = labels[rowIndex],
+                    dropParentLabel = setAbove.takeIf { rowIndex > 0 },
+                    onMakeDrop = { isDrop ->
+                        val updated = exercise.sets.toMutableList()
+                        updated[rowIndex] = set.copy(isDrop = isDrop)
+                        onSetsChange(updated.renumbered())
+                    },
+                    onAddDrop = {
+                        // Under this set and any drops it already has.
+                        val current = exercise.sets
+                        var insertAt = rowIndex + 1
+                        while (insertAt < current.size && current[insertAt].isDrop) insertAt++
+                        val updated = current.toMutableList()
+                        updated.add(
+                            insertAt,
+                            ExerciseSet(
+                                setNumber = insertAt + 1,
+                                previousLabel = "-",
+                                kg = "",
+                                reps = "",
+                                loggedAtSeconds = ActiveWorkoutState.elapsedSeconds,
+                                isDrop = true
+                            )
+                        )
+                        onSetsChange(updated.renumbered())
+                    },
                     ghostKg = ghostKgOf(ghost),
                     ghostReps = ghostRepsOf(ghost),
                     // Tap the set number: last time's numbers, both boxes, one tap.
@@ -850,15 +894,14 @@ private fun ExerciseCard(
                     onDelete = {
                         val updated = exercise.sets.toMutableList()
                         updated.removeAt(rowIndex)
-
-                        onSetsChange(updated.mapIndexed { i, s -> s.copy(setNumber = i + 1) })
+                        onSetsChange(updated.renumbered())
                     }
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
         }
         // Beat your best with a set typed in just now: say so straight away.
-        val todayTop = topSetOf(withLastTimeFilled(listOf(exercise)).first().sets.mapNotNull { s ->
+        val todayTop = topSetOf(withLastTimeFilled(listOf(exercise)).first().sets.filterNot { it.isDrop }.mapNotNull { s ->
             val reps = s.reps.toIntOrNull() ?: return@mapNotNull null
             TopSet(parseKg(s.kg)?.takeIf { it > 0.0 }, reps)
         })
@@ -876,7 +919,7 @@ private fun ExerciseCard(
                 val nextNumber = exercise.sets.size + 1
                 // Same weight as the set above (most sets repeat it); reps
                 // stay empty - they usually change.
-                val defaultKg = exercise.sets.lastOrNull()?.kg?.takeIf { it.isNotBlank() }
+                val defaultKg = exercise.sets.lastOrNull { !it.isDrop }?.kg?.takeIf { it.isNotBlank() }
                     ?: if (exercise.isBodyweight) "0" else ""
                 onSetsChange(
                     exercise.sets + ExerciseSet(
@@ -920,6 +963,10 @@ private fun SwipeToDeleteExerciseCard(
 @Composable
 private fun SwipeToDeleteSetRow(
     set: ExerciseSet,
+    label: String,
+    dropParentLabel: String?,
+    onMakeDrop: (Boolean) -> Unit,
+    onAddDrop: () -> Unit,
     onKgChange: (String) -> Unit,
     onRepsChange: (String) -> Unit,
     onDelete: () -> Unit,
@@ -931,6 +978,10 @@ private fun SwipeToDeleteSetRow(
         Box(modifier = Modifier.fillMaxWidth().background(AppSurface)) {
             SetRow(
                 set = set,
+                label = label,
+                dropParentLabel = dropParentLabel,
+                onMakeDrop = onMakeDrop,
+                onAddDrop = onAddDrop,
                 onKgChange = onKgChange,
                 onRepsChange = onRepsChange,
                 ghostKg = ghostKg,
@@ -941,9 +992,14 @@ private fun SwipeToDeleteSetRow(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SetRow(
     set: ExerciseSet,
+    label: String,
+    dropParentLabel: String?,
+    onMakeDrop: (Boolean) -> Unit,
+    onAddDrop: () -> Unit,
     onKgChange: (String) -> Unit,
     onRepsChange: (String) -> Unit,
     ghostKg: String? = null,
@@ -958,25 +1014,89 @@ private fun SetRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Set number in a rounded square matching the KG/REPS boxes.
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(AppSurfaceVariant)
-                .then(
-                    if (onFillFromLast != null) {
-                        Modifier.clickable(onClickLabel = "Fill in last time's numbers", onClick = onFillFromLast)
-                    } else Modifier
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = set.setNumber.toString(),
-                color = AppTextPrimary,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+        // A drop sits tucked under its set: a small orange hook, then a
+        // narrower "D" box - 8 + 8 + 24 keeps the columns lined up with the
+        // 40dp number boxes above.
+        if (set.isDrop) {
+            Box(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(40.dp)
+                    .drawBehind {
+                        val x = 3.dp.toPx()
+                        val hook = Path().apply {
+                            moveTo(x, -10.dp.toPx())
+                            lineTo(x, size.height / 2 - 6.dp.toPx())
+                            quadraticTo(x, size.height / 2, x + 6.dp.toPx(), size.height / 2)
+                            lineTo(size.width + 6.dp.toPx(), size.height / 2)
+                        }
+                        drawPath(hook, AppAccent.copy(alpha = 0.7f), style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round))
+                    }
             )
+        }
+        // Set number in a rounded square matching the KG/REPS boxes.
+        // Tap: last time's numbers. Hold: drop set options.
+        var menuOpen by remember { mutableStateOf(false) }
+        val haptics = LocalHapticFeedback.current
+        Box {
+            Box(
+                modifier = Modifier
+                    .width(if (set.isDrop) 24.dp else 40.dp)
+                    .height(40.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(AppSurfaceVariant)
+                    .combinedClickable(
+                        onClickLabel = if (onFillFromLast != null) "Fill in last time's numbers" else null,
+                        onClick = { onFillFromLast?.invoke() },
+                        onLongClickLabel = "Drop set options",
+                        onLongClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            menuOpen = true
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    color = if (set.isDrop) AppAccent else AppTextPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            DropdownMenu(
+                expanded = menuOpen,
+                onDismissRequest = { menuOpen = false },
+                modifier = Modifier.background(AppSurfaceVariant)
+            ) {
+                val itemColors = MenuDefaults.itemColors(textColor = AppTextPrimary)
+                when {
+                    set.isDrop -> DropdownMenuItem(
+                        text = { Text("Make normal set") },
+                        leadingIcon = { DropGlyph(AppTextSecondary) },
+                        colors = itemColors,
+                        onClick = { menuOpen = false; onMakeDrop(false) }
+                    )
+                    dropParentLabel != null -> DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text("Make drop set")
+                                Text("Attach to set $dropParentLabel", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+                            }
+                        },
+                        leadingIcon = { DropGlyph(AppAccent) },
+                        colors = itemColors,
+                        onClick = { menuOpen = false; onMakeDrop(true) }
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text("Add drop after this set") },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Filled.Add, contentDescription = null, tint = AppTextSecondary, modifier = Modifier.size(18.dp))
+                    },
+                    colors = itemColors,
+                    onClick = { menuOpen = false; onAddDrop() }
+                )
+            }
         }
         // The workout timer's value when this set was added - two
         // consecutive sets' values show how much rest was taken
@@ -1204,16 +1324,52 @@ private fun topSetOf(sets: List<com.example.workoutlog_androidstudio.api.SetEntr
 private val GHOST_TEXT = Color(0xFF55555B)
 
 /** [count] empty set rows, numbered from 1. Bodyweight ones start at 0 kg added. */
-private fun blankSets(count: Int, isBodyweight: Boolean, loggedAtSeconds: Int): List<ExerciseSet> =
+private fun blankSets(
+    count: Int,
+    isBodyweight: Boolean,
+    loggedAtSeconds: Int,
+    dropPattern: List<Boolean> = emptyList()
+): List<ExerciseSet> =
     (1..count).map { n ->
         ExerciseSet(
             setNumber = n,
             previousLabel = "-",
             kg = if (isBodyweight) "0" else "",
             reps = "",
-            loggedAtSeconds = loggedAtSeconds
+            loggedAtSeconds = loggedAtSeconds,
+            isDrop = dropPattern.getOrNull(n - 1) == true
         )
+    }.renumbered()
+
+/** Where each row sits: "2" for working set 2, "2D1" for its first drop. */
+private fun setKeys(isDrop: List<Boolean>): List<String> {
+    var n = 0
+    var d = 0
+    return isDrop.map { drop ->
+        if (drop) { d++; "${n}D$d" } else { n++; d = 0; "$n" }
     }
+}
+
+/** Last time's set for each row today: working set 2 against last time's
+ *  set 2, a drop against the same drop of that set - so adding a drop
+ *  doesn't shift the grey numbers of every row below it. */
+private fun matchLastTime(rows: List<ExerciseSet>, last: List<SetEntryResponse>): List<SetEntryResponse?> {
+    val byKey = setKeys(last.map { it.isDrop }).zip(last).toMap()
+    return setKeys(rows.map { it.isDrop }).map { byKey[it] }
+}
+
+/** The stairs-down mark used for drop sets in the menu. */
+@Composable
+private fun DropGlyph(color: Color) {
+    Canvas(modifier = Modifier.size(18.dp)) {
+        val u = size.width / 24f
+        val p = Path().apply {
+            moveTo(4 * u, 6 * u); lineTo(9 * u, 6 * u); lineTo(9 * u, 11 * u)
+            lineTo(14 * u, 11 * u); lineTo(14 * u, 16 * u); lineTo(20 * u, 16 * u)
+        }
+        drawPath(p, color, style = Stroke(width = 2.2f * u, cap = StrokeCap.Round, join = StrokeJoin.Round))
+    }
+}
 
 /** Nothing typed into this row yet. */
 private fun ExerciseSet.isBlank(isBodyweight: Boolean): Boolean =
@@ -1242,10 +1398,10 @@ private fun ghostRepsOf(last: SetEntryResponse?): String? = last?.reps?.toString
  */
 private fun withLastTimeFilled(exercises: List<ActiveExercise>): List<ActiveExercise> =
     exercises.map { exercise ->
-        val last = lastTimeSets(exercise.exerciseId)
+        val ghosts = matchLastTime(exercise.sets, lastTimeSets(exercise.exerciseId))
         exercise.copy(sets = exercise.sets.mapIndexed { i, set ->
             if (!set.touched) return@mapIndexed set
-            val ghost = last.getOrNull(i) ?: return@mapIndexed set
+            val ghost = ghosts[i] ?: return@mapIndexed set
             val kgEmpty = set.kg.isBlank() || (exercise.isBodyweight && set.kg == "0")
             set.copy(
                 kg = if (kgEmpty) ghostKgOf(ghost) ?: set.kg else set.kg,
