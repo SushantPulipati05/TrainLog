@@ -42,6 +42,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.onboarding.GlyphKind
@@ -346,20 +352,22 @@ fun ProgressScreen(
             }
         }
 
-        // ---- Insights: separate cards, each can be crossed off ----
-        if (insights.isNotEmpty() && query.isBlank() && group == null && region == null) {
-            item { SectionLabel("INSIGHTS") }
-            items(insights, key = { "${it.kind}:${it.exerciseId}" }) { insight ->
-                InsightCard(
-                    insight = insight,
-                    onOpen = { onOpenExercise(insight.exerciseId, insight.name) },
-                    onDismiss = {
-                        DismissedInsights.dismiss(context, insight)
-                        dismissTick++
-                    }
-                )
-            }
-        }
+        // Insights are switched off for now (being redesigned). To bring them back,
+        // remove the // from the block below.
+//        // ---- Insights: separate cards, each can be crossed off ----
+//        if (insights.isNotEmpty() && query.isBlank() && group == null && region == null) {
+//            item { SectionLabel("INSIGHTS") }
+//            items(insights, key = { "${it.kind}:${it.exerciseId}" }) { insight ->
+//                InsightCard(
+//                    insight = insight,
+//                    onOpen = { onOpenExercise(insight.exerciseId, insight.name) },
+//                    onDismiss = {
+//                        DismissedInsights.dismiss(context, insight)
+//                        dismissTick++
+//                    }
+//                )
+//            }
+//        }
 
         // ---- Your exercises ----
         item {
@@ -441,80 +449,112 @@ private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/**
+ * One recent PR: a tag with its kind (REP PR / WEIGHT PR), the exercise, the
+ * new lift, what the best was before, and the date.
+ */
 @Composable
 private fun PrCard(pr: ProgressPrResponse, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(14.dp)
+    val isRep = pr.kind == "REP"
+    val was = pr.previous?.let { prev ->
+        when {
+            isRep && pr.weightKg != null -> "× ${prev.toInt()} at ${Units.weightWithUnit(pr.weightKg)}"
+            isRep -> "${prev.toInt()} reps"
+            else -> Units.weightWithUnit(prev)
+        }
+    }
     Column(
         modifier = Modifier
-            .width(150.dp)
-            .clip(shape)
+            .width(176.dp)
+            .clip(RoundedCornerShape(14.dp))
             .background(AppSurface)
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .padding(12.dp)
     ) {
-        val isRep = pr.kind == "REP"
-        Box(
+        Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(6.dp))
-                .background(if (isRep) AppSurfaceVariant else AppAccent)
-                .padding(horizontal = 6.dp, vertical = 3.dp)
+                .background(if (isRep) AppSurfaceVariant else AppAccent.copy(alpha = 0.14f))
+                .padding(horizontal = 7.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            PrKindGlyph(isRep = isRep, modifier = Modifier.size(11.dp))
+            Spacer(modifier = Modifier.width(5.dp))
             Text(
                 text = if (isRep) "REP PR" else "WEIGHT PR",
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
-                color = if (isRep) AppAccent else AppOnAccent
+                color = AppAccent
             )
         }
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = pr.name,
-            style = MaterialTheme.typography.labelMedium,
-            color = AppTextSecondary,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = AppTextPrimary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = topSetLabel(pr.weightKg, pr.reps),
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
             color = AppTextPrimary,
             maxLines = 1
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = shortDate(pr.date) + (pr.previous?.let { prev ->
-                when {
-                    pr.kind == "REP" && pr.weightKg != null -> " · best at ${Units.weightText(pr.weightKg)} was × ${prev.toInt()}"
-                    pr.kind == "REP" -> " · best was ${prev.toInt()} reps"
-                    else -> " · was ${Units.weightWithUnit(prev)}"
-                }
-            } ?: ""),
-            style = MaterialTheme.typography.labelSmall,
-            color = AppTextMuted,
-            maxLines = 2
-        )
+        Spacer(modifier = Modifier.height(6.dp))
+        if (was != null) {
+            Row {
+                Text(text = "was ", style = MaterialTheme.typography.labelMedium, color = AppTextMuted)
+                Text(
+                    text = was,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = AppTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        Text(text = shortDate(pr.date), style = MaterialTheme.typography.labelMedium, color = AppTextMuted)
     }
 }
 
-/** One exercise: name, muscle and sessions; latest top set ("60 kg × 12")
- *  and its change over 3 months - in kg, or in reps when the weight held,
- *  or in estimated 1RM when sorting by Biggest gain; a chevron. The whole
- *  row opens its analytics. */
+/** The small drawn icon on a PR tag: repeat arrows for a rep PR, a barbell for a weight PR. */
+@Composable
+private fun PrKindGlyph(isRep: Boolean, modifier: Modifier = Modifier, color: Color = AppAccent) {
+    Canvas(modifier = modifier) {
+        val u = size.width / 24f
+        val stroke = Stroke(width = 2.6f * u, cap = StrokeCap.Round, join = StrokeJoin.Round)
+        fun line(vararg points: Pair<Float, Float>) {
+            val path = Path().apply {
+                points.forEachIndexed { i, (x, y) -> if (i == 0) moveTo(x * u, y * u) else lineTo(x * u, y * u) }
+            }
+            drawPath(path, color, style = stroke)
+        }
+        if (isRep) {
+            line(4f to 10f, 4f to 8f, 6f to 6f, 20f to 6f)
+            line(17f to 3f, 20f to 6f, 17f to 9f)
+            line(20f to 14f, 20f to 16f, 18f to 18f, 4f to 18f)
+            line(7f to 15f, 4f to 18f, 7f to 21f)
+        } else {
+            line(2f to 12f, 5f to 12f)
+            line(19f to 12f, 22f to 12f)
+            line(5f to 8f, 5f to 16f)
+            line(19f to 8f, 19f to 16f)
+            line(8f to 6f, 8f to 18f)
+            line(16f to 6f, 16f to 18f)
+            line(8f to 12f, 16f to 12f)
+        }
+    }
+}
+
+/** One exercise: just its name and a chevron. The whole row opens its
+ *  analytics. ([showE1rm] is kept so callers don't change; the numbers that
+ *  used to sit here live on the exercise's own page.) */
 @Composable
 private fun ExerciseProgressRow(exercise: ProgressExerciseResponse, showE1rm: Boolean, onClick: () -> Unit) {
-    fun oneDp(x: Double) = formatDecimal(Math.round(x * 10) / 10.0)
-    val change: Pair<String, Boolean>? = when {
-        showE1rm -> exercise.e1rmChange3m?.takeIf { kotlin.math.abs(it) >= 0.05 }?.let {
-            "${if (it > 0) "+" else "−"}${oneDp(Units.fromKg(kotlin.math.abs(it)))} ${Units.weightLabel} (est. 1RM)" to (it > 0)
-        }
-        exercise.change3m != null && kotlin.math.abs(exercise.change3m) >= 0.05 ->
-            "${if (exercise.change3m > 0) "+" else "−"}${oneDp(Units.fromKg(kotlin.math.abs(exercise.change3m)))} ${Units.weightLabel}" to (exercise.change3m > 0)
-        exercise.change3mReps != null && exercise.change3mReps != 0 ->
-            "${if (exercise.change3mReps > 0) "+" else "−"}${kotlin.math.abs(exercise.change3mReps)} reps" to (exercise.change3mReps > 0)
-        else -> null
-    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -522,45 +562,18 @@ private fun ExerciseProgressRow(exercise: ProgressExerciseResponse, showE1rm: Bo
             .clip(RoundedCornerShape(16.dp))
             .background(AppSurface)
             .clickable(onClick = onClick)
-            .padding(start = 16.dp, end = 10.dp, top = 14.dp, bottom = 14.dp),
+            .padding(start = 16.dp, end = 10.dp, top = 18.dp, bottom = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = exercise.name,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = AppTextPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(
-                text = listOfNotNull(
-                    exercise.muscleGroup?.lowercase()?.replaceFirstChar { it.uppercase() },
-                    "${exercise.sessions} ${if (exercise.sessions == 1) "session" else "sessions"}"
-                ).joinToString(" · "),
-                style = MaterialTheme.typography.labelMedium,
-                color = AppTextMuted
-            )
-        }
-        Spacer(modifier = Modifier.width(10.dp))
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = topSetLabel(exercise.topWeightKg, exercise.topReps),
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = AppTextPrimary,
-                maxLines = 1
-            )
-            change?.let { (text, up) ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (up) AppAccent else AppTextMuted,
-                    maxLines = 1
-                )
-            }
-        }
+        Text(
+            text = exercise.name,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = AppTextPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
         Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = AppTextMuted, modifier = Modifier.padding(start = 4.dp))
     }
 }

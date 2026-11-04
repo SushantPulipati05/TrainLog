@@ -907,7 +907,7 @@ private fun ExerciseCard(
         })
         if (best != null && todayTop != null && todayTop.beats(best)) {
             Text(
-                text = "New best: ${todayTop.short()} beats ${best.short()}",
+                text = "New best: ${todayTop.label()} beats ${best.label()}",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = AppAccent
@@ -1299,8 +1299,6 @@ private fun RenameWorkoutSheet(currentName: String, onDismiss: () -> Unit, onSav
 private data class TopSet(val weightKg: Double?, val reps: Int) {
     /** "70 kg × 6", or "12 reps" for bodyweight. */
     fun label(): String = if (weightKg != null) "${Units.weightWithUnit(weightKg)} × $reps" else "$reps reps"
-    /** "70 kg" / "12 reps" - for the "new best" line. */
-    fun short(): String = if (weightKg != null) Units.weightWithUnit(weightKg) else "$reps reps"
     /** Heavier wins; at the same weight (or both bodyweight), more reps wins. */
     fun beats(other: TopSet): Boolean = when {
         weightKg != null && other.weightKg != null -> weightKg > other.weightKg || (weightKg == other.weightKg && reps > other.reps)
