@@ -181,9 +181,9 @@ private enum class HistoryMetric(val label: String) {
 
 private fun metricValue(point: ExerciseHistoryPointResponse, metric: HistoryMetric, isBodyweight: Boolean): Float =
     when (metric) {
-        HistoryMetric.HEAVIEST_SET -> if (isBodyweight) point.maxReps.toFloat() else (point.maxWeightKg ?: 0.0).toFloat()
-        HistoryMetric.EST_1RM -> (bestE1rm(point)?.first ?: 0.0).toFloat()
-        HistoryMetric.TOTAL_VOLUME -> point.totalVolumeKg.toFloat()
+        HistoryMetric.HEAVIEST_SET -> if (isBodyweight) point.maxReps.toFloat() else Units.fromKg(point.maxWeightKg ?: 0.0).toFloat()
+        HistoryMetric.EST_1RM -> Units.fromKg(bestE1rm(point)?.first ?: 0.0).toFloat()
+        HistoryMetric.TOTAL_VOLUME -> Units.fromKg(point.totalVolumeKg).toFloat()
     }
 
 private fun oneDecimal(value: Double): String = formatDecimal((value * 10).roundToInt() / 10.0)
@@ -215,8 +215,8 @@ private fun personalRecords(history: ExerciseHistoryResponse): List<RecordTile> 
     val heaviest = weighted.maxWithOrNull(compareBy({ it.second.weightKg ?: 0.0 }, { it.second.reps }))?.let { (date, set) ->
         RecordTile(
             label = if (history.isBodyweight) "HEAVIEST ADDED" else "HEAVIEST",
-            value = formatDecimal(set.weightKg ?: 0.0),
-            unit = "kg × ${set.reps}",
+            value = Units.weightText(set.weightKg ?: 0.0),
+            unit = "${Units.weightLabel} × ${set.reps}",
             detail = formatHistoryDateShort(date)
         )
     }
@@ -226,7 +226,7 @@ private fun personalRecords(history: ExerciseHistoryResponse): List<RecordTile> 
         val at = if (weight == null || weight <= 0.0) {
             if (history.isBodyweight) "bodyweight" else ""
         } else {
-            "@ ${formatDecimal(weight)} kg"
+            "@ ${Units.weightWithUnit(weight)}"
         }
         RecordTile(label = "MOST REPS", value = set.reps.toString(), unit = at, detail = formatHistoryDateShort(date))
     }
@@ -234,8 +234,8 @@ private fun personalRecords(history: ExerciseHistoryResponse): List<RecordTile> 
     val bestVolume = points.maxByOrNull { it.totalVolumeKg }?.takeIf { it.totalVolumeKg > 0.0 }?.let { point ->
         RecordTile(
             label = "BEST VOLUME",
-            value = oneDecimal(point.totalVolumeKg),
-            unit = "kg",
+            value = oneDecimal(Units.fromKg(point.totalVolumeKg)),
+            unit = Units.weightLabel,
             detail = formatHistoryDateShort(point.date)
         )
     }
@@ -252,9 +252,9 @@ private fun personalRecords(history: ExerciseHistoryResponse): List<RecordTile> 
                 val weight = set.weightKg ?: 0.0
                 RecordTile(
                     label = "EST. 1RM",
-                    value = oneDecimal(weight * (1 + set.reps / 30.0)),
-                    unit = "kg",
-                    detail = "from ${formatDecimal(weight)} × ${set.reps}"
+                    value = oneDecimal(Units.fromKg(weight * (1 + set.reps / 30.0))),
+                    unit = Units.weightLabel,
+                    detail = "from ${Units.weightText(weight)} × ${set.reps}"
                 )
             }
     }
@@ -376,12 +376,12 @@ private fun ExerciseHistoryContent(exerciseName: String, history: ExerciseHistor
                 // Headline: the latest session's number and the change over
                 // the range, e.g. "20 kg × 5 · 17/10      ▲ 10 kg in 3M".
                 filtered.lastOrNull()?.first?.let { latest ->
-                    val unit = if (selectedMetric == HistoryMetric.HEAVIEST_SET && history.isBodyweight) "reps" else "kg"
+                    val unit = if (selectedMetric == HistoryMetric.HEAVIEST_SET && history.isBodyweight) "reps" else Units.weightLabel
                     val detail = when (selectedMetric) {
                         HistoryMetric.HEAVIEST_SET ->
-                            if (history.isBodyweight) "reps" else topSetOf(latest.sets)?.let { "kg × ${it.reps}" } ?: "kg"
-                        HistoryMetric.EST_1RM -> "kg est."
-                        HistoryMetric.TOTAL_VOLUME -> "kg"
+                            if (history.isBodyweight) "reps" else topSetOf(latest.sets)?.let { "${Units.weightLabel} × ${it.reps}" } ?: Units.weightLabel
+                        HistoryMetric.EST_1RM -> "${Units.weightLabel} est."
+                        HistoryMetric.TOTAL_VOLUME -> Units.weightLabel
                     }
                     val delta = if (values.size >= 2) values.last() - values.first() else 0f
                     Row(
@@ -777,7 +777,7 @@ private fun SessionHistoryCard(point: ExerciseHistoryPointResponse, isOpen: Bool
                 }
             }
             Text(
-                text = "${oneDecimal(point.totalVolumeKg)} kg",
+                text = "${oneDecimal(Units.fromKg(point.totalVolumeKg))} ${Units.weightLabel}",
                 style = MaterialTheme.typography.labelMedium,
                 color = AppTextSecondary
             )
@@ -849,12 +849,7 @@ private fun SessionHistoryCard(point: ExerciseHistoryPointResponse, isOpen: Bool
  *  same way here as it does on the workout detail screen. */
 private fun formatSetLoad(weightKg: Double?): String {
     if (weightKg == null) return "-"
-    val number = if (weightKg == weightKg.toLong().toDouble()) {
-        weightKg.toLong().toString()
-    } else {
-        weightKg.toString()
-    }
-    return "$number KG"
+    return "${Units.weightText(weightKg)} ${Units.weightLabelUpper}"
 }
 
 /** Static, generic form cues keyed by muscle group - not personalized and
@@ -1147,7 +1142,7 @@ private fun lineTooltip(point: ExerciseHistoryPointResponse, metric: HistoryMetr
         HistoryMetric.EST_1RM -> {
             val best = bestE1rm(point)
             "$date · est. 1RM" to (best?.let { (e1rm, set) ->
-                "${oneDecimal(e1rm)} kg (${formatDecimal(set.weightKg ?: 0.0)} × ${set.reps})"
+                "${oneDecimal(Units.fromKg(e1rm))} ${Units.weightLabel} (${Units.weightText(set.weightKg ?: 0.0)} × ${set.reps})"
             } ?: "-")
         }
         else -> {
@@ -1155,7 +1150,7 @@ private fun lineTooltip(point: ExerciseHistoryPointResponse, metric: HistoryMetr
             "$date · top set" to when {
                 top == null -> "-"
                 isBodyweight && (top.weightKg ?: 0.0) <= 0.0 -> "${point.maxReps} reps"
-                else -> "${formatDecimal(top.weightKg ?: 0.0)} kg × ${top.reps}"
+                else -> "${Units.weightWithUnit(top.weightKg ?: 0.0)} × ${top.reps}"
             }
         }
     }

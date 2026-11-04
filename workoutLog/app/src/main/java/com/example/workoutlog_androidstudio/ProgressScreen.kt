@@ -152,7 +152,7 @@ private fun shortDate(iso: String): String =
 
 /** "32.5 kg × 8", or "12 reps" for bodyweight with nothing added. */
 private fun topSetLabel(weightKg: Double?, reps: Int): String =
-    if (weightKg != null && weightKg > 0.0) "${formatDecimal(weightKg)} kg × $reps" else "$reps reps"
+    if (weightKg != null && weightKg > 0.0) "${Units.weightWithUnit(weightKg)} × $reps" else "$reps reps"
 
 /**
  * The Progress tab: recent PRs, this week's sets per muscle group against a
@@ -486,9 +486,9 @@ private fun PrCard(pr: ProgressPrResponse, onClick: () -> Unit) {
         Text(
             text = shortDate(pr.date) + (pr.previous?.let { prev ->
                 when {
-                    pr.kind == "REP" && pr.weightKg != null -> " · best at ${formatDecimal(pr.weightKg)} was × ${prev.toInt()}"
+                    pr.kind == "REP" && pr.weightKg != null -> " · best at ${Units.weightText(pr.weightKg)} was × ${prev.toInt()}"
                     pr.kind == "REP" -> " · best was ${prev.toInt()} reps"
-                    else -> " · was ${formatDecimal(prev)} kg"
+                    else -> " · was ${Units.weightWithUnit(prev)}"
                 }
             } ?: ""),
             style = MaterialTheme.typography.labelSmall,
@@ -507,10 +507,10 @@ private fun ExerciseProgressRow(exercise: ProgressExerciseResponse, showE1rm: Bo
     fun oneDp(x: Double) = formatDecimal(Math.round(x * 10) / 10.0)
     val change: Pair<String, Boolean>? = when {
         showE1rm -> exercise.e1rmChange3m?.takeIf { kotlin.math.abs(it) >= 0.05 }?.let {
-            "${if (it > 0) "+" else "−"}${oneDp(kotlin.math.abs(it))} kg (est. 1RM)" to (it > 0)
+            "${if (it > 0) "+" else "−"}${oneDp(Units.fromKg(kotlin.math.abs(it)))} ${Units.weightLabel} (est. 1RM)" to (it > 0)
         }
         exercise.change3m != null && kotlin.math.abs(exercise.change3m) >= 0.05 ->
-            "${if (exercise.change3m > 0) "+" else "−"}${oneDp(kotlin.math.abs(exercise.change3m))} kg" to (exercise.change3m > 0)
+            "${if (exercise.change3m > 0) "+" else "−"}${oneDp(Units.fromKg(kotlin.math.abs(exercise.change3m)))} ${Units.weightLabel}" to (exercise.change3m > 0)
         exercise.change3mReps != null && exercise.change3mReps != 0 ->
             "${if (exercise.change3mReps > 0) "+" else "−"}${kotlin.math.abs(exercise.change3mReps)} reps" to (exercise.change3mReps > 0)
         else -> null
@@ -634,7 +634,7 @@ private fun InsightCard(insight: ProgressInsightResponse, onOpen: () -> Unit, on
                 color = AppTextPrimary
             )
             Spacer(modifier = Modifier.height(2.dp))
-            Text(text = insight.message, style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
+            Text(text = Units.localizeKgText(insight.message), style = MaterialTheme.typography.bodySmall, color = AppTextSecondary)
         }
         androidx.compose.material3.IconButton(onClick = onDismiss, modifier = Modifier.size(36.dp)) {
             Icon(Icons.Filled.Close, contentDescription = "Dismiss", tint = AppTextMuted, modifier = Modifier.size(18.dp))

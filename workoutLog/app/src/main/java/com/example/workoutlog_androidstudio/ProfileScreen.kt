@@ -98,6 +98,8 @@ fun ProfileScreen(
     var editedWeight by remember { mutableStateOf("") }
     var editedTargetWeight by remember { mutableStateOf("") }
     var editedHeight by remember { mutableStateOf("") }
+    var editedFeet by remember { mutableStateOf("") }
+    var editedInches by remember { mutableStateOf("") }
     var editedBodyFat by remember { mutableStateOf("") }
 
     val coroutineScope = rememberCoroutineScope()
@@ -121,9 +123,14 @@ fun ProfileScreen(
         val current = profile ?: return
         editedName = current.name
         editedAge = current.age.toString()
-        editedWeight = formatDecimal(current.weightKg)
-        editedTargetWeight = current.targetWeightKg?.let { formatDecimal(it) } ?: ""
+        editedWeight = Units.weightText(current.weightKg)
+        editedTargetWeight = current.targetWeightKg?.let { Units.weightText(it) } ?: ""
         editedHeight = formatDecimal(current.heightCm)
+        // Feet and inches, with inches kept to one decimal so nothing is lost.
+        val totalInches = Units.cmToInches(current.heightCm)
+        val feetPart = (totalInches / 12).toInt()
+        editedFeet = feetPart.toString()
+        editedInches = formatDecimal(((totalInches - feetPart * 12) * 10).roundToInt() / 10.0)
         editedBodyFat = current.bodyFatPercent?.let { formatDecimal(it) } ?: ""
         saveError = null
         isEditing = true
@@ -142,9 +149,22 @@ fun ProfileScreen(
             try {
                 val nameTrimmed = editedName.trim()
                 val ageValue = editedAge.toIntOrNull()
-                val weightValue = editedWeight.toDoubleOrNull()
-                val heightValue = editedHeight.toDoubleOrNull()
-                val targetValue = editedTargetWeight.toDoubleOrNull()
+                // Typed in the chosen unit; an untouched box keeps the exact
+                // stored kg/cm so saving never nudges a value by rounding.
+                val weightValue = Units.kgFromInput(editedWeight, current.weightKg)
+                val heightValue = if (Units.height == HeightUnit.CM) {
+                    editedHeight.toDoubleOrNull()
+                } else {
+                    val ft = editedFeet.toIntOrNull() ?: 0
+                    val inch = editedInches.toDoubleOrNull() ?: 0.0
+                    val typedCm = Units.feetInchesToCm(ft, inch)
+                    val shownBefore = Units.cmToInches(current.heightCm)
+                    val shownFt = (shownBefore / 12).toInt()
+                    val unchanged = ft == shownFt && formatDecimal(inch) ==
+                        formatDecimal(((shownBefore - shownFt * 12) * 10).roundToInt() / 10.0)
+                    if (unchanged) current.heightCm else typedCm
+                }
+                val targetValue = Units.kgFromInput(editedTargetWeight, current.targetWeightKg)
                 val bodyFatValue = editedBodyFat.toDoubleOrNull()
 
                 val updated = NetworkClient.workoutApi.updateProfile(
@@ -311,11 +331,11 @@ fun ProfileScreen(
                                 )
                                 BiometricStat(
                                     label = "WEIGHT",
-                                    value = if (isEditing) null else "${formatDecimal(current.weightKg)} KG",
-                                    caption = current.targetWeightKg?.let { "Target: ${formatDecimal(it)} kg" } ?: "No target set",
+                                    value = if (isEditing) null else "${Units.weightText(current.weightKg)} ${Units.weightLabelUpper}",
+                                    caption = current.targetWeightKg?.let { "Target: ${Units.weightWithUnit(it)}" } ?: "No target set",
                                     badge = current.weightDeltaKg?.let { delta ->
                                         val sign = if (delta > 0) "+" else ""
-                                        "$sign${"%.1f".format(delta)} KG"
+                                        "$sign${"%.1f".format(Units.fromKg(delta))} ${Units.weightLabelUpper}"
                                     },
                                     modifier = Modifier.weight(1f),
                                     editableField = if (isEditing) {
@@ -329,11 +349,20 @@ fun ProfileScreen(
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                                 BiometricStat(
                                     label = "HEIGHT",
-                                    value = if (isEditing) null else "${formatDecimal(current.heightCm)} CM",
-                                    caption = formatStature(current.heightCm),
+                                    value = if (isEditing) null else if (Units.height == HeightUnit.CM) "${formatDecimal(current.heightCm)} CM" else Units.heightText(current.heightCm),
+                                    caption = if (Units.height == HeightUnit.CM) formatStature(current.heightCm) else "${formatDecimal(current.heightCm)} cm",
                                     modifier = Modifier.weight(1f),
                                     editableField = if (isEditing) {
-                                        { EditableStatField(value = editedHeight, onValueChange = { editedHeight = it }, keyboardType = KeyboardType.Decimal) }
+                                        if (Units.height == HeightUnit.CM) {
+                                            { EditableStatField(value = editedHeight, onValueChange = { editedHeight = it }, keyboardType = KeyboardType.Decimal) }
+                                        } else {
+                                            {
+                                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    Box(modifier = Modifier.weight(1f)) { EditableStatField(value = editedFeet, onValueChange = { editedFeet = it.filter(Char::isDigit) }, keyboardType = KeyboardType.Number) }
+                                                    Box(modifier = Modifier.weight(1f)) { EditableStatField(value = editedInches, onValueChange = { editedInches = it }, keyboardType = KeyboardType.Decimal) }
+                                                }
+                                            }
+                                        }
                                     } else null
                                 )
                                 BiometricStat(
@@ -377,7 +406,7 @@ fun ProfileScreen(
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                                 BiometricStat(
                                     label = "TOTAL VOLUME",
-                                    value = "%,.0f KG".format(current.totalVolumeKg),
+                                    value = Units.volumeText(current.totalVolumeKg),
                                     caption = "Cumulative Gross",
                                     modifier = Modifier.weight(1f)
                                 )

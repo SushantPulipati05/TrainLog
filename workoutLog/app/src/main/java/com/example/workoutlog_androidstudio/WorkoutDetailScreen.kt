@@ -271,7 +271,7 @@ fun WorkoutDetailScreen(
 
                     for (set in editedExercise.sets) {
                         val reps = set.reps.toIntOrNull() ?: continue
-                        val weight = parseKg(set.kg)
+                        val weight = Units.parseWeightKg(set.kg)
 
                         if (set.id == null) {
                             // A newly added row - either on a brand-new exercise,
@@ -611,7 +611,7 @@ fun WorkoutDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    StatCard(label = "VOLUME", value = workout.volumeLabel, modifier = Modifier.weight(1f))
+                    StatCard(label = "VOLUME", value = Units.localizeVolumeLabel(workout.volumeLabel), modifier = Modifier.weight(1f))
                     StatCard(
                         label = "TOTAL SETS",
                         // Drop sets belong to the set above them, so they aren't counted.
@@ -930,8 +930,7 @@ private fun ExerciseResponse.toNewEditableExercise(): EditableExercise {
 
 /** Drops a trailing ".0" for a clean input box value (e.g. 100.0 -> "100"),
  *  but keeps real decimals (42.5 -> "42.5"). */
-private fun formatKgForInput(weightKg: Double): String =
-    if (weightKg == weightKg.toLong().toDouble()) weightKg.toLong().toString() else weightKg.toString()
+private fun formatKgForInput(weightKg: Double): String = Units.weightText(weightKg)
 
 /** One of the three stat tiles (volume / total sets / exercises) shown side by side. */
 @Composable
@@ -1082,7 +1081,7 @@ private fun EditableExerciseCard(
         Row(modifier = Modifier.fillMaxWidth()) {
             Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.weight(0.6f))
             Text(
-                text = if (exercise.isBodyweight) "ADDED KG" else "KG",
+                text = if (exercise.isBodyweight) "ADDED ${Units.weightLabelUpper}" else Units.weightLabelUpper,
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTextMuted,
                 modifier = Modifier.weight(1f),
@@ -1174,10 +1173,5 @@ private fun EditableCellField(
  */
 private fun formatLoad(weightKg: Double?): String {
     if (weightKg == null) return "-"
-    val number = if (weightKg == weightKg.toLong().toDouble()) {
-        weightKg.toLong().toString()
-    } else {
-        weightKg.toString()
-    }
-    return "$number KG"
+    return "${Units.weightText(weightKg)} ${Units.weightLabelUpper}"
 }

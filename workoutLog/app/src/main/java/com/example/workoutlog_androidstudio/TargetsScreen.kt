@@ -63,7 +63,7 @@ fun TargetsScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     var targetWeightText by remember {
-        mutableStateOf(AppDataCache.profile?.targetWeightKg?.let { formatDecimal(it) } ?: "")
+        mutableStateOf(AppDataCache.profile?.targetWeightKg?.let { Units.weightText(it) } ?: "")
     }
     var weeklyTarget by remember { mutableStateOf(AppDataCache.profile?.weeklyWorkoutTarget ?: 6) }
 
@@ -79,7 +79,7 @@ fun TargetsScreen(
         try {
             val loaded = AppDataCache.loadProfile(force = force)
             profile = loaded
-            targetWeightText = loaded.targetWeightKg?.let { formatDecimal(it) } ?: ""
+            targetWeightText = loaded.targetWeightKg?.let { Units.weightText(it) } ?: ""
             weeklyTarget = loaded.weeklyWorkoutTarget
         } catch (e: Exception) {
             errorMessage = "Couldn't load your targets. Check your connection."
@@ -98,7 +98,7 @@ fun TargetsScreen(
         coroutineScope.launch {
             try {
 
-                val parsedTarget = targetWeightText.trim().toDoubleOrNull()
+                val parsedTarget = Units.kgFromInput(targetWeightText.trim(), AppDataCache.profile?.targetWeightKg)
                 val updated = NetworkClient.workoutApi.updateProfile(
                     UpdateProfileRequest(
                         targetWeightKg = parsedTarget,
@@ -169,7 +169,7 @@ fun TargetsScreen(
                             Text(text = "WEIGHT TARGET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
                             if (current != null) {
                                 Text(
-                                    text = "Current: ${formatDecimal(current.weightKg)} KG",
+                                    text = "Current: ${Units.weightText(current.weightKg)} ${Units.weightLabelUpper}",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = AppTextMuted
                                 )
@@ -180,7 +180,7 @@ fun TargetsScreen(
                             value = targetWeightText,
                             onValueChange = { targetWeightText = it },
                             singleLine = true,
-                            label = { Text(text = "Target weight (kg)", color = AppTextMuted) },
+                            label = { Text(text = "Target weight (${Units.weightLabel})", color = AppTextMuted) },
                             placeholder = { Text(text = "e.g. 80", color = AppTextMuted) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             modifier = Modifier.fillMaxWidth(),

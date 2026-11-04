@@ -135,7 +135,7 @@ fun pendingWorkoutFrom(
             // A drop whose set above was left empty has nothing to drop
             // from, so it's saved as a normal set.
             val isDrop = set.isDrop && saved.isNotEmpty()
-            saved.add(PendingSet(exercise.exerciseId, set.setNumber, reps, parseKg(set.kg), set.loggedAtSeconds, isDrop))
+            saved.add(PendingSet(exercise.exerciseId, set.setNumber, reps, Units.parseWeightKg(set.kg), set.loggedAtSeconds, isDrop))
         }
         saved
     }
@@ -149,7 +149,7 @@ fun pendingWorkoutFrom(
             name = exercise.name,
             muscleGroup = exercise.muscleGroup.trim().uppercase(),
             sets = workingSets,
-            volumeKg = done.sumOf { (parseKg(it.kg) ?: 0.0) * (it.reps.toIntOrNull() ?: 0) }
+            volumeKg = done.sumOf { (Units.parseWeightKg(it.kg) ?: 0.0) * (it.reps.toIntOrNull() ?: 0) }
         )
     }
     val date = Instant.ofEpochMilli(startedAtMillis).atZone(ZoneId.systemDefault()).toLocalDate()

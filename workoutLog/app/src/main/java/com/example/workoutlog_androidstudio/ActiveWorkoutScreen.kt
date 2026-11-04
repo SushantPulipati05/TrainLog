@@ -243,7 +243,7 @@ fun ActiveWorkoutScreen(
             suggestion = suggestion,
             durationLabel = facts.durationMinutes.let { if (it >= 60) "${it / 60}h ${(it % 60).toString().padStart(2, '0')}m" else "${it}m" },
             totalSets = facts.totalSets,
-            topLift = facts.topWeightKg?.let { "${formatDecimal(it)} kg" },
+            topLift = facts.topWeightKg?.let { Units.weightWithUnit(it) },
             isSaving = isSavingName,
             onSave = { chosen ->
                 isSavingName = true
@@ -816,7 +816,7 @@ private fun ExerciseCard(
             Text("SET", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.width(40.dp), textAlign = TextAlign.Center)
             Text("TIME", style = MaterialTheme.typography.labelSmall, color = AppTextMuted, modifier = Modifier.width(44.dp), textAlign = TextAlign.Center)
             Text(
-                text = if (exercise.isBodyweight) "ADDED KG" else "KG",
+                text = if (exercise.isBodyweight) "ADDED ${Units.weightLabelUpper}" else Units.weightLabelUpper,
                 style = MaterialTheme.typography.labelSmall,
                 color = AppTextMuted,
                 modifier = Modifier.weight(1f),
@@ -903,7 +903,7 @@ private fun ExerciseCard(
         // Beat your best with a set typed in just now: say so straight away.
         val todayTop = topSetOf(withLastTimeFilled(listOf(exercise)).first().sets.filterNot { it.isDrop }.mapNotNull { s ->
             val reps = s.reps.toIntOrNull() ?: return@mapNotNull null
-            TopSet(parseKg(s.kg)?.takeIf { it > 0.0 }, reps)
+            TopSet(Units.parseWeightKg(s.kg)?.takeIf { it > 0.0 }, reps)
         })
         if (best != null && todayTop != null && todayTop.beats(best)) {
             Text(
@@ -1298,9 +1298,9 @@ private fun RenameWorkoutSheet(currentName: String, onDismiss: () -> Unit, onSav
 /** One set's weight (null = bodyweight, nothing added) and reps. */
 private data class TopSet(val weightKg: Double?, val reps: Int) {
     /** "70 kg × 6", or "12 reps" for bodyweight. */
-    fun label(): String = if (weightKg != null) "${formatDecimal(weightKg)} kg × $reps" else "$reps reps"
+    fun label(): String = if (weightKg != null) "${Units.weightWithUnit(weightKg)} × $reps" else "$reps reps"
     /** "70 kg" / "12 reps" - for the "new best" line. */
-    fun short(): String = if (weightKg != null) "${formatDecimal(weightKg)} kg" else "$reps reps"
+    fun short(): String = if (weightKg != null) Units.weightWithUnit(weightKg) else "$reps reps"
     /** Heavier wins; at the same weight (or both bodyweight), more reps wins. */
     fun beats(other: TopSet): Boolean = when {
         weightKg != null && other.weightKg != null -> weightKg > other.weightKg || (weightKg == other.weightKg && reps > other.reps)
@@ -1387,7 +1387,7 @@ private const val AFTER_LAST_SET_SECONDS = 3 * 60
 private fun lastTimeSets(exerciseId: Int): List<SetEntryResponse> =
     AppDataCache.exerciseHistories[exerciseId]?.history?.lastOrNull()?.sets.orEmpty().sortedBy { it.setNumber }
 
-private fun ghostKgOf(last: SetEntryResponse?): String? = last?.weightKg?.takeIf { it > 0.0 }?.let { formatDecimal(it) }
+private fun ghostKgOf(last: SetEntryResponse?): String? = last?.weightKg?.takeIf { it > 0.0 }?.let { Units.weightText(it) }
 
 private fun ghostRepsOf(last: SetEntryResponse?): String? = last?.reps?.toString()
 

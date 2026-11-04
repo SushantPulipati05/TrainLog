@@ -253,7 +253,7 @@ object WorkoutNamer {
 
         val special: Pair<List<String>, String>? = when {
             facts.prExercise != null ->
-                PR to "New best on ${facts.prExercise}" + (facts.prWeightKg?.let { ": ${formatDecimal(it)} kg" } ?: "")
+                PR to "New best on ${facts.prExercise}" + (facts.prWeightKg?.let { ": ${Units.weightWithUnit(it)}" } ?: "")
             facts.biggestEver -> BIGGEST to "Biggest ${label.lowercase()} session yet"
             facts.comebackDays != null -> COMEBACK to "First session in ${facts.comebackDays} days"
             facts.durationMinutes in 1..34 -> SHORT to "Done in ${facts.durationMinutes} min"
@@ -272,7 +272,8 @@ object WorkoutNamer {
             return template
                 .replace("{s}", label)
                 .replace("{c}", weighted.random(random))
-                .replace("{w}", weight?.let { formatDecimal(it) } ?: "")
+                .replace("{w} kg", "{w} ${Units.weightLabel}")
+                .replace("{w}", weight?.let { Units.weightText(it) } ?: "")
                 .replace("{x}", exercise.orEmpty())
                 .replace("{n}", facts.sessionNumber.toString())
                 .replace("{day}", weekday)
@@ -340,8 +341,8 @@ object WorkoutNamer {
 
         val top = doneSets
             .filter { !it.first.isBodyweight }
-            .maxByOrNull { parseKg(it.second.kg) ?: 0.0 }
-            ?.takeIf { (parseKg(it.second.kg) ?: 0.0) > 0.0 }
+            .maxByOrNull { Units.parseWeightKg(it.second.kg) ?: 0.0 }
+            ?.takeIf { (Units.parseWeightKg(it.second.kg) ?: 0.0) > 0.0 }
 
         val previous = history.filter { it.id != workoutId }
         val sameKind = previous.filter { it.kind(plan) == kind }
@@ -364,7 +365,7 @@ object WorkoutNamer {
             durationMinutes = elapsedSeconds / 60,
             startedAt = now.minusSeconds(elapsedSeconds.toLong()),
             topExercise = top?.first?.name,
-            topWeightKg = top?.second?.kg?.let { parseKg(it) },
+            topWeightKg = top?.second?.kg?.let { Units.parseWeightKg(it) },
             sessionNumber = sameKind.size + 1,
             totalSets = doneSets.size
         )

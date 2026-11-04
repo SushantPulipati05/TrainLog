@@ -123,7 +123,7 @@ fun WorkoutCalendarScreen(
     }
     val monthVolumeLabel = remember(monthWorkouts) {
         val total = monthWorkouts.sumOf { parseVolumeKg(it.volumeLabel) }
-        String.format(Locale.US, "%,.0f", total) + " KG"
+        Units.volumeText(total)
     }
 
     Column(
@@ -486,7 +486,7 @@ private fun DaySessionCard(
 private fun formatBestSetLabel(bestSet: SetEntryResponse, setCount: Int): String {
     val weight = bestSet.weightKg
     return if (weight != null && weight > 0) {
-        "${formatDecimal(weight)} KG x ${bestSet.reps}"
+        "${Units.weightText(weight)} ${Units.weightLabelUpper} x ${bestSet.reps}"
     } else {
         "$setCount sets logged"
     }

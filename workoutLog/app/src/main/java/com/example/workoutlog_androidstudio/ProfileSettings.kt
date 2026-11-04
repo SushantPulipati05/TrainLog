@@ -85,6 +85,7 @@ fun ProfileSettingsSections(
     var showDelete by remember { mutableStateOf(false) }
     var showChangePassword by remember { mutableStateOf(false) }
     var showFeedback by remember { mutableStateOf(false) }
+    var showUnits by remember { mutableStateOf(false) }
 
     // ---- Training ----
     SettingsLabel("TRAINING")
@@ -114,6 +115,13 @@ fun ProfileSettingsSections(
             title = "Notifications",
             subtitle = "Gym reminders, workout in progress",
             onClick = { openNotificationSettings(context) }
+        )
+        SettingsDivider()
+        SettingsRow(
+            glyph = SettingsGlyphKind.UNITS,
+            title = "Units",
+            subtitle = "Weight in ${Units.weightLabel}, height in ${if (Units.height == HeightUnit.CM) "cm" else "ft / in"}",
+            onClick = { showUnits = true }
         )
         SettingsDivider()
         SettingsRow(
@@ -187,6 +195,46 @@ fun ProfileSettingsSections(
     DeleteAccountSheet(visible = showDelete, onDismiss = { showDelete = false })
     ChangePasswordSheet(visible = showChangePassword, onDismiss = { showChangePassword = false })
     FeedbackSheet(visible = showFeedback, onDismiss = { showFeedback = false })
+    UnitsSheet(visible = showUnits, onDismiss = { showUnits = false })
+}
+
+/**
+ * Profile -> Units: kg or lb, cm or ft / in. Only changes what is typed and
+ * shown on this phone - everything already logged stays exactly as it was.
+ */
+@Composable
+private fun UnitsSheet(visible: Boolean, onDismiss: () -> Unit) {
+    AppBottomSheet(visible = visible, onDismissRequest = onDismiss) {
+        Text("Units", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = AppTextPrimary)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "Your logged workouts are not changed - only how weights and height are shown and typed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = AppTextMuted
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("WEIGHT", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+        Spacer(modifier = Modifier.height(6.dp))
+        UnitToggle(
+            options = listOf("KG", "LB"),
+            selectedIndex = if (Units.weight == WeightUnit.KG) 0 else 1,
+            onSelect = { Units.selectWeight(if (it == 0) WeightUnit.KG else WeightUnit.LB) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(14.dp))
+        Text("HEIGHT", style = MaterialTheme.typography.labelSmall, color = AppTextMuted)
+        Spacer(modifier = Modifier.height(6.dp))
+        UnitToggle(
+            options = listOf("CM", "FT / IN"),
+            selectedIndex = if (Units.height == HeightUnit.CM) 0 else 1,
+            onSelect = { Units.selectHeight(if (it == 0) HeightUnit.CM else HeightUnit.FT_IN) },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        TextButton(onClick = onDismiss, modifier = Modifier.fillMaxWidth()) {
+            Text("Done", color = AppTextSecondary)
+        }
+    }
 }
 
 /**
@@ -655,7 +703,7 @@ private fun SettingsRow(
 // Drawn icons (app theme, no icon library)
 // ---------------------------------------------------------------------------
 
-enum class SettingsGlyphKind { CALENDAR, TARGET, BELL, SPARK, PERSON, LOCK, LOG_OUT, BIN, CHAT, DOC, CHEVRON, TICK }
+enum class SettingsGlyphKind { CALENDAR, TARGET, BELL, SPARK, PERSON, LOCK, LOG_OUT, BIN, CHAT, DOC, CHEVRON, TICK, UNITS }
 
 @Composable
 fun SettingsGlyph(kind: SettingsGlyphKind, modifier: Modifier = Modifier, color: Color = AppAccent) {
@@ -704,6 +752,7 @@ fun SettingsGlyph(kind: SettingsGlyphKind, modifier: Modifier = Modifier, color:
             SettingsGlyphKind.DOC -> { line(7f to 3f, 14f to 3f, 18f to 7f, 18f to 21f, 7f to 21f, 7f to 3f); line(14f to 3f, 14f to 7f, 18f to 7f); line(10f to 12f, 15f to 12f); line(10f to 16f, 15f to 16f) }
             SettingsGlyphKind.CHEVRON -> line(9f to 6f, 15f to 12f, 9f to 18f)
             SettingsGlyphKind.TICK -> line(5f to 12.5f, 9.5f to 17f, 19f to 7f)
+            SettingsGlyphKind.UNITS -> { rect(3f, 8f, 18f, 8f, 2f); line(7f to 8f, 7f to 12f); line(11f to 8f, 11f to 11f); line(15f to 8f, 15f to 12f); line(19f to 8f, 19f to 11f) }
         }
     }
 }

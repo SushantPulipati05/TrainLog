@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.workoutlog_androidstudio.DeletedToast
+import com.example.workoutlog_androidstudio.Units
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.onboarding.GettingStartedCard
 import com.example.workoutlog_androidstudio.onboarding.GlyphKind
@@ -619,7 +620,7 @@ private fun WorkoutCard(workout: com.example.workoutlog_androidstudio.WorkoutSum
             )
             _root_ide_package_.com.example.workoutlog_androidstudio.StatColumn(
                 label = "VOLUME",
-                value = workout.volumeLabel,
+                value = Units.localizeVolumeLabel(workout.volumeLabel),
                 modifier = Modifier.weight(1f)
             )
         }

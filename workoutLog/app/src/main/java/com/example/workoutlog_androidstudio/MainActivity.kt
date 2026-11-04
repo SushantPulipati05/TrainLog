@@ -124,6 +124,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Brings back a workout that was still in progress if Android killed
         // the app (it's saved on the phone with every change).
+        Units.init(this)
         ActiveWorkoutState.init(this)
         // The training plan + gym reminder (Profile -> Training plan). Re-arming
         // here is cheap and makes sure the next reminder is always scheduled.

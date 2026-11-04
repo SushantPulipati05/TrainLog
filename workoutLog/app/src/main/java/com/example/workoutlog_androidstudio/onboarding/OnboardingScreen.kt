@@ -85,6 +85,10 @@ import com.example.workoutlog_androidstudio.SEX_FEMALE
 import com.example.workoutlog_androidstudio.SEX_MALE
 import com.example.workoutlog_androidstudio.SEX_UNSPECIFIED
 import com.example.workoutlog_androidstudio.SexChooser
+import com.example.workoutlog_androidstudio.HeightUnit
+import com.example.workoutlog_androidstudio.UnitToggle
+import com.example.workoutlog_androidstudio.Units
+import com.example.workoutlog_androidstudio.WeightUnit
 import com.example.workoutlog_androidstudio.api.NetworkClient
 import com.example.workoutlog_androidstudio.api.ProfileResponse
 import com.example.workoutlog_androidstudio.api.UpdateProfileRequest
@@ -227,9 +231,9 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                     SummaryRow("NAME", name.trim(), OnboardingStep.NAME),
                     SummaryRow("AGE", "$age years", OnboardingStep.AGE),
                     SummaryRow("SEX", when (sex) { SEX_FEMALE -> "Female"; SEX_MALE -> "Male"; SEX_UNSPECIFIED -> "Prefer not to say"; else -> null }, OnboardingStep.SEX),
-                    SummaryRow("HEIGHT", "${heightCm.roundToInt()} cm", OnboardingStep.HEIGHT),
-                    SummaryRow("WEIGHT", "${formatKg(weightKg)} kg", OnboardingStep.WEIGHT),
-                    SummaryRow("TARGET WEIGHT", if (hasTarget) "${formatKg(targetKg)} kg" else null, OnboardingStep.TARGET),
+                    SummaryRow("HEIGHT", Units.heightText(heightCm.toDouble()), OnboardingStep.HEIGHT),
+                    SummaryRow("WEIGHT", Units.weightWithUnit(weightKg.toDouble()), OnboardingStep.WEIGHT),
+                    SummaryRow("TARGET WEIGHT", if (hasTarget) Units.weightWithUnit(targetKg.toDouble()) else null, OnboardingStep.TARGET),
                     SummaryRow("BODY FAT", if (hasBodyFat) "${bodyFat.roundToInt()}%" else null, OnboardingStep.BODY_FAT),
                     SummaryRow("WEEKLY TARGET", "$weeklyTarget ${if (weeklyTarget == 1) "day" else "days"}", OnboardingStep.WEEKLY)
                 ),
@@ -299,9 +303,14 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                     )
                     OnboardingStep.AGE -> BigValue(value = "$age", unit = "years")
                     OnboardingStep.SEX -> {}
-                    OnboardingStep.HEIGHT -> BigValue(value = "${heightCm.roundToInt()}", unit = "cm")
-                    OnboardingStep.WEIGHT -> BigValue(value = formatKg(weightKg), unit = "kg")
-                    OnboardingStep.TARGET -> BigValue(value = formatKg(targetKg), unit = "kg")
+                    OnboardingStep.HEIGHT -> if (Units.height == HeightUnit.CM) {
+                        BigValue(value = "${heightCm.roundToInt()}", unit = "cm")
+                    } else {
+                        val inches = Units.cmToInches(heightCm.toDouble()).roundToInt()
+                        BigValue(value = "${inches / 12}′ ${inches % 12}″", unit = "ft / in")
+                    }
+                    OnboardingStep.WEIGHT -> BigValue(value = shownWeight(weightKg), unit = Units.weightLabel)
+                    OnboardingStep.TARGET -> BigValue(value = shownWeight(targetKg), unit = Units.weightLabel)
                     OnboardingStep.BODY_FAT -> BigValue(value = "${bodyFat.roundToInt()}", unit = "%")
                     else -> BigValue(value = "$weeklyTarget", unit = if (weeklyTarget == 1) "day / week" else "days / week")
                 }
@@ -318,14 +327,33 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                         val delta = targetKg - weightKg
                         if (delta != 0f) {
                             val sign = if (delta > 0) "+" else "−"
-                            ValueChip(text = "$sign${formatKg(abs(delta))} KG FROM NOW", color = AppAccent)
+                            ValueChip(text = "$sign${shownWeight(abs(delta))} ${Units.weightLabelUpper} FROM NOW", color = AppAccent)
                         }
                     }
                     else -> {}
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            // Unit switch for the three body-measurement steps. The slot is
+            // always there so the ruler sits at the same height on every step.
+            Box(modifier = Modifier.height(36.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                when (step) {
+                    OnboardingStep.HEIGHT -> UnitToggle(
+                        options = listOf("CM", "FT / IN"),
+                        selectedIndex = if (Units.height == HeightUnit.CM) 0 else 1,
+                        onSelect = { Units.selectHeight(if (it == 0) HeightUnit.CM else HeightUnit.FT_IN) },
+                        modifier = Modifier.width(180.dp)
+                    )
+                    OnboardingStep.WEIGHT, OnboardingStep.TARGET -> UnitToggle(
+                        options = listOf("KG", "LB"),
+                        selectedIndex = if (Units.weight == WeightUnit.KG) 0 else 1,
+                        onSelect = { Units.selectWeight(if (it == 0) WeightUnit.KG else WeightUnit.LB) },
+                        modifier = Modifier.width(180.dp)
+                    )
+                    else -> {}
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
 
             when (step) {
                 OnboardingStep.NAME -> {}
@@ -340,33 +368,31 @@ fun OnboardingScreen(initial: ProfileResponse, onFinished: () -> Unit) {
                     onDecrease = { age = (age - 1).coerceAtLeast(13) },
                     onIncrease = { age = (age + 1).coerceAtMost(100) }
                 )
-                OnboardingStep.HEIGHT -> RulerPicker(
-                    value = heightCm,
-                    onValueChange = { heightCm = it },
-                    min = 100f,
-                    max = 250f,
-                    step = 1f,
-                    majorEvery = 10,
-                    midEvery = 5
-                )
-                OnboardingStep.WEIGHT -> RulerPicker(
-                    value = weightKg,
-                    onValueChange = { weightKg = it },
-                    min = 30f,
-                    max = 250f,
-                    step = 0.5f,
-                    majorEvery = 10,
-                    midEvery = 2
-                )
-                OnboardingStep.TARGET -> RulerPicker(
-                    value = targetKg,
-                    onValueChange = { targetKg = it },
-                    min = 30f,
-                    max = 250f,
-                    step = 0.5f,
-                    majorEvery = 10,
-                    midEvery = 2
-                )
+                OnboardingStep.HEIGHT -> if (Units.height == HeightUnit.CM) {
+                    RulerPicker(
+                        value = heightCm,
+                        onValueChange = { heightCm = it },
+                        min = 100f,
+                        max = 250f,
+                        step = 1f,
+                        majorEvery = 10,
+                        midEvery = 5
+                    )
+                } else {
+                    // Inches, with a long labelled tick at every foot.
+                    RulerPicker(
+                        value = Units.cmToInches(heightCm.toDouble()).toFloat(),
+                        onValueChange = { heightCm = Units.inchesToCm(it.toDouble()).toFloat() },
+                        min = 39f,
+                        max = 98f,
+                        step = 1f,
+                        majorEvery = 12,
+                        midEvery = 6,
+                        labelFor = { "${(it / 12).toInt()}′" }
+                    )
+                }
+                OnboardingStep.WEIGHT -> WeightRuler(value = weightKg, onValueChange = { weightKg = it })
+                OnboardingStep.TARGET -> WeightRuler(value = targetKg, onValueChange = { targetKg = it })
                 OnboardingStep.BODY_FAT -> BodyFatSlider(value = bodyFat, onValueChange = { bodyFat = it })
                 else -> WeeklyTargetPicker(selected = weeklyTarget, onSelect = { weeklyTarget = it })
             }
@@ -576,7 +602,8 @@ private fun RulerPicker(
     step: Float,
     majorEvery: Int,
     midEvery: Int,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    labelFor: (Float) -> String = { it.roundToInt().toString() }
 ) {
     val textMeasurer = rememberTextMeasurer()
     val spacingPx = with(LocalDensity.current) { 10.dp.toPx() }
@@ -629,7 +656,7 @@ private fun RulerPicker(
                 cap = StrokeCap.Round
             )
             if (isMajor) {
-                val layout = textMeasurer.measure(tickValue.roundToInt().toString(), labelStyle)
+                val layout = textMeasurer.measure(labelFor(tickValue), labelStyle)
                 drawText(layout, topLeft = Offset(x - layout.size.width / 2f, 42.dp.toPx()))
             }
         }
@@ -841,6 +868,36 @@ fun StartupStatus(failed: Boolean, onRetry: () -> Unit) {
         }
     }
 }
+
+/** The weight ruler: half-kilo steps in kg, whole-pound steps in lb. The value stays in kg. */
+@Composable
+private fun WeightRuler(value: Float, onValueChange: (Float) -> Unit) {
+    if (Units.weight == WeightUnit.KG) {
+        RulerPicker(
+            value = value,
+            onValueChange = onValueChange,
+            min = 30f,
+            max = 250f,
+            step = 0.5f,
+            majorEvery = 10,
+            midEvery = 2
+        )
+    } else {
+        RulerPicker(
+            value = Units.fromKg(value.toDouble()).toFloat(),
+            onValueChange = { onValueChange(Units.toKg(it.toDouble()).toFloat()) },
+            min = 66f,
+            max = 552f,
+            step = 1f,
+            majorEvery = 10,
+            midEvery = 5
+        )
+    }
+}
+
+/** A kg value as shown in the chosen unit: one decimal in kg, whole pounds in lb. */
+private fun shownWeight(kg: Float): String =
+    if (Units.weight == WeightUnit.LB) Units.fromKg(kg.toDouble()).roundToInt().toString() else formatKg(kg)
 
 private fun roundToHalf(value: Float): Float = (value * 2f).roundToInt() / 2f
 
